@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npm cache clean:*)",
+      "Bash(npm create:*)",
+      "Bash(createdb:*)",
+      "Bash(psql:*)",
+      "Bash(sudo systemctl start:*)",
+      "Bash(sudo systemctl status:*)",
+      "Bash(pg_isready:*)",
+      "Bash(npm run db:generate:*)",
+      "Bash(npm run db:migrate:*)",
+      "Bash(npm run db:seed:*)",
+      "Bash(DATABASE_URL=postgresql://postgres@localhost:5432/nomi_education npm run db:seed:*)",
+      "Bash(DATABASE_URL=postgresql://postgres@localhost:5432/nomi_education npm run dev:*)",
+      "Bash(npm run dev:*)",
+      "Bash(cat:*)",
+      "Bash(npm install:*)",
+      "Bash(node -e:*)",
+      "Bash(timeout 10 npm run dev:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite build)"
+    ]
+  }
+}

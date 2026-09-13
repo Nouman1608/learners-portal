@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly Nomi Education Log Rotation
+Requires=nomi-logs-rotate.service
+
+[Timer]
+# Run weekly on Sunday at 3:00 AM
+OnCalendar=Sun *-*-* 03:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

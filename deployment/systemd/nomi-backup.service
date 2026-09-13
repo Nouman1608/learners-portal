@@ -1,0 +1,20 @@
+[Unit]
+Description=Nomi Education Database Backup
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=nomi
+Group=nomi
+WorkingDirectory=/opt/nomi-education
+
+# Backup command
+ExecStart=/bin/bash -c 'pg_dump -h 127.0.0.1 -U postgres nomi_education | gzip > /var/nomi/backups/nomi-db-$(date +\%%Y\%%m\%%d-\%%H\%%M\%%S).sql.gz'
+
+# Keep only last 30 days of backups
+ExecStartPost=/bin/bash -c 'find /var/nomi/backups -name "nomi-db-*.sql.gz" -mtime +30 -delete'
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nomi-backup

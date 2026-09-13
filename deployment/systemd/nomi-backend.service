@@ -1,0 +1,34 @@
+[Unit]
+Description=Nomi Education Backend API
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=nomi
+Group=nomi
+WorkingDirectory=/opt/nomi-education/Nomi/backend
+EnvironmentFile=/opt/nomi-education/Nomi/.env.production
+
+# Start the backend using tsx
+ExecStart=/usr/bin/npx tsx src/server.ts
+
+# Restart policy
+Restart=always
+RestartSec=10s
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nomi-backend
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/nomi/uploads /var/nomi/logs
+
+[Install]
+WantedBy=multi-user.target

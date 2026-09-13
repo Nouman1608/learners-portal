@@ -1,0 +1,15 @@
+[Unit]
+Description=Daily Nomi Education Database Backup
+Requires=nomi-backup.service
+
+[Timer]
+# Run daily at 2:00 AM
+OnCalendar=daily
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+
+# Run 5 minutes after boot if missed
+OnBootSec=5min
+
+[Install]
+WantedBy=timers.target

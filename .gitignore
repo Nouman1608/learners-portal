@@ -1,0 +1,231 @@
+# ============================================
+# Nomi Education - Git Ignore Configuration
+# ============================================
+
+# ============================================
+# Environment & Secrets (CRITICAL - NEVER COMMIT!)
+# ============================================
+.env
+.env.local
+.env.development
+.env.production
+.env.*.local
+*.env
+
+# Deployment secrets
+deployment/scripts/secrets.txt
+
+# ============================================
+# Node.js & npm
+# ============================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# ============================================
+# Build Outputs
+# ============================================
+dist/
+build/
+*.tsbuildinfo
+.cache/
+
+# Backend build
+backend/dist/
+backend/build/
+
+# Frontend build
+frontend/dist/
+frontend/build/
+
+# ============================================
+# Logs
+# ============================================
+logs/
+*.log
+*.log.*
+*.log.gz
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Backend logs
+backend/logs/
+backend/*.log
+
+# ============================================
+# Database
+# ============================================
+
+*.sql.gz
+*.db
+*.sqlite
+*.sqlite3
+
+# Database backups
+backups/
+*.backup
+*.dump
+
+# ============================================
+# Uploads & User Generated Content
+# ============================================
+uploads/
+backend/uploads/
+frontend/public/uploads/
+
+# ============================================
+# Testing
+# ============================================
+coverage/
+.nyc_output/
+*.lcov
+
+# ============================================
+# IDEs & Editors
+# ============================================
+# VSCode
+.vscode/
+*.code-workspace
+
+# JetBrains (WebStorm, IntelliJ, etc.)
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ============================================
+# Operating Systems
+# ============================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+.Trash-*
+
+# ============================================
+# Docker & Podman
+# ============================================
+# Don't ignore Dockerfiles or docker-compose files (we want those)
+# But ignore runtime data
+*.pid
+*.seed
+*.pid.lock
+
+# ============================================
+# SSL Certificates & Keys
+# ============================================
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+
+# Let's Encrypt (if accidentally copied to repo)
+letsencrypt/
+
+# ============================================
+# Temporary Files
+# ============================================
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+
+# ============================================
+# Dependencies Lock Files (Optional)
+# ============================================
+# Uncomment if you want to ignore lock files
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# ============================================
+# Runtime Data
+# ============================================
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# ============================================
+# TypeScript
+# ============================================
+*.tsbuildinfo
+
+# ============================================
+# System Files
+# ============================================
+.cache
+.parcel-cache
+
+# ============================================
+# Production Deployment (Local Copies)
+# ============================================
+# If you copy production files locally for testing
+production-data/
+vps-backups/
+
+# ============================================
+# Misc
+# ============================================
+.vercel
+.netlify
+.next/
+out/
+
+# ============================================
+# Keep These Files (Explicitly Track)
+# ============================================
+# Force include important config templates
+!.env.example
+!.env.production.example
+!backend/.env.example
+!frontend/.env.example
+
+# Force include deployment configs
+!deployment/
+!deployment/**/*
+
+# Force include Dockerfiles
+!Dockerfile
+!**/Dockerfile
+!*.dockerignore
+!docker-compose*.yml
+
+# Force include nginx configs
+!*.conf
+!deployment/nginx/*.conf

@@ -1,0 +1,17 @@
+[Unit]
+Description=Rotate Nomi Education Application Logs
+
+[Service]
+Type=oneshot
+User=nomi
+Group=nomi
+
+# Remove logs older than 90 days
+ExecStart=/bin/bash -c 'find /var/nomi/logs -name "*.log" -mtime +90 -delete'
+
+# Compress logs older than 7 days
+ExecStartPost=/bin/bash -c 'find /var/nomi/logs -name "*.log" -mtime +7 ! -name "*.gz" -exec gzip {} \;'
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nomi-logs-rotate
