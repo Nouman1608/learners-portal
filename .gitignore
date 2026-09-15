@@ -229,3 +229,7 @@ out/
 # Force include nginx configs
 !*.conf
 !deployment/nginx/*.conf
+
+# Local-only, never publish
+CLAUDE.md
+docs-local/
