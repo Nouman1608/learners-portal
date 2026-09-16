@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { analyticsApi, PerformanceAnalytics, AnalyticsQueryParams } from '../../api/analytics.api';
 import BarChart from './charts/BarChart';
 import LineChart from './charts/LineChart';
-import { ArrowPathIcon } from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { exportCsv, stampedFilename } from '../../utils/csv';
 import toast from 'react-hot-toast';
 
 interface PerformanceDashboardProps {
@@ -49,21 +50,18 @@ export default function PerformanceDashboard({ filters }: PerformanceDashboardPr
 
   // Calculate metrics
   // Ensure all data arrays are valid before using them
-  const passFailRatesArray = Array.isArray(data.passFailRates) ? data.passFailRates : [];
   const coursePerformanceArray = Array.isArray(data.coursePerformanceComparison) ? data.coursePerformanceComparison : [];
   const topPerformersArray = Array.isArray(data.topPerformers) ? data.topPerformers : [];
+  const atRiskStudents = Array.isArray(data.atRiskStudents) ? data.atRiskStudents : [];
 
-  const totalPassFailRates = passFailRatesArray.reduce(
-    (acc, rate) => ({
-      total: acc.total + rate.totalCount,
-      passed: acc.passed + rate.passedCount,
-      failed: acc.failed + rate.failedCount,
-    }),
-    { total: 0, passed: 0, failed: 0 }
-  );
-  const overallPassRate = totalPassFailRates.total > 0
-    ? (totalPassFailRates.passed / totalPassFailRates.total * 100)
-    : 0;
+  // The API returns one set of figures for the current filter, not one row per course.
+  const passFail = data.passFailRates ?? {
+    totalAssessments: 0,
+    passedCount: 0,
+    failedCount: 0,
+    passRate: 0,
+  };
+  const overallPassRate = passFail.passRate ?? 0;
 
   const avgCourseScore = coursePerformanceArray.length > 0
     ? coursePerformanceArray.reduce((sum, c) => sum + (c.avgScore || 0), 0) / coursePerformanceArray.length
@@ -192,51 +190,120 @@ export default function PerformanceDashboard({ filters }: PerformanceDashboardPr
         </div>
       </div>
 
-      {/* Pass/Fail Rates by Course */}
+      {/* Pass/Fail summary */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-lg font-semibold text-gray-900">Pass and fail totals</h3>
+        <p className="mt-1 text-sm text-gray-500">
+          Across every graded assessment matching the current filters. A score of 60% or above passes.
+        </p>
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <div className="border border-gray-200 rounded-lg p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Graded</p>
+            <p className="mt-1 text-2xl font-semibold text-gray-900">{passFail.totalAssessments}</p>
+          </div>
+          <div className="border border-gray-200 rounded-lg p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Passed</p>
+            <p className="mt-1 text-2xl font-semibold text-green-600">{passFail.passedCount}</p>
+          </div>
+          <div className="border border-gray-200 rounded-lg p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Failed</p>
+            <p className="mt-1 text-2xl font-semibold text-red-600">{passFail.failedCount}</p>
+          </div>
+          <div className="border border-gray-200 rounded-lg p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Pass rate</p>
+            <p className="mt-1 text-2xl font-semibold text-gray-900">{overallPassRate.toFixed(1)}%</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Students needing attention */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Pass/Fail Rates by Course</h3>
+        <div className="px-6 py-4 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Students needing attention</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Flagged for weak attendance, low scores, or unpaid fees. Highest concern first.
+            </p>
+          </div>
+          {atRiskStudents.length > 0 && (
+            <button
+              onClick={() => {
+                exportCsv(
+                  stampedFilename('students-needing-attention'),
+                  atRiskStudents,
+                  [
+                    { header: 'Student', value: s => s.studentName },
+                    { header: 'Email', value: s => s.email },
+                    { header: 'Attendance %', value: s => s.attendanceRate?.toFixed(1) ?? '' },
+                    { header: 'Average score %', value: s => s.avgScore?.toFixed(1) ?? '' },
+                    { header: 'Overdue fees', value: s => s.overdueCount },
+                    { header: 'Overdue amount (PKR)', value: s => Math.round(s.overduePKR) },
+                    { header: 'Concerns', value: s => s.reasons.join('; ') },
+                  ]
+                );
+                toast.success('Exported to CSV');
+              }}
+              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            >
+              <ArrowDownTrayIcon className="h-4 w-4 mr-2" aria-hidden="true" />
+              Export CSV
+            </button>
+          )}
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Course</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Passed</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Failed</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Pass Rate</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {passFailRatesArray.map((rate) => (
-                <tr key={rate.courseId || 'overall'}>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    {rate.courseTitle || 'Overall'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                    {rate.totalCount}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 text-right">
-                    {rate.passedCount}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 text-right">
-                    {rate.failedCount}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      rate.passRate >= 80 ? 'bg-green-100 text-green-800' :
-                      rate.passRate >= 60 ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
-                      {(rate.passRate ?? 0).toFixed(1)}%
-                    </span>
-                  </td>
+        {atRiskStudents.length === 0 ? (
+          <p className="px-6 py-12 text-center text-gray-500">
+            No students are currently flagged. Nothing to action.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Concerns</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Attendance</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Avg score</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Overdue</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {atRiskStudents.map((student) => (
+                  <tr key={student.studentId}>
+                    <td className="px-6 py-4 text-sm">
+                      <p className="font-medium text-gray-900">{student.studentName}</p>
+                      <p className="text-gray-500">{student.email}</p>
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      <div className="flex flex-wrap gap-1">
+                        {student.reasons.map((reason) => (
+                          <span
+                            key={reason}
+                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                              student.riskScore >= 50
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-yellow-100 text-yellow-800'
+                            }`}
+                          >
+                            {reason}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">
+                      {student.attendanceRate === null ? '—' : `${student.attendanceRate.toFixed(0)}%`}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">
+                      {student.avgScore === null ? '—' : `${student.avgScore.toFixed(0)}%`}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-red-600">
+                      {student.overdueCount === 0 ? '—' : `PKR ${Math.round(student.overduePKR).toLocaleString()}`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

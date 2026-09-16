@@ -7,6 +7,7 @@ import {
   getPerformanceAnalytics,
   getAttendanceAnalytics,
   getCourseAnalytics,
+  getGrowthAnalytics,
   getTeacherAnalytics,
 } from '../controllers/analytics.controller';
 
@@ -50,6 +51,14 @@ router.get(
   requireTeacher,
   logActivity('view', 'analytics-courses'),
   getCourseAnalytics
+);
+
+// Growth Analytics - leads and retention (Admin only)
+router.get(
+  '/growth',
+  requireAdmin,
+  logActivity('view', 'analytics-growth'),
+  getGrowthAnalytics
 );
 
 // Teacher Analytics (Admin only)

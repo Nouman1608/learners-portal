@@ -5,16 +5,21 @@ import FinancialDashboard from '../components/analytics/FinancialDashboard';
 import PerformanceDashboard from '../components/analytics/PerformanceDashboard';
 import AttendanceDashboard from '../components/analytics/AttendanceDashboard';
 import CourseDashboard from '../components/analytics/CourseDashboard';
+import GrowthDashboard from '../components/analytics/GrowthDashboard';
 import TeacherDashboard from '../components/analytics/TeacherDashboard';
 
-type TabType = 'financial' | 'performance' | 'attendance' | 'courses' | 'teachers';
+type TabType = 'financial' | 'performance' | 'attendance' | 'courses' | 'growth' | 'teachers';
 
 export default function Analytics() {
   const { hasRole } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('performance');
-  const [filters, setFilters] = useState<AnalyticsQueryParams>({
+  // Shown explicitly rather than left blank, so it is always clear which
+  // period the figures cover. Matches the server's default of year-to-date.
+  const [filters, setFilters] = useState<AnalyticsQueryParams>(() => ({
     groupBy: 'month',
-  });
+    startDate: `${new Date().getFullYear()}-01-01`,
+    endDate: new Date().toISOString().split('T')[0],
+  }));
 
   // Determine available tabs based on role
   const isAdmin = hasRole(['admin', 'sudo']);
@@ -25,6 +30,7 @@ export default function Analytics() {
     { id: 'performance', label: 'Performance', allowed: isTeacher },
     { id: 'attendance', label: 'Attendance', allowed: isTeacher },
     { id: 'courses', label: 'Courses', allowed: isTeacher },
+    { id: 'growth', label: 'Growth', allowed: isAdmin },
     { id: 'teachers', label: 'Teachers', allowed: isAdmin },
   ];
 
@@ -47,7 +53,11 @@ export default function Analytics() {
   };
 
   const resetFilters = () => {
-    setFilters({ groupBy: 'month' });
+    setFilters({
+      groupBy: 'month',
+      startDate: `${new Date().getFullYear()}-01-01`,
+      endDate: new Date().toISOString().split('T')[0],
+    });
   };
 
   return (
@@ -150,6 +160,9 @@ export default function Analytics() {
             )}
             {activeTab === 'courses' && isTeacher && (
               <CourseDashboard filters={filters} />
+            )}
+            {activeTab === 'growth' && isAdmin && (
+              <GrowthDashboard filters={filters} />
             )}
             {activeTab === 'teachers' && isAdmin && (
               <TeacherDashboard filters={filters} />

@@ -49,7 +49,7 @@ export default function TeacherDashboard({ filters }: TeacherDashboardProps) {
   // Calculate metrics
   const totalTeachers = data.teacherWorkload.length;
   const totalCourses = data.teacherWorkload.reduce((sum, t) => sum + t.courseCount, 0);
-  const totalClasses = data.teacherWorkload.reduce((sum, t) => sum + t.classCount, 0);
+  const totalClasses = data.teacherWorkload.reduce((sum, t) => sum + t.totalClasses, 0);
   const totalStudents = data.teacherWorkload.reduce((sum, t) => sum + t.studentCount, 0);
   const avgCoursesPerTeacher = totalTeachers > 0 ? totalCourses / totalTeachers : 0;
   const avgStudentsPerTeacher = totalTeachers > 0 ? totalStudents / totalTeachers : 0;
@@ -85,7 +85,7 @@ export default function TeacherDashboard({ filters }: TeacherDashboardProps) {
         <div className="bg-white rounded-lg shadow p-6">
           <BarChart
             data={data.teacherWorkload.map(t => ({
-              name: `${t.firstName} ${t.lastName}`,
+              name: t.teacherName,
               courses: t.courseCount,
             }))}
             xKey="name"
@@ -100,7 +100,7 @@ export default function TeacherDashboard({ filters }: TeacherDashboardProps) {
         <div className="bg-white rounded-lg shadow p-6">
           <BarChart
             data={data.teacherWorkload.map(t => ({
-              name: `${t.firstName} ${t.lastName}`,
+              name: t.teacherName,
               students: t.studentCount,
             }))}
             xKey="name"
@@ -135,11 +135,11 @@ export default function TeacherDashboard({ filters }: TeacherDashboardProps) {
                 .sort((a, b) => b.studentCount - a.studentCount)
                 .map((teacher) => {
                   // Calculate workload score (weighted: classes + students)
-                  const workloadScore = teacher.classCount + (teacher.studentCount / 10);
+                  const workloadScore = teacher.totalClasses + (teacher.studentCount / 10);
                   return (
                     <tr key={teacher.teacherId}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {teacher.firstName} {teacher.lastName}
+                        {teacher.teacherName}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {teacher.email}
@@ -148,7 +148,7 @@ export default function TeacherDashboard({ filters }: TeacherDashboardProps) {
                         {teacher.courseCount}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                        {teacher.classCount}
+                        {teacher.totalClasses}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
                         {teacher.studentCount}
@@ -175,12 +175,12 @@ export default function TeacherDashboard({ filters }: TeacherDashboardProps) {
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Workload Distribution</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {data.teacherWorkload.map(teacher => {
-            const workloadScore = teacher.classCount + (teacher.studentCount / 10);
+            const workloadScore = teacher.totalClasses + (teacher.studentCount / 10);
             return (
               <div key={teacher.teacherId} className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-gray-900">
-                    {teacher.firstName} {teacher.lastName}
+                    {teacher.teacherName}
                   </span>
                   <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                     workloadScore >= 50 ? 'bg-red-100 text-red-800' :
@@ -197,7 +197,7 @@ export default function TeacherDashboard({ filters }: TeacherDashboardProps) {
                   </div>
                   <div className="flex justify-between">
                     <span>Classes:</span>
-                    <span className="font-medium">{teacher.classCount}</span>
+                    <span className="font-medium">{teacher.totalClasses}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Students:</span>

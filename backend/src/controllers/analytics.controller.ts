@@ -15,6 +15,29 @@ const analyticsQuerySchema = z.object({
   limit: z.string().regex(/^\d+$/).optional(),
 });
 
+/**
+ * Resolves the requested period and the equally long period immediately before
+ * it, so every figure can be shown against a like-for-like comparison.
+ */
+function resolveDateRange(startDate?: string, endDate?: string) {
+  const end = endDate ? new Date(endDate) : new Date();
+  const start = startDate
+    ? new Date(startDate)
+    : new Date(end.getFullYear(), 0, 1);
+
+  const spanMs = Math.max(end.getTime() - start.getTime(), 0);
+  const previousEnd = new Date(start.getTime() - 1);
+  const previousStart = new Date(previousEnd.getTime() - spanMs);
+
+  return { start, end, previousStart, previousEnd };
+}
+
+/** Percentage change from a previous value, guarding against division by zero. */
+function percentChange(current: number, previous: number): number | null {
+  if (previous === 0) return current === 0 ? 0 : null;
+  return ((current - previous) / previous) * 100;
+}
+
 // Financial Analytics
 export const getFinancialAnalytics = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -25,37 +48,76 @@ export const getFinancialAnalytics = async (req: Request, res: Response, next: N
       filters: validated
     });
 
-    // Convert string dates to Date objects
-    const startDate = validated.startDate ? new Date(validated.startDate) : new Date(new Date().getFullYear(), 0, 1);
-    const endDate = validated.endDate ? new Date(validated.endDate) : new Date();
+    const { start, end, previousStart, previousEnd } = resolveDateRange(
+      validated.startDate,
+      validated.endDate
+    );
 
     const [
       revenueOverTime,
       paymentMethods,
       outstandingFees,
       courseRevenue,
+      collectionRate,
+      courseProfitability,
+      previousRevenue,
+      previousCollection,
     ] = await Promise.all([
       analyticsService.getRevenueOverTime(
-        startDate,
-        endDate,
+        start,
+        end,
         validated.groupBy as 'day' | 'week' | 'month' | undefined
       ),
-      analyticsService.getPaymentMethodBreakdown(
-        startDate,
-        endDate
-      ),
+      analyticsService.getPaymentMethodBreakdown(start, end),
       analyticsService.getOutstandingFeesAnalysis(),
-      analyticsService.getCourseRevenueBreakdown(
-        startDate,
-        endDate
-      ),
+      analyticsService.getCourseRevenueBreakdown(start, end),
+      analyticsService.getCollectionRate(start, end),
+      analyticsService.getCourseProfitability(start, end),
+      analyticsService.getRevenueOverTime(previousStart, previousEnd, 'month'),
+      analyticsService.getCollectionRate(previousStart, previousEnd),
     ]);
+
+    const totalRevenuePKR = revenueOverTime.reduce((s, r) => s + r.revenuePKR, 0);
+    const previousRevenuePKR = previousRevenue.reduce((s, r) => s + r.revenuePKR, 0);
+    const totalProfitPKR = courseProfitability.reduce((s, c) => s + c.profitPKR, 0);
+    const totalTeacherCostPKR = courseProfitability.reduce((s, c) => s + c.teacherCostPKR, 0);
 
     res.json({
       revenueOverTime,
       paymentMethods,
       outstandingFees,
       courseRevenue,
+      collectionRate,
+      courseProfitability,
+      totals: {
+        revenuePKR: totalRevenuePKR,
+        teacherCostPKR: totalTeacherCostPKR,
+        profitPKR: totalProfitPKR,
+        transactionCount: revenueOverTime.reduce((s, r) => s + r.transactionCount, 0),
+      },
+      comparison: {
+        period: {
+          start: start.toISOString().split('T')[0],
+          end: end.toISOString().split('T')[0],
+        },
+        previousPeriod: {
+          start: previousStart.toISOString().split('T')[0],
+          end: previousEnd.toISOString().split('T')[0],
+        },
+        revenuePKR: {
+          current: totalRevenuePKR,
+          previous: previousRevenuePKR,
+          changePercent: percentChange(totalRevenuePKR, previousRevenuePKR),
+        },
+        collectionRate: {
+          current: collectionRate.collectionRate,
+          previous: previousCollection.collectionRate,
+          changePercent: percentChange(
+            collectionRate.collectionRate,
+            previousCollection.collectionRate
+          ),
+        },
+      },
     });
   } catch (error) {
     next(error);
@@ -88,6 +150,7 @@ export const getPerformanceAnalytics = async (req: Request, res: Response, next:
       coursePerformanceComparison,
       topPerformers,
       passFailRates,
+      atRiskStudents,
     ] = await Promise.all([
       analyticsService.getAssessmentDistributions(
         courseIdFilter,
@@ -99,6 +162,9 @@ export const getPerformanceAnalytics = async (req: Request, res: Response, next:
         validated.limit ? parseInt(validated.limit) : undefined
       ),
       analyticsService.getPassFailRates(courseIdFilter),
+      analyticsService.getAtRiskStudents(
+        validated.limit ? parseInt(validated.limit) : undefined
+      ),
     ]);
 
     // Student trends (if studentId is provided)
@@ -114,6 +180,7 @@ export const getPerformanceAnalytics = async (req: Request, res: Response, next:
       coursePerformanceComparison,
       topPerformers,
       passFailRates,
+      atRiskStudents,
       studentPerformanceTrends,
     });
   } catch (error) {
@@ -175,24 +242,71 @@ export const getCourseAnalytics = async (req: Request, res: Response, next: Next
       filters: validated
     });
 
-    // Convert string dates to Date objects
-    const startDate = validated.startDate ? new Date(validated.startDate) : new Date(new Date().getFullYear(), 0, 1);
-    const endDate = validated.endDate ? new Date(validated.endDate) : new Date();
+    const { start, end } = resolveDateRange(validated.startDate, validated.endDate);
 
     const [
       coursePopularity,
       enrollmentTrends,
+      retention,
     ] = await Promise.all([
       analyticsService.getCoursePopularity(),
-      analyticsService.getEnrollmentTrends(
-        startDate,
-        endDate
-      ),
+      analyticsService.getEnrollmentTrends(start, end),
+      analyticsService.getRetentionMetrics(start, end),
     ]);
 
     res.json({
       coursePopularity,
       enrollmentTrends,
+      retention,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Growth Analytics - lead conversion and retention (Admin only)
+export const getGrowthAnalytics = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const validated = analyticsQuerySchema.parse(req.query);
+
+    logger.info('Fetching growth analytics', {
+      userId: req.user?.id,
+      filters: validated
+    });
+
+    const { start, end, previousStart, previousEnd } = resolveDateRange(
+      validated.startDate,
+      validated.endDate
+    );
+
+    const [leadConversion, retention, previousLeads] = await Promise.all([
+      analyticsService.getLeadConversion(start, end),
+      analyticsService.getRetentionMetrics(start, end),
+      analyticsService.getLeadConversion(previousStart, previousEnd),
+    ]);
+
+    res.json({
+      leadConversion,
+      retention,
+      comparison: {
+        previousPeriod: {
+          start: previousStart.toISOString().split('T')[0],
+          end: previousEnd.toISOString().split('T')[0],
+        },
+        totalLeads: {
+          current: leadConversion.totalLeads,
+          previous: previousLeads.totalLeads,
+          changePercent: percentChange(leadConversion.totalLeads, previousLeads.totalLeads),
+        },
+        conversionRate: {
+          current: leadConversion.conversionRate,
+          previous: previousLeads.conversionRate,
+          changePercent: percentChange(
+            leadConversion.conversionRate,
+            previousLeads.conversionRate
+          ),
+        },
+      },
     });
   } catch (error) {
     next(error);
