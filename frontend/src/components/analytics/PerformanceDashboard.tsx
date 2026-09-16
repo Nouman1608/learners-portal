@@ -86,13 +86,13 @@ export default function PerformanceDashboard({ filters }: PerformanceDashboardPr
         <div className="bg-white rounded-lg shadow p-6">
           <p className="text-sm font-medium text-gray-600">Total Assessments</p>
           <p className="mt-2 text-3xl font-bold text-gray-900">
-            {totalPassFailRates.total}
+            {passFail.totalAssessments}
           </p>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
           <p className="text-sm font-medium text-gray-600">Failed</p>
           <p className="mt-2 text-3xl font-bold text-red-600">
-            {totalPassFailRates.failed}
+            {passFail.failedCount}
           </p>
         </div>
       </div>
