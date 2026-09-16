@@ -61,9 +61,15 @@ export const analyticsService = {
           dateFormat = 'YYYY-MM';
       }
 
+      // The format has to be inlined rather than bound as a parameter: Postgres
+      // sees TO_CHAR(col, $1) and TO_CHAR(col, $2) as different expressions, so
+      // GROUP BY would not match the selected column and the query is rejected.
+      // dateFormat comes from the switch above and is never user input.
+      const periodExpr = sql`TO_CHAR(${payments.paymentDate}, ${sql.raw(`'${dateFormat}'`)})`;
+
       const rows = await db
         .select({
-          period: sql<string>`TO_CHAR(${payments.paymentDate}, ${dateFormat})`,
+          period: sql<string>`${periodExpr}`,
           currency: fees.currency,
           revenue: sql<number>`COALESCE(SUM(${payments.amount}::numeric), 0)::float`,
           revenuePKR: sumInPkr(payments.amount, fees.currency),
@@ -77,8 +83,8 @@ export const analyticsService = {
             lte(payments.paymentDate, endDate)
           )
         )
-        .groupBy(sql`TO_CHAR(${payments.paymentDate}, ${dateFormat})`, fees.currency)
-        .orderBy(sql`TO_CHAR(${payments.paymentDate}, ${dateFormat})`);
+        .groupBy(periodExpr, fees.currency)
+        .orderBy(periodExpr);
 
       // Collapse (period, currency) rows into one entry per period.
       const periods = new Map<string, {
@@ -644,13 +650,19 @@ export const analyticsService = {
         const reasons: string[] = [];
         let riskScore = 0;
 
-        if (attendance && attendance.sessions >= 3 && attendance.attendanceRate < 75) {
-          riskScore += ((75 - attendance.attendanceRate) / 75) * 40;
-          reasons.push(`Attendance ${attendance.attendanceRate.toFixed(0)}%`);
+        // Rates can come back null (no gradeable sessions, or a zero max score).
+        // The null checks are load-bearing: `null < 75` is true in JavaScript,
+        // so without them a student with no rate is flagged and then crashes.
+        const attendanceRate = attendance?.attendanceRate ?? null;
+        const avgScore = score?.avgScore ?? null;
+
+        if (attendance && attendance.sessions >= 3 && attendanceRate !== null && attendanceRate < 75) {
+          riskScore += ((75 - attendanceRate) / 75) * 40;
+          reasons.push(`Attendance ${attendanceRate.toFixed(0)}%`);
         }
-        if (score && score.assessmentCount >= 1 && score.avgScore < 60) {
-          riskScore += ((60 - score.avgScore) / 60) * 40;
-          reasons.push(`Average score ${score.avgScore.toFixed(0)}%`);
+        if (score && score.assessmentCount >= 1 && avgScore !== null && avgScore < 60) {
+          riskScore += ((60 - avgScore) / 60) * 40;
+          reasons.push(`Average score ${avgScore.toFixed(0)}%`);
         }
         if (overdue && overdue.overdueCount > 0) {
           riskScore += Math.min(overdue.overdueCount * 10, 20);
@@ -661,8 +673,8 @@ export const analyticsService = {
           studentId: student.studentId,
           studentName: `${student.firstName} ${student.lastName}`,
           email: student.email,
-          attendanceRate: attendance?.attendanceRate ?? null,
-          avgScore: score?.avgScore ?? null,
+          attendanceRate,
+          avgScore,
           overdueCount: overdue?.overdueCount ?? 0,
           overduePKR: overdue?.overduePKR ?? 0,
           riskScore: Math.round(riskScore),
