@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "5",
-      "when": 1765901484511,
-      "tag": "0000_lyrical_major_mapleleaf",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "5",
-      "when": 1766074464506,
-      "tag": "0001_strong_magma",
+      "when": 1789890846157,
+      "tag": "0000_baseline",
       "breakpoints": true
     }
   ]
