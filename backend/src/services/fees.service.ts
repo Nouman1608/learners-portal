@@ -316,7 +316,7 @@ export const feesService = {
 
         // 1. Generate any missing fees for current month
         const feeResult = await this.generateMonthlyFees(month, year, false);
-        logger.info(`[FEES SYNC] Fee generation: ${feeResult.regularFeesCreated} regular, ${feeResult.usageFeesCreated} usage, ${feeResult.catchUpFeesCreated} catch-up`);
+        logger.info(`[FEES SYNC] Fee generation: ${feeResult.regularFeesCreated} regular, ${feeResult.usageFeesCreated} usage`);
 
         // 2. Mark overdue fees
         const overdueResult = await this.markOverdueFees();
@@ -349,19 +349,15 @@ export const feesService = {
 
   /**
    * Generate fees for a given billing period
-   * Handles both regular (rolling 20th cutoff) and 1-to-1 (usage-based) classes
+   * Handles both regular (billed immediately, in full, from the enrollment
+   * month) and 1-to-1 (usage-based) classes
    */
   async generateMonthlyFees(month: number, year: number, isManualGeneration: boolean = false) {
-    const today = new Date();
-    const currentDay = today.getDate();
-    const currentMonth = today.getMonth() + 1;
-    const currentYear = today.getFullYear();
-
     logger.info(`[FEES] Starting fee generation for ${month}/${year} (manual: ${isManualGeneration})`);
 
     // Get active AND dropped enrollments — dropped ones are processed so their
     // fees honor the drop date (fees stop after the drop month; drop month
-    // follows the 20th rule via generateRollingFee).
+    // follows the mirror 20th rule via generateRollingFee).
     const activeEnrollments = await db
       .select({
         id: enrollments.id,
@@ -387,7 +383,6 @@ export const feesService = {
 
     let regularFeesCreated = 0;
     let usageFeesCreated = 0;
-    let catchUpFeesCreated = 0;
     const skippedEnrollments: string[] = [];
 
     const dueDate = new Date(year, month - 1, 10).toISOString().split('T')[0];
@@ -408,14 +403,10 @@ export const feesService = {
             enrollment,
             month,
             year,
-            currentMonth,
-            currentYear,
-            currentDay,
             dueDate,
             isManualGeneration
           );
           regularFeesCreated += result.regularCount;
-          catchUpFeesCreated += result.catchUpCount;
           if (result.skipped && result.skipReason) {
             skippedEnrollments.push(result.skipReason);
           }
@@ -426,12 +417,11 @@ export const feesService = {
     }
 
     const summary = {
-      message: `Generated ${regularFeesCreated} regular fees, ${usageFeesCreated} usage-based fees, ${catchUpFeesCreated} catch-up fees`,
+      message: `Generated ${regularFeesCreated} regular fees, ${usageFeesCreated} usage-based fees`,
       regularFeesCreated,
       usageFeesCreated,
-      catchUpFeesCreated,
       skippedCount: skippedEnrollments.length,
-      totalCount: regularFeesCreated + usageFeesCreated + catchUpFeesCreated,
+      totalCount: regularFeesCreated + usageFeesCreated,
     };
 
     logger.info(`[FEES] Fee generation completed:`, summary);
@@ -731,28 +721,28 @@ export const feesService = {
   },
 
   /**
-   * Generate rolling-basis fee for regular classes
-   * Implements 20th-of-month cutoff logic with catch-up
+   * Generate rolling-basis fee for regular classes.
+   * The child is always billed the full month's fee immediately, starting the
+   * enrollment month, regardless of what day of the month they joined — there
+   * is no cutoff and no catch-up fee. (The 20th-of-month cutoff still applies
+   * separately to *teacher* invoice eligibility — see shouldGenerateFeeForMonth,
+   * used from invoices.service.ts.)
    */
   async generateRollingFee(
     enrollment: any,
     billingMonth: number,
     billingYear: number,
-    currentMonth: number,
-    currentYear: number,
-    currentDay: number,
     dueDate: string,
     isManualGeneration: boolean
   ) {
     let regularCount = 0;
-    let catchUpCount = 0;
     let skipped = false;
     let skipReason: string | null = null;
 
     // Validate customFeePerMonth exists
     if (!enrollment.customFeePerMonth) {
       logger.warn(`[FEES] Skipping enrollment ${enrollment.id}: customFeePerMonth not set`);
-      return { regularCount: 0, catchUpCount: 0, skipped: true, skipReason: 'No customFeePerMonth set' };
+      return { regularCount: 0, skipped: true, skipReason: 'No customFeePerMonth set' };
     }
 
     // Hard lower bound: never generate fees for months before the enrollment existed in the system.
@@ -779,7 +769,6 @@ export const feesService = {
         }
         return {
           regularCount: 0,
-          catchUpCount: 0,
           skipped: true,
           skipReason: `Enrollment created ${enrolledAt.toISOString().split('T')[0]} after billing period ${billingMonth}/${billingYear}`,
         };
@@ -815,7 +804,6 @@ export const feesService = {
           );
         return {
           regularCount: 0,
-          catchUpCount: 0,
           skipped: true,
           skipReason: `Dropped ${droppedAt.toISOString().split('T')[0]}${isDropMonth ? ' before 20th' : ''} - no fee for ${billingMonth}/${billingYear}`,
         };
@@ -831,8 +819,7 @@ export const feesService = {
 
     // Pro-rated first month (opt-in per enrollment): charge only the days from the
     // enrollment date to the end of the month, so billing syncs to the 1st from the
-    // next month onward. Overrides the 20th rule for the enrollment month — the fee
-    // is always generated immediately and no catch-up applies.
+    // next month onward. Still generated immediately either way.
     const isProratedFirstMonth =
       enrollment.prorateFirstMonth &&
       enrollmentDate !== null &&
@@ -846,125 +833,87 @@ export const feesService = {
       feeNotes = `Pro-rated first month: ${chargedDays} of ${daysInMonth} days`;
     }
 
-    // RULE 1: Check if we should generate fee for current billing month
-    const shouldGenerateCurrentMonth =
-      isProratedFirstMonth || this.shouldGenerateFeeForMonth(enrollmentDate, billingMonth, billingYear);
-
-    if (shouldGenerateCurrentMonth) {
-      // Manual regeneration reconciles: a catch-up fee for a month that should
-      // have a regular fee is stale (e.g. the enrollment date moved before the
-      // 20th). Remove it — the unique (enrollment, month, year) constraint would
-      // otherwise block inserting the regular fee. Received fees are never touched.
-      if (isManualGeneration) {
-        await db
-          .delete(fees)
-          .where(
-            and(
-              eq(fees.enrollmentId, enrollment.id),
-              eq(fees.month, billingMonth),
-              eq(fees.year, billingYear),
-              eq(fees.isCatchUp, true),
-              ne(fees.status, 'received')
-            )
-          );
-      }
-
-      const existing = await db
-        .select()
-        .from(fees)
+    // Manual regeneration reconciles: a catch-up fee left over from before this
+    // rule existed is stale once a regular fee is due for the month — remove it
+    // so the unique (enrollment, month, year) constraint doesn't block the insert.
+    // Received fees are never touched.
+    if (isManualGeneration) {
+      await db
+        .delete(fees)
         .where(
           and(
             eq(fees.enrollmentId, enrollment.id),
             eq(fees.month, billingMonth),
             eq(fees.year, billingYear),
-            eq(fees.isCatchUp, false)
+            eq(fees.isCatchUp, true),
+            ne(fees.status, 'received')
           )
+        );
+    }
+
+    const existing = await db
+      .select()
+      .from(fees)
+      .where(
+        and(
+          eq(fees.enrollmentId, enrollment.id),
+          eq(fees.month, billingMonth),
+          eq(fees.year, billingYear),
+          eq(fees.isCatchUp, false)
         )
-        .limit(1);
+      )
+      .limit(1);
 
-      if (existing.length === 0 || isManualGeneration) {
-        if (existing.length > 0) {
-          // Don't overwrite already-received fees
-          if (existing[0].status !== 'received') {
-            await db
-              .update(fees)
-              .set({
-                amount: feeAmount,
-                currency: currency,
-                billingType: 'monthly',
-                feeNotes: feeNotes,
-                updatedAt: new Date(),
-              })
-              .where(eq(fees.id, existing[0].id));
-            logger.info(`[FEES] Updated regular fee for enrollment ${enrollment.id} for ${billingMonth}/${billingYear}: ${currency} ${feeAmount}`);
-          } else {
-            logger.info(`[FEES] Skipping update for received fee, enrollment ${enrollment.id} for ${billingMonth}/${billingYear}`);
-          }
-          regularCount++; // Count updates in manual mode
+    if (existing.length === 0 || isManualGeneration) {
+      if (existing.length > 0) {
+        // Don't overwrite already-received fees
+        if (existing[0].status !== 'received') {
+          await db
+            .update(fees)
+            .set({
+              amount: feeAmount,
+              currency: currency,
+              billingType: 'monthly',
+              feeNotes: feeNotes,
+              updatedAt: new Date(),
+            })
+            .where(eq(fees.id, existing[0].id));
+          logger.info(`[FEES] Updated regular fee for enrollment ${enrollment.id} for ${billingMonth}/${billingYear}: ${currency} ${feeAmount}`);
         } else {
-          await db.insert(fees).values({
-            enrollmentId: enrollment.id,
-            studentId: enrollment.studentId,
-            courseId: enrollment.courseId,
-            month: billingMonth,
-            year: billingYear,
-            amount: feeAmount,
-            currency: currency,
-            dueDate,
-            status: 'pending',
-            billingType: 'monthly',
-            isCatchUp: false,
-            feeNotes: feeNotes,
-          });
-          regularCount++;
+          logger.info(`[FEES] Skipping update for received fee, enrollment ${enrollment.id} for ${billingMonth}/${billingYear}`);
         }
-
-        logger.info(`[FEES] Processed regular fee for enrollment ${enrollment.id} for ${billingMonth}/${billingYear}: ${currency} ${feeAmount}`);
+        regularCount++; // Count updates in manual mode
+      } else {
+        await db.insert(fees).values({
+          enrollmentId: enrollment.id,
+          studentId: enrollment.studentId,
+          courseId: enrollment.courseId,
+          month: billingMonth,
+          year: billingYear,
+          amount: feeAmount,
+          currency: currency,
+          dueDate,
+          status: 'pending',
+          billingType: 'monthly',
+          isCatchUp: false,
+          feeNotes: feeNotes,
+        });
+        regularCount++;
       }
-    } else {
-      skipped = true;
-      skipReason = `Enrollment date ${enrollmentDate?.toISOString().split('T')[0]} after 20th - skipping month ${billingMonth}/${billingYear}`;
 
-      // Manual regeneration reconciles: if the enrollment date moved to on/after
-      // the 20th, a previously generated regular fee for this month is no longer
-      // valid — remove it (catch-up fees for this month are preserved; received
-      // fees are never touched). The daily cron stays non-destructive here.
-      if (isManualGeneration) {
-        await db
-          .delete(fees)
-          .where(
-            and(
-              eq(fees.enrollmentId, enrollment.id),
-              eq(fees.month, billingMonth),
-              eq(fees.year, billingYear),
-              eq(fees.isCatchUp, false),
-              ne(fees.status, 'received')
-            )
-          );
-      }
+      logger.info(`[FEES] Processed regular fee for enrollment ${enrollment.id} for ${billingMonth}/${billingYear}: ${currency} ${feeAmount}`);
     }
 
-    // RULE 2: Check for catch-up fees (only when current date >= 20th).
-    // Prorated-first-month enrollments never get catch-ups — their first-month
-    // fee is generated immediately (pro-rated) instead.
-    if (currentDay >= 20 && currentMonth === billingMonth && currentYear === billingYear && enrollmentDate && !enrollment.prorateFirstMonth) {
-      const catchUpResult = await this.generateCatchUpFee(
-        enrollment,
-        enrollmentDate,
-        billingMonth,
-        billingYear,
-        feeAmount,
-        currency,
-        isManualGeneration
-      );
-      catchUpCount += catchUpResult.count;
-    }
-
-    return { regularCount, catchUpCount, skipped, skipReason };
+    return { regularCount, skipped, skipReason };
   },
 
   /**
-   * Determine if fee should be generated based on enrollment date
+   * The old 20th-of-month join cutoff. No longer used to decide whether a
+   * child is billed (they're always billed immediately, in full, from the
+   * enrollment month — see generateRollingFee) — kept solely to gate *teacher*
+   * invoice eligibility (invoices.service.ts): a teacher is credited for a
+   * student starting the month this returns true for, one month later than
+   * the child's own bill when the child joined on/after the 20th.
    * RULE: If enrolled before 20th of month, include that month
    *       If enrolled on/after 20th, skip that month
    */
@@ -988,90 +937,6 @@ export const feesService = {
     }
 
     return false;
-  },
-
-  /**
-   * Generate catch-up fee for previous month if student enrolled after 20th
-   * Only runs when current date >= 20th
-   */
-  async generateCatchUpFee(
-    enrollment: any,
-    enrollmentDate: Date,
-    currentMonth: number,
-    currentYear: number,
-    feeAmount: string,
-    currency: string,
-    isManualGeneration: boolean
-  ) {
-    const enrollmentMonth = enrollmentDate.getMonth() + 1;
-    const enrollmentYear = enrollmentDate.getFullYear();
-    const enrollmentDay = enrollmentDate.getDate();
-
-    // Calculate previous month
-    let prevMonth = currentMonth - 1;
-    let prevYear = currentYear;
-    if (prevMonth === 0) {
-      prevMonth = 12;
-      prevYear--;
-    }
-
-    // Check if student enrolled after 20th of previous month
-    if (enrollmentYear === prevYear && enrollmentMonth === prevMonth && enrollmentDay >= 20) {
-      const existingCatchUp = await db
-        .select()
-        .from(fees)
-        .where(
-          and(
-            eq(fees.enrollmentId, enrollment.id),
-            eq(fees.month, prevMonth),
-            eq(fees.year, prevYear),
-            eq(fees.isCatchUp, true)
-          )
-        )
-        .limit(1);
-
-      if (existingCatchUp.length === 0 || isManualGeneration) {
-        const catchUpDueDate = new Date(currentYear, currentMonth - 1, 10).toISOString().split('T')[0];
-
-        if (existingCatchUp.length > 0) {
-          // Don't overwrite already-received catch-up fees
-          if (existingCatchUp[0].status !== 'received') {
-            await db
-              .update(fees)
-              .set({
-                amount: feeAmount,
-                currency: currency,
-                billingType: 'catch-up',
-                feeNotes: `Catch-up fee for ${prevMonth}/${prevYear} (enrolled ${enrollmentDate.toISOString().split('T')[0]})`,
-                updatedAt: new Date(),
-              })
-              .where(eq(fees.id, existingCatchUp[0].id));
-            logger.info(`[FEES] Updated catch-up fee for enrollment ${enrollment.id} for ${prevMonth}/${prevYear}: ${currency} ${feeAmount}`);
-          }
-          return { count: 1 }; // Count updates too
-        } else {
-          await db.insert(fees).values({
-            enrollmentId: enrollment.id,
-            studentId: enrollment.studentId,
-            courseId: enrollment.courseId,
-            month: prevMonth,
-            year: prevYear,
-            amount: feeAmount,
-            currency: currency,
-            dueDate: catchUpDueDate,
-            status: 'pending',
-            billingType: 'catch-up',
-            isCatchUp: true,
-            feeNotes: `Catch-up fee for ${prevMonth}/${prevYear} (enrolled ${enrollmentDate.toISOString().split('T')[0]})`,
-          });
-
-          logger.info(`[FEES] Generated catch-up fee for enrollment ${enrollment.id} for ${prevMonth}/${prevYear}: ${currency} ${feeAmount}`);
-          return { count: 1 };
-        }
-      }
-    }
-
-    return { count: 0 };
   },
 
   async getStudentFees(studentId: string) {

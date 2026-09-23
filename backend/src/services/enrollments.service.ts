@@ -152,29 +152,25 @@ export const enrollmentsService = {
         feeNotes = `Pro-rated first month: ${chargedDays} of ${daysInMonth} days`;
       }
 
-      // 20th rule: enrolled on/after the 20th (and not prorated) → no fee for the
-      // enrollment month; the catch-up flow bills it the following month
-      if (input.prorateFirstMonth || enrolledDay < 20) {
-        // Calculate due date (10th of the fee month)
-        const dueDate = new Date(feeYear, feeMonth - 1, 10);
+      // The child is billed the full month's fee immediately on enrollment,
+      // no matter what day of the month they join (no 20th cutoff, no
+      // catch-up — those are still used to gate the *teacher's* payout, one
+      // month later than the child's bill when they joined on/after the
+      // 20th; see feesService.shouldGenerateFeeForMonth).
+      const dueDate = new Date(feeYear, feeMonth - 1, 10);
 
-        await db.insert(fees).values({
-          enrollmentId: newEnrollment.id,
-          studentId: input.studentId,
-          courseId: input.courseId,
-          month: feeMonth,
-          year: feeYear,
-          amount: feeAmount,
-          currency, // Use the same currency as enrollment
-          dueDate: dueDate.toISOString().split('T')[0],
-          status: 'pending',
-          feeNotes,
-        });
-      } else {
-        logger.info(`[ENROLLMENT] Enrolled on/after the 20th (${effectiveEnrolledAt.toISOString().split('T')[0]}) — no fee for ${feeMonth}/${feeYear}; catch-up will bill it next month`, {
-          enrollmentId: newEnrollment.id,
-        });
-      }
+      await db.insert(fees).values({
+        enrollmentId: newEnrollment.id,
+        studentId: input.studentId,
+        courseId: input.courseId,
+        month: feeMonth,
+        year: feeYear,
+        amount: feeAmount,
+        currency, // Use the same currency as enrollment
+        dueDate: dueDate.toISOString().split('T')[0],
+        status: 'pending',
+        feeNotes,
+      });
     } else {
       // 1-to-1: create a zero-amount placeholder fee for the enrollment month so
       // the admin can record sessions immediately (Edit Sessions on the Fees page).
@@ -716,20 +712,20 @@ export const enrollmentsService = {
           firstMonthNotes = `Pro-rated first month: ${chargedDays} of ${daysInMonth} days`;
         }
 
-        if (prorateFirstMonth) {
-          // The prorated fee replaces any catch-up for the enrollment month
-          await db
-            .delete(fees)
-            .where(
-              and(
-                eq(fees.enrollmentId, enrollmentId),
-                eq(fees.month, firstMonth),
-                eq(fees.year, firstYear),
-                eq(fees.isCatchUp, true),
-                sql`${fees.status} != 'received'`
-              )
-            );
-        }
+        // A first-month fee is now always billed immediately, so a leftover
+        // catch-up row from before this rule existed is stale — clear it so it
+        // doesn't block inserting/updating the real first-month fee below.
+        await db
+          .delete(fees)
+          .where(
+            and(
+              eq(fees.enrollmentId, enrollmentId),
+              eq(fees.month, firstMonth),
+              eq(fees.year, firstYear),
+              eq(fees.isCatchUp, true),
+              sql`${fees.status} != 'received'`
+            )
+          );
 
         const [existingFirstFee] = await db
           .select({ id: fees.id, status: fees.status })
@@ -752,8 +748,9 @@ export const enrollmentsService = {
               .where(eq(fees.id, existingFirstFee.id));
             logger.info(`[ENROLLMENT] Updated first-month fee for enrollment ${enrollmentId} (${firstMonth}/${firstYear}): ${firstMonthAmount}`);
           }
-        } else if (prorateFirstMonth) {
-          // No first-month fee exists (e.g. enrolled after the 20th) — create the prorated one
+        } else {
+          // No first-month fee exists (e.g. an older enrollment from before fees
+          // were always billed immediately) — create it now, full or prorated.
           await db.insert(fees).values({
             enrollmentId,
             studentId: updatedEnrollment.studentId,
@@ -768,7 +765,7 @@ export const enrollmentsService = {
             isCatchUp: false,
             feeNotes: firstMonthNotes,
           });
-          logger.info(`[ENROLLMENT] Created pro-rated first-month fee for enrollment ${enrollmentId} (${firstMonth}/${firstYear}): ${firstMonthAmount}`);
+          logger.info(`[ENROLLMENT] Created missing first-month fee for enrollment ${enrollmentId} (${firstMonth}/${firstYear}): ${firstMonthAmount}`);
         }
       }
     }

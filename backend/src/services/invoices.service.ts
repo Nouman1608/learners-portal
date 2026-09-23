@@ -3,6 +3,7 @@ import { invoices, invoiceLineItems } from '../db/schema/invoices';
 import { fees, enrollments, users, courses, courseTeachers, courseEvents } from '../db/schema';
 import { eq, and, or, desc, sql, gte, lte, ilike } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler';
+import { feesService } from './fees.service';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
@@ -1037,6 +1038,7 @@ export const invoicesService = {
           classType: enrollments.classType,
           attendanceMode: enrollments.attendanceMode,
           startDate: enrollments.startDate,
+          enrolledAt: enrollments.enrolledAt,
           student: {
             id: users.id,
             firstName: users.firstName,
@@ -1102,7 +1104,17 @@ export const invoicesService = {
             continue;
           }
         } else {
-          // Regular monthly fee — look up actual fee record to respect join date (20th rule) and proration
+          // Teacher eligibility follows the old 20th-of-month join cutoff, decoupled
+          // from the child's own fee (which is now billed immediately from day one):
+          // joined before the 20th → teacher credited this month; on/after the 20th
+          // → teacher credit starts the following month instead.
+          const enrolledAtDate = enrollment.enrolledAt ? new Date(enrollment.enrolledAt) : null;
+          if (!feesService.shouldGenerateFeeForMonth(enrolledAtDate, input.month, input.year)) {
+            logger.info(`[INVOICE]   Skipping local student ${enrollment.student.firstName} ${enrollment.student.lastName}: joined on/after the 20th, teacher credit starts next month`);
+            continue;
+          }
+
+          // Regular monthly fee — look up actual fee record for the amount/proration
           const [regularFee] = await db
             .select({ amount: fees.amount })
             .from(fees)
@@ -1182,7 +1194,17 @@ export const invoicesService = {
             continue;
           }
         } else {
-          // Regular online class — check fee record to respect join date (20th rule)
+          // Teacher eligibility follows the old 20th-of-month join cutoff, decoupled
+          // from the child's own fee (which is now billed immediately from day one):
+          // joined before the 20th → teacher credited this month; on/after the 20th
+          // → teacher credit starts the following month instead.
+          const enrolledAtDate = enrollment.enrolledAt ? new Date(enrollment.enrolledAt) : null;
+          if (!feesService.shouldGenerateFeeForMonth(enrolledAtDate, input.month, input.year)) {
+            logger.info(`[INVOICE]   Skipping online student ${enrollment.student.firstName} ${enrollment.student.lastName}: joined on/after the 20th, teacher credit starts next month`);
+            continue;
+          }
+
+          // Regular online class — check fee record for the amount/proration
           const [regularFee] = await db
             .select({ id: fees.id, amount: fees.amount })
             .from(fees)

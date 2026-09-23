@@ -8,7 +8,8 @@ import whatsappCron from './whatsappCron';
 /**
  * Generate fees for all active enrollments
  * Runs DAILY at 00:01 (1 minute past midnight)
- * Daily run handles 20th-of-month cutoff logic and catch-up fees in real-time
+ * Catches any enrollment created outside the app's own immediate-fee step
+ * (e.g. a backdated enrollment date edit) and keeps 1-to-1 usage fees in sync.
  */
 export const dailyFeeGeneration = cron.schedule('1 0 * * *', async () => {
   try {
@@ -20,7 +21,7 @@ export const dailyFeeGeneration = cron.schedule('1 0 * * *', async () => {
 
     const result = await feesService.generateMonthlyFees(month, year, false);
 
-    logger.info(`[CRON] Daily fee generation completed: ${result.regularFeesCreated} regular, ${result.usageFeesCreated} usage, ${result.catchUpFeesCreated} catch-up fees`);
+    logger.info(`[CRON] Daily fee generation completed: ${result.regularFeesCreated} regular, ${result.usageFeesCreated} usage`);
   } catch (error: any) {
     logger.error('[CRON] Daily fee generation failed:', error);
   }
