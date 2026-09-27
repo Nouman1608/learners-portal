@@ -3,6 +3,7 @@ import Sidebar from './Sidebar';
 import { Bars3Icon } from '@heroicons/react/24/outline';
 import { useAuth } from '../../context/AuthContext';
 import FirstLoginModal from '../FirstLoginModal';
+import { brand } from '../../brand';
 
 interface LayoutProps {
   children: ReactNode;
@@ -28,7 +29,7 @@ export default function Layout({ children }: LayoutProps) {
           >
             <Bars3Icon className="h-6 w-6" />
           </button>
-          <h1 className="text-lg font-semibold text-gray-900">Learners Academy</h1>
+          <h1 className="text-lg font-semibold text-gray-900">{brand.name}</h1>
           <div className="w-6"></div> {/* Spacer for centering */}
         </div>
 

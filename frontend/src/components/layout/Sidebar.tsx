@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import authApi from '../../api/auth.api';
 import toast from 'react-hot-toast';
+import { brand } from '../../brand';
 import {
   HomeIcon,
   UserGroupIcon,
@@ -136,8 +137,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Logo/Brand */}
       <div className="flex items-center justify-between py-4 px-4 bg-gray-800 border-b border-gray-700 flex-shrink-0">
         <div className="flex flex-col items-center flex-1">
-          <img src="/logo.svg" alt="Learners Academy" className="h-20 w-auto" />
-          <h1 className="text-lg font-bold text-white">Learners Academy</h1>
+          <img src={brand.logoOnDark} alt={brand.name} className={brand.logoOnDarkClass} />
+          <h1 className="text-lg font-bold text-white">{brand.name}</h1>
         </div>
         {/* Close button for mobile */}
         <button
