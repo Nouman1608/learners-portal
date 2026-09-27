@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+import { brand } from '../brand';
 
 const Login: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -37,17 +38,17 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
+    <div className={`min-h-screen flex items-center justify-center px-4 ${brand.loginBgClass}`}>
       <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-lg">
         {/* Header */}
         <div className="text-center">
           <img
-            src="/logo.svg"
-            alt="Learners Academy"
-            className="mx-auto h-32 w-auto mb-4"
+            src={brand.logo}
+            alt={brand.name}
+            className={brand.logoClass}
           />
           <h1 className="text-3xl font-bold text-gray-900">
-            Learners Academy
+            {brand.name}
           </h1>
           <p className="mt-2 text-sm text-gray-600">
             Sign in to your account
@@ -69,7 +70,7 @@ const Login: React.FC = () => {
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                className={`mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none ${brand.focusRingClass}`}
                 placeholder="Enter your username"
                 disabled={loading}
               />
@@ -88,7 +89,7 @@ const Login: React.FC = () => {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  className={`block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none ${brand.focusRingClass}`}
                   placeholder="Enter your password"
                   disabled={loading}
                 />
@@ -112,7 +113,7 @@ const Login: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${brand.buttonClass}`}
           >
             {loading ? (
               <span className="flex items-center">

@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// In production the API is proxied at /api on the same host, so one build serves
+// every portal hostname and the auth cookie (SameSite=strict) stays first-party.
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api');
 
 export const apiClient = axios.create({
   baseURL: API_URL,

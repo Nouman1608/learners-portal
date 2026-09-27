@@ -22,7 +22,7 @@ app.use(helmet());
 // CORS
 app.use(
   cors({
-    origin: env.FRONTEND_URL,
+    origin: env.FRONTEND_URL.split(',').map((o) => o.trim()).filter(Boolean),
     credentials: true,
   })
 );

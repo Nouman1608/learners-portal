@@ -6,7 +6,8 @@ dotenv.config();
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.string().default('5000'),
-  FRONTEND_URL: z.string().url(),
+  // One URL, or several separated by commas (the portal answers on more than one hostname).
+  FRONTEND_URL: z.string().min(1),
   DATABASE_URL: z.string().url(),
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default('15m'),
