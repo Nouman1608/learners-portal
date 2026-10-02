@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { User, LoginCredentials } from '../types';
 import authApi from '../api/auth.api';
 import toast from 'react-hot-toast';
+import { setAuthToken } from '../native';
 
 interface AuthContextType {
   user: User | null;
@@ -96,6 +97,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error('Logout error:', error);
       // Clear user anyway
       setUser(null);
+    } finally {
+      await setAuthToken(null);
     }
   };
 

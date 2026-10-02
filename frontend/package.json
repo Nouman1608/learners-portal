@@ -8,9 +8,20 @@
     "build": "vite build",
     "build:check": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "build:app-la": "tsc && vite build --mode app-la --outDir dist-app-la",
+    "app:la": "npm run build:app-la && cap sync",
+    "app:la:android": "npm run app:la && cap open android"
   },
   "dependencies": {
+    "@aparajita/capacitor-secure-storage": "^8.0.1",
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/browser": "^8.0.4",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/ios": "^8.5.2",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.3",
     "@headlessui/react": "^1.7.17",
     "@heroicons/react": "^2.1.1",
     "@hookform/resolvers": "^3.3.2",
@@ -33,6 +44,8 @@
     "zustand": "^4.4.7"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.5.2",
     "@types/react": "^18.2.45",
     "@types/react-big-calendar": "^1.8.9",
     "@types/react-dom": "^18.2.18",
@@ -42,5 +55,8 @@
     "tailwindcss": "^3.3.6",
     "typescript": "^5.3.3",
     "vite": "^5.0.8"
+  },
+  "allowScripts": {
+    "sharp@0.32.6": true
   }
 }
