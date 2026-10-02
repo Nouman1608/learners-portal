@@ -6,8 +6,18 @@ import { eq } from 'drizzle-orm';
 import { hashPassword, comparePassword } from '../utils/bcrypt';
 import { generateToken } from '../config/jwt';
 import { AppError } from '../middleware/errorHandler';
+import { getRequestToken } from '../middleware/auth';
 import logger from '../utils/logger';
 import env from '../config/env';
+
+// The mobile app identifies itself with this header. It gets its token in the
+// response body (it sends it back as a Bearer header) and a longer session, so
+// people are not logged out of the app every 15 minutes.
+const MOBILE_CLIENT = 'learners-mobile';
+const MOBILE_SESSION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const WEB_SESSION_MS = 15 * 60 * 1000; // 15 minutes
+
+const isMobileClient = (req: Request) => req.get('X-Client') === MOBILE_CLIENT;
 
 const loginSchema = z.object({
   username: z.string().min(1, 'Username is required'),
@@ -58,15 +68,19 @@ export const login = async (req: Request, res: Response) => {
       throw new AppError(401, 'Invalid username or password');
     }
 
-    // Generate JWT token
-    const token = generateToken({
-      userId: user.id,
-      username: user.username,
-      role: user.role,
-    });
+    const mobile = isMobileClient(req);
 
-    // Calculate expiration time (15 minutes from now)
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    // Generate JWT token
+    const token = generateToken(
+      {
+        userId: user.id,
+        username: user.username,
+        role: user.role,
+      },
+      mobile ? '30d' : undefined
+    );
+
+    const expiresAt = new Date(Date.now() + (mobile ? MOBILE_SESSION_MS : WEB_SESSION_MS));
 
     // Create session in database
     await db.insert(sessions).values({
@@ -75,18 +89,20 @@ export const login = async (req: Request, res: Response) => {
       expiresAt,
     });
 
-    // Set cookie
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 15 * 60 * 1000, // 15 minutes
-    });
+    if (!mobile) {
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: WEB_SESSION_MS,
+      });
+    }
 
-    logger.info(`User logged in: ${username}`);
+    logger.info(`User logged in: ${username}${mobile ? ' (mobile app)' : ''}`);
 
     // Return user data without password
     return res.json({
+      ...(mobile && { token }),
       user: {
         id: user.id,
         username: user.username,
@@ -111,7 +127,7 @@ export const login = async (req: Request, res: Response) => {
 
 export const logout = async (req: Request, res: Response) => {
   try {
-    const token = req.cookies.token;
+    const token = getRequestToken(req);
 
     if (token) {
       // Delete session from database
@@ -168,20 +184,24 @@ export const me = async (req: Request, res: Response) => {
 
 export const refresh = async (req: Request, res: Response) => {
   try {
-    const oldToken = req.cookies.token;
+    const oldToken = getRequestToken(req);
+    const mobile = isMobileClient(req);
 
     if (!oldToken || !req.user) {
       throw new AppError(401, 'No valid session');
     }
 
     // Generate new token
-    const newToken = generateToken({
-      userId: req.user.id,
-      username: req.user.username,
-      role: req.user.role,
-    });
+    const newToken = generateToken(
+      {
+        userId: req.user.id,
+        username: req.user.username,
+        role: req.user.role,
+      },
+      mobile ? '30d' : undefined
+    );
 
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + (mobile ? MOBILE_SESSION_MS : WEB_SESSION_MS));
 
     // Delete old session and create new one
     await db.delete(sessions).where(eq(sessions.token, oldToken));
@@ -191,12 +211,16 @@ export const refresh = async (req: Request, res: Response) => {
       expiresAt,
     });
 
-    // Set new cookie
+    if (mobile) {
+      logger.info(`Token refreshed for user: ${req.user.username} (mobile app)`);
+      return res.json({ message: 'Token refreshed successfully', token: newToken });
+    }
+
     res.cookie('token', newToken, {
       httpOnly: true,
       secure: env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 15 * 60 * 1000,
+      maxAge: WEB_SESSION_MS,
     });
 
     logger.info(`Token refreshed for user: ${req.user.username}`);

@@ -7,9 +7,9 @@ export interface JWTPayload {
   role: string;
 }
 
-export const generateToken = (payload: JWTPayload): string => {
+export const generateToken = (payload: JWTPayload, expiresIn: string = env.JWT_EXPIRES_IN): string => {
   return jwt.sign(payload, env.JWT_SECRET, {
-    expiresIn: env.JWT_EXPIRES_IN as string,
+    expiresIn,
   } as jwt.SignOptions);
 };
 

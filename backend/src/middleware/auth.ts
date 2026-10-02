@@ -5,14 +5,24 @@ import { sessions, users } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import logger from '../utils/logger';
 
+/**
+ * The web app sends its token in an httpOnly cookie; the mobile app has no
+ * cookie jar it can rely on, so it sends `Authorization: Bearer <token>`.
+ */
+export const getRequestToken = (req: Request): string | undefined => {
+  if (req.cookies.token) return req.cookies.token;
+  const header = req.get('Authorization');
+  if (header?.startsWith('Bearer ')) return header.slice(7).trim() || undefined;
+  return undefined;
+};
+
 export const authenticate = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    // Get token from cookie
-    const token = req.cookies.token;
+    const token = getRequestToken(req);
 
     if (!token) {
       return res.status(401).json({ error: 'Authentication required' });
@@ -71,7 +81,7 @@ export const optionalAuth = async (
   next: NextFunction
 ) => {
   try {
-    const token = req.cookies.token;
+    const token = getRequestToken(req);
 
     if (token) {
       const payload = verifyToken(token);

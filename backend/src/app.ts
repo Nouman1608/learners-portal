@@ -22,7 +22,12 @@ app.use(helmet());
 // CORS
 app.use(
   cors({
-    origin: env.FRONTEND_URL.split(',').map((o) => o.trim()).filter(Boolean),
+    origin: [
+      ...env.FRONTEND_URL.split(',').map((o) => o.trim()).filter(Boolean),
+      // The mobile app's built-in web view (Capacitor): Android, then iOS.
+      'https://localhost',
+      'capacitor://localhost',
+    ],
     credentials: true,
   })
 );
