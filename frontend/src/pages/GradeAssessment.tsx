@@ -12,6 +12,7 @@ import { FullscreenToggle } from '../components/common/FullscreenToggle';
 import { ArrowLeftIcon, CheckCircleIcon, ClockIcon, XCircleIcon, PencilSquareIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import EmptyState from '../components/common/EmptyState';
+import { fileUrl } from '../native';
 
 const gradeSchema = z.object({
   score: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Invalid score format'),
@@ -356,7 +357,7 @@ const GradeAssessment: React.FC = () => {
 
             <div className={isFullscreen ? 'h-[calc(100vh-4rem)]' : 'h-[calc(100vh-16rem)]'}>
               <PDFAnnotator
-                fileUrl={`${(import.meta.env.VITE_API_URL || 'http://localhost:3000').replace('/api', '')}${submissionFile.fileUrl}`}
+                fileUrl={fileUrl(submissionFile.fileUrl)}
                 resultId={selectedStudent.id}
                 onSave={() => toast.success('Annotations saved')}
                 className="h-full"

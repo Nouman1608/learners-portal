@@ -3,6 +3,7 @@ import { invoicesApi, Invoice, OneToOneSession, SessionOverride } from '../api/i
 import { useAuth } from '../context/AuthContext';
 import OneToOneSessionModal from '../components/invoices/OneToOneSessionModal';
 import toast from 'react-hot-toast';
+import { fileUrl, isNativeApp, openExternal } from '../native';
 import {
   DocumentTextIcon,
   EnvelopeIcon,
@@ -213,6 +214,10 @@ export default function Invoices() {
     try {
       // Get the appropriate PDF URL based on user role
       const { pdfUrl } = await invoicesApi.downloadInvoice(invoice.id);
+      if (isNativeApp) {
+        await openExternal(fileUrl(pdfUrl));
+        return;
+      }
       setViewingPdfUrl(pdfUrl);
       setViewingInvoice(invoice);
     } catch (error: any) {
@@ -224,8 +229,12 @@ export default function Invoices() {
     try {
       // Use the download API to get the appropriate PDF based on user role
       const { pdfUrl, invoiceNumber } = await invoicesApi.downloadInvoice(invoice.id);
+      if (isNativeApp) {
+        await openExternal(fileUrl(pdfUrl));
+        return;
+      }
       const link = document.createElement('a');
-      link.href = import.meta.env.VITE_API_URL.replace('/api', '') + pdfUrl;
+      link.href = fileUrl(pdfUrl);
       link.download = `${invoiceNumber}.pdf`;
       link.click();
     } catch (error: any) {
@@ -545,8 +554,7 @@ export default function Invoices() {
                         onClick={async () => {
                           try {
                             const { pdfUrl, invoiceNumber } = await invoicesApi.downloadInvoice(invoice.id);
-                            const baseUrl = (import.meta.env.VITE_API_URL || '').replace('/api', '');
-                            const downloadUrl = `${window.location.origin}${baseUrl}${pdfUrl}`;
+                            const downloadUrl = new URL(fileUrl(pdfUrl), window.location.origin).href;
                             const message = `Here is your invoice ${invoiceNumber}:\n${downloadUrl}`;
                             await navigator.clipboard.writeText(message);
                             toast.success('Invoice link copied! Paste it in the WhatsApp group.');
@@ -599,7 +607,7 @@ export default function Invoices() {
             {/* PDF Viewer */}
             <div className="flex-1 overflow-auto">
               <iframe
-                src={import.meta.env.VITE_API_URL.replace('/api', '') + viewingPdfUrl}
+                src={fileUrl(viewingPdfUrl)}
                 className="w-full h-full"
                 title="Invoice PDF"
               />

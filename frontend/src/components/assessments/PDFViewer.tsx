@@ -5,6 +5,7 @@ import 'react-pdf/dist/esm/Page/TextLayer.css';
 import { useAutoHide } from '../../hooks/useAutoHide';
 import { useSwipeGesture } from '../../hooks/useSwipeGesture';
 import LoadingSpinner from '../common/LoadingSpinner';
+import { pdfSource } from '../../native';
 
 // Configure PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
@@ -21,6 +22,18 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ fileUrl, className = '', inFullsc
   const [scale, setScale] = useState<number>(0.5);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [source, setSource] = useState<Awaited<ReturnType<typeof pdfSource>> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSource(null);
+    setLoading(true);
+    setError(null);
+    pdfSource(fileUrl)
+      .then((s) => { if (!cancelled) setSource(s); })
+      .catch((err) => { if (!cancelled) onDocumentLoadError(err); });
+    return () => { cancelled = true; };
+  }, [fileUrl]);
 
   // Auto-hide controls
   const { isVisible: controlsVisible, hideAfterDelay } = useAutoHide({ delay: 3000 });
@@ -163,10 +176,10 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ fileUrl, className = '', inFullsc
           </div>
         )}
 
-        {!error && (
+        {!error && source && (
           <div className="inline-block min-w-full text-center">
             <Document
-              file={fileUrl}
+              file={source}
               onLoadSuccess={onDocumentLoadSuccess}
               onLoadError={onDocumentLoadError}
               loading=""

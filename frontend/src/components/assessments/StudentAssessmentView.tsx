@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { assessmentsApi, Assessment, AssessmentFile } from '../../api/assessments.api';
 import PDFViewer from './PDFViewer';
 import LoadingSpinner from '../common/LoadingSpinner';
+import { fileUrl, isNativeApp, openExternal } from '../../native';
 import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 
 interface StudentAssessmentViewProps {
@@ -91,11 +92,14 @@ const StudentAssessmentView: React.FC<StudentAssessmentViewProps> = ({
     }
   };
 
-  const getFileUrl = (fileUrl: string) =>
-    `${(import.meta.env.VITE_API_URL || 'http://localhost:3000').replace('/api', '')}${fileUrl}`;
+  const getFileUrl = fileUrl;
 
   const handleDownload = async (file: AssessmentFile) => {
     try {
+      if (isNativeApp) {
+        await openExternal(getFileUrl(file.fileUrl));
+        return;
+      }
       const response = await fetch(getFileUrl(file.fileUrl));
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);

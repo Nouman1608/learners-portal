@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { DocumentTextIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import EmptyState from '../components/common/EmptyState';
+import { fileUrl, openExternal } from '../native';
 
 const MyInvoices: React.FC = () => {
   const { user } = useAuth();
@@ -39,7 +40,7 @@ const MyInvoices: React.FC = () => {
 
   const handleDownload = (invoice: Invoice) => {
     if (invoice.pdfUrl) {
-      window.open(invoice.pdfUrl, '_blank');
+      openExternal(fileUrl(invoice.pdfUrl));
     } else {
       toast.error('Invoice PDF not available');
     }

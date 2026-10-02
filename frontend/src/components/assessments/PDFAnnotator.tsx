@@ -7,6 +7,7 @@ import { useSwipeGesture } from '../../hooks/useSwipeGesture';
 import { PencilIcon, ChatBubbleLeftIcon, SwatchIcon, ArrowUturnLeftIcon, TrashIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import ConfirmDialog from '../common/ConfirmDialog';
 import LoadingSpinner from '../common/LoadingSpinner';
+import { pdfSource } from '../../native';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 
 // Configure PDF.js worker
@@ -107,7 +108,7 @@ const PDFAnnotator: React.FC<PDFAnnotatorProps> = ({ fileUrl, resultId, onSave, 
         setLoading(true);
         console.log('Loading PDF from:', absoluteFileUrl);
 
-        const loadingTask = pdfjsLib.getDocument(absoluteFileUrl);
+        const loadingTask = pdfjsLib.getDocument(await pdfSource(absoluteFileUrl));
         const pdf = await loadingTask.promise;
 
         console.log('PDF loaded successfully. Pages:', pdf.numPages);

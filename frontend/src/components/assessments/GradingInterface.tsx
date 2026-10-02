@@ -9,6 +9,7 @@ import PDFAnnotator from './PDFAnnotator';
 import { ChevronLeftIcon, XMarkIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
 import LoadingSpinner from '../common/LoadingSpinner';
 import EmptyState from '../common/EmptyState';
+import { fileUrl } from '../../native';
 
 const gradeSchema = z.object({
   score: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Invalid score format'),
@@ -220,7 +221,7 @@ const GradingInterface: React.FC<GradingInterfaceProps> = ({ assessment, onClose
                   {/* PDF Annotator */}
                   <div className="flex-1 overflow-hidden">
                     <PDFAnnotator
-                      fileUrl={`${(import.meta.env.VITE_API_URL || 'http://localhost:3000').replace('/api', '')}${submissionFile.fileUrl}`}
+                      fileUrl={fileUrl(submissionFile.fileUrl)}
                       resultId={selectedStudent.id}
                       onSave={() => toast.success('Annotations saved')}
                       className="h-full"

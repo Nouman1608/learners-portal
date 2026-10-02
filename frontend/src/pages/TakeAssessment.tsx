@@ -9,6 +9,7 @@ import { FullscreenToggle } from '../components/common/FullscreenToggle';
 import { CollapsibleSidebar } from '../components/common/CollapsibleSidebar';
 import { ArrowLeftIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+import { fileUrl, isNativeApp, openExternal } from '../native';
 
 const TakeAssessment: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -112,11 +113,14 @@ const TakeAssessment: React.FC = () => {
     navigate('/assessments');
   };
 
-  const getFileUrl = (fileUrl: string) =>
-    `${(import.meta.env.VITE_API_URL || 'http://localhost:3000').replace('/api', '')}${fileUrl}`;
+  const getFileUrl = fileUrl;
 
   const handleDownload = async (file: AssessmentFile) => {
     try {
+      if (isNativeApp) {
+        await openExternal(getFileUrl(file.fileUrl));
+        return;
+      }
       const response = await fetch(getFileUrl(file.fileUrl));
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);

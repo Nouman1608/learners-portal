@@ -5,6 +5,7 @@ import { studentCourseTitle } from '../utils/course';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import PDFViewerWithAnnotations from '../components/assessments/PDFViewerWithAnnotations';
+import { fileUrl } from '../native';
 
 const MyResults: React.FC = () => {
   const { user: _user } = useAuth();
@@ -227,7 +228,7 @@ const MyResults: React.FC = () => {
       {/* Annotated Submission Viewer */}
       {viewingSubmission && (
         <PDFViewerWithAnnotations
-          fileUrl={`${(import.meta.env.VITE_API_URL || 'http://localhost:3000').replace('/api', '')}${viewingSubmission.file.fileUrl}`}
+          fileUrl={fileUrl(viewingSubmission.file.fileUrl)}
           resultId={viewingSubmission.resultId}
           onClose={() => setViewingSubmission(null)}
         />

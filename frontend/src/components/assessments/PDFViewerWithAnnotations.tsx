@@ -4,6 +4,7 @@ import { useSwipeGesture } from '../../hooks/useSwipeGesture';
 import * as pdfjsLib from 'pdfjs-dist';
 import { ChevronLeftIcon, ChevronRightIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import LoadingSpinner from '../common/LoadingSpinner';
+import { pdfSource } from '../../native';
 
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
@@ -53,7 +54,7 @@ const PDFViewerWithAnnotations: React.FC<PDFViewerWithAnnotationsProps> = ({ fil
         setLoading(true);
         console.log('Loading PDF from:', absoluteFileUrl);
 
-        const loadingTask = pdfjsLib.getDocument(absoluteFileUrl);
+        const loadingTask = pdfjsLib.getDocument(await pdfSource(absoluteFileUrl));
         const pdf = await loadingTask.promise;
 
         console.log('PDF loaded successfully. Pages:', pdf.numPages);
