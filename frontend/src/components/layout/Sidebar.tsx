@@ -135,11 +135,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         transform ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0 transition-transform duration-300 ease-in-out
         flex flex-col w-64 bg-gray-900 h-screen
+        [@media(max-height:500px)]:overflow-y-auto
       `}>
       {/* Logo/Brand */}
       <div className="flex items-center justify-between py-4 px-4 bg-gray-800 border-b border-gray-700 flex-shrink-0">
         <div className="flex flex-col items-center flex-1">
-          <img src={brand.logoOnDark} alt={brand.name} className={brand.logoOnDarkClass} />
+          <img src={brand.logoOnDark} alt={brand.name} className={`${brand.logoOnDarkClass} [@media(max-height:500px)]:hidden`} />
           <h1 className="text-lg font-bold text-white">{brand.name}</h1>
         </div>
         {/* Close button for mobile */}
@@ -187,7 +188,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4 min-h-0">
+      {/* Phones in landscape are ~340px tall: too short for the logo, user box and
+          logout to leave room for this list. There the logo is hidden and the whole
+          sidebar scrolls instead of just the list. */}
+      <nav className="flex-1 overflow-y-auto py-4 min-h-0 [@media(max-height:500px)]:flex-none [@media(max-height:500px)]:overflow-visible">
         <div className="space-y-1 px-3">
           {navigationItems.map((item) => {
             if (!canAccessRoute(item.roles)) return null;
