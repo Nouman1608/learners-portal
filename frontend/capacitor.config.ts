@@ -7,6 +7,8 @@ const config: CapacitorConfig = {
   appId: 'pk.com.learnersacademy.portal',
   appName: 'Learners Academy',
   webDir: 'dist-app-la',
+  // Pinch-to-zoom is off by default in Capacitor; wide tables and PDFs need it.
+  zoomEnabled: true,
   android: { path: 'mobile/la/android' },
   ios: { path: 'mobile/la/ios' },
   plugins: {

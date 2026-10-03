@@ -122,16 +122,16 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Mobile backdrop overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
           onClick={onClose}
         />
       )}
 
       {/* Sidebar */}
       <div className={`
-        fixed md:static inset-y-0 left-0 z-50
+        fixed lg:static inset-y-0 left-0 z-50
         transform ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-        md:translate-x-0 transition-transform duration-300 ease-in-out
+        lg:translate-x-0 transition-transform duration-300 ease-in-out
         flex flex-col w-64 bg-gray-900 h-screen
       `}>
       {/* Logo/Brand */}
@@ -143,7 +143,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         {/* Close button for mobile */}
         <button
           onClick={onClose}
-          className="md:hidden text-gray-400 hover:text-white"
+          className="lg:hidden text-gray-400 hover:text-white"
           aria-label="Close menu"
         >
           <XMarkIcon className="h-6 w-6" />
