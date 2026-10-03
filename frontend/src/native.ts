@@ -50,6 +50,57 @@ export async function openExternal(url: string): Promise<void> {
   else window.open(url, '_blank');
 }
 
+/**
+ * App display size. Pinching can't shrink a page below the width it was laid
+ * out for, so "Smaller" lays the page out wider than the screen and scales it
+ * down to fit, the way a laptop shows more. Needs setUseWideViewPort(true) in
+ * MainActivity, or Android ignores the viewport width.
+ */
+export const DISPLAY_SIZES = [
+  { label: 'Normal', scale: 1 },
+  { label: 'Smaller', scale: 0.85 },
+  { label: 'Smallest', scale: 0.7 },
+] as const;
+
+const DISPLAY_KEY = 'displayScale';
+
+export function getDisplayScale(): number {
+  try {
+    const saved = Number(localStorage.getItem(DISPLAY_KEY));
+    return DISPLAY_SIZES.some((s) => s.scale === saved) ? saved : 1;
+  } catch {
+    return 1;
+  }
+}
+
+function applyViewport(scale: number): void {
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+  if (!meta) return;
+  meta.content =
+    scale === 1
+      ? 'width=device-width, initial-scale=1.0'
+      : `width=${Math.round(window.screen.width / scale)}, initial-scale=${scale}`;
+}
+
+export function setDisplayScale(scale: number): void {
+  try {
+    localStorage.setItem(DISPLAY_KEY, String(scale));
+  } catch {
+    // Not saved; it still applies until the app closes.
+  }
+  applyViewport(scale);
+}
+
+/** Applies the saved display size, and again whenever the phone is rotated. */
+export function initDisplayScale(): void {
+  if (!isNativeApp) return;
+  applyViewport(getDisplayScale());
+  // screen.width only reflects the new orientation once the rotation settles.
+  window.screen.orientation?.addEventListener('change', () => {
+    setTimeout(() => applyViewport(getDisplayScale()), 300);
+  });
+}
+
 /** Sent on every app request; the backend checks for this exact value. */
 export const MOBILE_CLIENT_HEADER = 'learners-mobile';
 

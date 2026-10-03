@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import authApi from '../../api/auth.api';
 import toast from 'react-hot-toast';
 import { brand } from '../../brand';
+import { isNativeApp, DISPLAY_SIZES, getDisplayScale, setDisplayScale } from '../../native';
 import {
   HomeIcon,
   UserGroupIcon,
@@ -63,6 +64,7 @@ const navigationItems: NavItem[] = [
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { user, logout, refreshUser } = useAuth();
+  const [displayScale, setDisplayScaleState] = useState(getDisplayScale);
   const navigate = useNavigate();
   const [editingTeams, setEditingTeams] = useState(false);
   const [teamsValue, setTeamsValue] = useState('');
@@ -213,6 +215,29 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* Logout - Sticky at bottom */}
       <div className="p-4 border-t border-gray-700 bg-gray-900 flex-shrink-0">
+        {isNativeApp && (
+          <div className="px-3 pb-3">
+            <p className="text-xs text-gray-400 mb-1.5">Display size</p>
+            <div className="flex gap-1">
+              {DISPLAY_SIZES.map((size) => (
+                <button
+                  key={size.scale}
+                  onClick={() => {
+                    setDisplayScale(size.scale);
+                    setDisplayScaleState(size.scale);
+                  }}
+                  className={`flex-1 py-1.5 text-xs rounded-md transition-colors ${
+                    displayScale === size.scale
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-gray-800 text-gray-300 hover:text-white'
+                  }`}
+                >
+                  {size.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <button
           onClick={handleLogout}
           className="flex items-center gap-3 w-full px-3 py-2 text-sm font-medium text-gray-300 hover:bg-gray-800 hover:text-white rounded-lg transition-colors"
