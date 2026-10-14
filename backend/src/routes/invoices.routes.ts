@@ -17,6 +17,7 @@ router.get('/:id', invoicesController.getInvoiceById);
 router.get('/:id/download', invoicesController.downloadInvoice);
 
 // Get 1-to-1 session data for a student/month - admin only
+router.get('/teacher/:teacherId/1to1-sessions', requireAdmin, invoicesController.getTeacher1to1Sessions);
 router.get('/student/:studentId/1to1-sessions', requireAdmin, invoicesController.get1to1Sessions);
 
 // Generate invoices - admin only

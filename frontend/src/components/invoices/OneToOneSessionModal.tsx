@@ -8,6 +8,7 @@ const MONTHS = [
 ];
 
 interface Props {
+  teacherInvoice?: boolean;
   studentName: string;
   month: number;
   year: number;
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export default function OneToOneSessionModal({
+  teacherInvoice = false,
   studentName,
   month,
   year,
@@ -55,16 +57,16 @@ export default function OneToOneSessionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">1-to-1 Sessions — {studentName}</h2>
             <p className="text-sm text-gray-500 mt-0.5">
-              {MONTHS[month - 1]} {year} · Set sessions to charge per subject
+              {MONTHS[month - 1]} {year} · {teacherInvoice ? 'How many classes has each student taken?' : 'Set sessions to charge per subject'}
             </p>
           </div>
-          <button onClick={onCancel} className="text-gray-400 hover:text-gray-600">
+          <button disabled={loading} aria-label="Close session prompt" onClick={onCancel} className="text-gray-400 hover:text-gray-600">
             <XMarkIcon className="h-5 w-5" />
           </button>
         </div>
@@ -74,10 +76,10 @@ export default function OneToOneSessionModal({
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                <th className="pb-3 pr-4">Subject</th>
+                <th className="pb-3 pr-4">{teacherInvoice ? 'Student / Subject' : 'Subject'}</th>
                 <th className="pb-3 pr-4 text-right">Rate / Session</th>
                 <th className="pb-3 pr-4 text-center">Completed</th>
-                <th className="pb-3 text-center">Charge</th>
+                <th className="pb-3 text-center">{teacherInvoice ? 'Classes taken' : 'Charge'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -88,7 +90,7 @@ export default function OneToOneSessionModal({
                   : null;
                 return (
                   <tr key={s.enrollmentId} className="py-3">
-                    <td className="py-3 pr-4 font-medium text-gray-900">{s.courseTitle}</td>
+                    <td className="py-3 pr-4 font-medium text-gray-900">{s.studentName && <div>{s.studentName}</div>}{s.courseTitle}</td>
                     <td className="py-3 pr-4 text-right text-gray-600">
                       {formatCurrency(s.perSessionFee, s.currency)}
                     </td>
@@ -107,11 +109,14 @@ export default function OneToOneSessionModal({
                         <input
                           type="number"
                           min={0}
+                          step={1}
+                          disabled={loading}
+                          aria-label={`Classes taken for ${s.studentName || studentName}: ${s.courseTitle}`}
                           value={chargeCount}
                           onChange={(e) => handleChange(s.enrollmentId, e.target.value)}
                           className="w-20 text-center border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
-                        {total !== null && (
+                        {!teacherInvoice && total !== null && (
                           <span className="text-xs text-indigo-600 font-medium">
                             = {s.currency} {total}
                           </span>
@@ -125,7 +130,7 @@ export default function OneToOneSessionModal({
           </table>
 
           {/* Total */}
-          <div className="mt-4 pt-3 border-t border-gray-200 flex justify-end">
+          {!teacherInvoice && <div className="mt-4 pt-3 border-t border-gray-200 flex justify-end">
             <div className="text-sm text-gray-700">
               <span className="font-medium">Estimated total: </span>
               {(() => {
@@ -142,12 +147,15 @@ export default function OneToOneSessionModal({
             </div>
           </div>
 
+          }
           {/* Info note */}
           <div className="mt-3 flex items-start gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg p-3">
             <InformationCircleIcon className="h-4 w-4 flex-shrink-0 mt-0.5" />
             <span>
               "Completed" shows sessions marked as completed in the calendar for this month.
-              Adjust the "Charge" count if needed before generating the invoice.
+              {teacherInvoice
+                ? ' Enter classes actually taken. Zero excludes the student. Local earnings use the session fee and teacher percentage; online earnings use the fixed amount per student with classes taken. These counts are saved on this teacher invoice only.'
+                : ' Adjust the "Charge" count if needed before generating the invoice.'}
             </span>
           </div>
         </div>

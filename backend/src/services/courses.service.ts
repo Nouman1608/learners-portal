@@ -24,7 +24,7 @@ export interface CreateCourseInput {
 
 export interface UpdateCourseInput {
   courseCategory?: 'senior' | 'junior';
-  courseLevel?: 'ig' | 'alevel';
+  courseLevel?: '' | 'ig' | 'alevel';
   subject?: string;
   teacherName?: string;
   studentName?: string;

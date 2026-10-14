@@ -446,7 +446,11 @@ export const calendarService = {
           )
         )
         .limit(1);
-      classType = timeslot?.classType || 'local';
+      const inheritedType = timeslot?.classType || 'local';
+      if (!['local', 'online', 'hybrid', '1-to-1'].includes(inheritedType)) {
+        throw new AppError(400, 'The timeslot has an invalid class type');
+      }
+      classType = inheritedType as NonNullable<CreateEventInput['classType']>;
     }
 
     const [newEvent] = await db

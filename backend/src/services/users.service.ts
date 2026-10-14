@@ -146,7 +146,7 @@ export const usersService = {
           ilike(users.firstName, `%${filter.search}%`),
           ilike(users.lastName, `%${filter.search}%`),
           // Match full names like "Harmeen Azmat" that span both columns
-          ilike(sql`${users.firstName} || ' ' || ${users.lastName}`, `%${filter.search}%`),
+          sql`${users.firstName} || ' ' || ${users.lastName} ILIKE ${`%${filter.search}%`}`,
           ilike(users.email, `%${filter.search}%`),
           ilike(users.phone, `%${filter.search}%`),
           ilike(users.parentPhone, `%${filter.search}%`)

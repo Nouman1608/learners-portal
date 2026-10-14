@@ -18,6 +18,7 @@ const generateStudentInvoiceSchema = z.object({
 });
 
 const generateTeacherInvoiceSchema = z.object({
+  sessionOverrides: generateStudentInvoiceSchema.shape.sessionOverrides,
   teacherId: z.string().uuid(),
   month: z.number().int().min(1).max(12),
   year: z.number().int().min(2020),
@@ -41,6 +42,16 @@ export const get1to1Sessions = async (req: Request, res: Response, next: NextFun
   } catch (error) {
     next(error);
   }
+};
+
+export const getTeacher1to1Sessions = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = generateTeacherInvoiceSchema.parse({
+      teacherId: req.params.teacherId, month: Number(req.query.month), year: Number(req.query.year),
+    });
+    const sessions = await invoicesService.getTeacher1to1Sessions(input.teacherId, input.month, input.year);
+    res.json({ sessions });
+  } catch (error) { next(error); }
 };
 
 export const generateStudentInvoice = async (req: Request, res: Response, next: NextFunction) => {

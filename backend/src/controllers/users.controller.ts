@@ -41,7 +41,7 @@ const createUserSchema = z.object({
     const paymentType = data.teacherPaymentType || 'percentage_based';
 
     if (paymentType === 'salaried') {
-      return data.monthlySalary !== undefined && data.monthlySalary > 0;
+      return data.monthlySalary != null && data.monthlySalary > 0;
     }
 
     // percentage_based: require the 3 per-student fields
@@ -92,7 +92,7 @@ const updateUserSchema = z.object({
     // Switching to salaried requires a positive salary in the same request,
     // otherwise invoicing rejects the teacher with "fee configuration not set"
     if (data.teacherPaymentType === 'salaried') {
-      return data.monthlySalary !== undefined && data.monthlySalary > 0;
+      return data.monthlySalary != null && data.monthlySalary > 0;
     }
     return true;
   },

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { invoicesApi, Invoice, OneToOneSession, SessionOverride } from '../api/invoices.api';
+import { usersApi, User } from '../api/users.api';
 import { useAuth } from '../context/AuthContext';
 import OneToOneSessionModal from '../components/invoices/OneToOneSessionModal';
 import toast from 'react-hot-toast';
@@ -36,6 +37,7 @@ export default function Invoices() {
   const [emailingId, setEmailingId] = useState<string | null>(null);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [sessionModal, setSessionModal] = useState<{
+    type: 'student' | 'teacher';
     studentId: string;
     studentName: string;
     month: number;
@@ -43,12 +45,41 @@ export default function Invoices() {
     sessions: OneToOneSession[];
     invoiceId?: string; // set when regenerating an existing invoice
   } | null>(null);
+  const [teachers, setTeachers] = useState<User[]>([]);
+  const [teacherId, setTeacherId] = useState('');
+  const [teacherGenerating, setTeacherGenerating] = useState(false);
   const [sessionModalLoading, setSessionModalLoading] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const { confirm: confirmDialog, dialogProps } = useConfirmDialog();
   const [filterSubcategory, setFilterSubcategory] = useState<string>('all');
 
   const isAdmin = user?.role === 'admin' || user?.role === 'sudo';
+
+  useEffect(() => {
+    if (isAdmin) usersApi.getUsersByRole('teacher').then(setTeachers)
+      .catch(() => toast.error('Failed to load teachers'));
+  }, [isAdmin]);
+
+  const handleIndividualTeacher = async (id: string, month: number, year: number, name: string) => {
+    setTeacherGenerating(true);
+    try {
+      const sessions = await invoicesApi.getTeacher1to1Sessions(id, month, year);
+      if (sessions.length) {
+        setSessionModal({ type: 'teacher', studentId: id, studentName: name, month, year, sessions });
+      } else {
+        const confirmed = await confirmDialog({ title: 'Generate Teacher Invoice',
+          message: `Generate invoice for ${name} for ${MONTHS[month - 1]} ${year}?`,
+          confirmLabel: 'Generate', variant: 'info' });
+        if (confirmed) {
+          await invoicesApi.generateTeacherInvoice({ teacherId: id, month, year });
+          toast.success('Teacher invoice generated successfully');
+          loadInvoices();
+        }
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to load teacher sessions or generate invoice');
+    } finally { setTeacherGenerating(false); }
+  };
 
   // Monotonic counter so out-of-order API responses can't overwrite newer results
   const requestSeq = useRef(0);
@@ -136,6 +167,11 @@ export default function Invoices() {
   };
 
   const handleRegenerateInvoice = async (invoice: Invoice) => {
+    if (invoice.type === 'teacher') {
+      await handleIndividualTeacher(invoice.recipientId, invoice.month, invoice.year,
+        `${invoice.recipient.firstName} ${invoice.recipient.lastName}`);
+      return;
+    }
     setRegeneratingId(invoice.id);
     try {
       const sessions = await invoicesApi.get1to1Sessions(
@@ -143,6 +179,7 @@ export default function Invoices() {
       );
       if (sessions.length > 0) {
         setSessionModal({
+          type: 'student',
           studentId: invoice.recipientId,
           studentName: `${invoice.recipient.firstName} ${invoice.recipient.lastName}`,
           month: invoice.month,
@@ -181,12 +218,12 @@ export default function Invoices() {
     if (!sessionModal) return;
     setSessionModalLoading(true);
     try {
-      await invoicesApi.generateStudentInvoice({
-        studentId: sessionModal.studentId,
-        month: sessionModal.month,
-        year: sessionModal.year,
-        sessionOverrides: overrides,
-      });
+      const period = { month: sessionModal.month, year: sessionModal.year, sessionOverrides: overrides };
+      if (sessionModal.type === 'teacher') {
+        await invoicesApi.generateTeacherInvoice({ ...period, teacherId: sessionModal.studentId });
+      } else {
+        await invoicesApi.generateStudentInvoice({ ...period, studentId: sessionModal.studentId });
+      }
       toast.success('Invoice generated successfully');
       setSessionModal(null);
       loadInvoices();
@@ -287,6 +324,23 @@ export default function Invoices() {
         <p className="mt-2 text-gray-600">View and manage invoices</p>
       </div>
 
+      {isAdmin && (
+        <div className="bg-white rounded-lg shadow p-6 mb-6 flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-48">
+            <label htmlFor="individual-teacher" className="block text-sm font-medium text-gray-700 mb-2">Individual teacher invoice</label>
+            <select id="individual-teacher" value={teacherId} onChange={e => setTeacherId(e.target.value)}
+              disabled={teacherGenerating} className="w-full px-3 py-2 border border-gray-300 rounded-md">
+              <option value="">Select a teacher</option>
+              {teachers.map(t => <option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>)}
+            </select>
+          </div>
+          <button disabled={!teacherId || teacherGenerating} className="px-4 py-2 bg-indigo-600 text-white rounded-md disabled:opacity-50"
+            onClick={() => { const teacher = teachers.find(t => t.id === teacherId); if (teacher) void handleIndividualTeacher(teacherId, selectedMonth, selectedYear, `${teacher.firstName} ${teacher.lastName}`); }}>
+            {teacherGenerating ? 'Loading...' : 'Generate Teacher Invoice'}
+          </button>
+          <p className="w-full text-sm text-gray-500">For {MONTHS[selectedMonth - 1]} {selectedYear}. Review one-to-one classes taken before generating.</p>
+        </div>
+      )}
       {/* Filters and Actions */}
       <div className="bg-white rounded-lg shadow p-6 mb-6">
         <div className={`grid grid-cols-1 gap-4 ${isAdmin ? 'md:grid-cols-4 lg:grid-cols-7' : 'md:grid-cols-3'}`}>
@@ -539,10 +593,10 @@ export default function Invoices() {
                         <EnvelopeIcon className="h-5 w-5" />
                       </button>
                     )}
-                    {isAdmin && invoice.type === 'student' && (
+                    {isAdmin && (
                       <button
                         onClick={() => handleRegenerateInvoice(invoice)}
-                        disabled={regeneratingId === invoice.id}
+                        disabled={regeneratingId === invoice.id || teacherGenerating}
                         className="p-1.5 text-orange-500 hover:text-orange-700 hover:bg-orange-50 rounded-lg transition-colors disabled:opacity-50"
                         title="Regenerate Invoice"
                       >
@@ -640,6 +694,7 @@ export default function Invoices() {
 
       {sessionModal && (
         <OneToOneSessionModal
+          teacherInvoice={sessionModal.type === 'teacher'}
           studentName={sessionModal.studentName}
           month={sessionModal.month}
           year={sessionModal.year}

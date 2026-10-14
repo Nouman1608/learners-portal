@@ -33,6 +33,7 @@ export interface GenerateStudentInvoiceInput {
 }
 
 export interface GenerateTeacherInvoiceInput {
+  sessionOverrides?: SessionOverride[];
   teacherId: string;
   month: number;
   year: number;
@@ -928,6 +929,20 @@ export const invoicesService = {
    * Generate teacher invoice
    */
   async generateTeacherInvoice(input: GenerateTeacherInvoiceInput) {
+    // Validate all manual counts before changing invoice versions. These are
+    // invoice snapshots, not edits to the student's fees or calendar.
+    const manualSessions = new Map<string, number>();
+    if (input.sessionOverrides?.length) {
+      const eligible = await this.getTeacher1to1Sessions(input.teacherId, input.month, input.year);
+      const allowed = new Set(eligible.map(e => e.enrollmentId));
+      for (const override of input.sessionOverrides) {
+        if (!allowed.has(override.enrollmentId) || manualSessions.has(override.enrollmentId) ||
+            !Number.isSafeInteger(override.sessionCount) || override.sessionCount < 0) {
+          throw new AppError(400, 'Invalid one-to-one session count or enrollment for this teacher and period');
+        }
+        manualSessions.set(override.enrollmentId, override.sessionCount);
+      }
+    }
     // Check if latest invoice already exists
     const [existing] = await db
       .select()
@@ -946,11 +961,6 @@ export const invoicesService = {
     // Versioning: If exists, mark old as not latest and increment version
     let newVersion = 1;
     if (existing) {
-      await db
-        .update(invoices)
-        .set({ isLatest: false })
-        .where(eq(invoices.id, existing.id));
-
       newVersion = (existing.version || 1) + 1;
       logger.info(`[INVOICE] Regenerating teacher invoice for ${input.teacherId} - ${input.month}/${input.year} (version ${newVersion})`);
     }
@@ -1081,8 +1091,8 @@ export const invoicesService = {
         let feeId: string | null = null;
 
         // For 1-to-1 classes, get the actual fee from fees table (based on sessions)
-        if (enrollment.classType === '1-to-1' && enrollment.perSessionFee) {
-          const [enrollmentFee] = await db
+        if (enrollment.classType === '1-to-1') {
+          const [storedFee] = await db
             .select()
             .from(fees)
             .where(
@@ -1093,6 +1103,13 @@ export const invoicesService = {
               )
             )
             .limit(1);
+
+          const manualCount = manualSessions.get(enrollment.id);
+          const enrollmentFee = manualCount === undefined ? storedFee : {
+            id: null,
+            amount: (manualCount * parseFloat(enrollment.perSessionFee || '0')).toFixed(2),
+            sessionCount: manualCount,
+          };
 
           if (enrollmentFee && parseFloat(enrollmentFee.amount) > 0) {
             studentFee = parseFloat(enrollmentFee.amount);
@@ -1157,6 +1174,7 @@ export const invoicesService = {
             studentName: `${enrollment.student.firstName} ${enrollment.student.lastName}`,
             studentFee: studentFee.toString(),
             ...(sessionCount && { sessionCount: sessionCount.toString() }),
+            ...(manualSessions.has(enrollment.id) && { sessionSource: 'admin override', enrollmentId: enrollment.id }),
             ...(enrollment.perSessionFee && { perSessionFee: enrollment.perSessionFee }),
           },
         });
@@ -1173,7 +1191,7 @@ export const invoicesService = {
 
         // Check fee record — ensures join date (20th rule) and proration are respected
         if (enrollment.classType === '1-to-1') {
-          const [enrollmentFee] = await db
+          const [storedFee] = await db
             .select()
             .from(fees)
             .where(
@@ -1184,6 +1202,13 @@ export const invoicesService = {
               )
             )
             .limit(1);
+
+          const manualCount = manualSessions.get(enrollment.id);
+          const enrollmentFee = manualCount === undefined ? storedFee : {
+            id: null,
+            amount: (manualCount * parseFloat(enrollment.perSessionFee || '0')).toFixed(2),
+            sessionCount: manualCount,
+          };
 
           if (enrollmentFee && parseFloat(enrollmentFee.amount) > 0) {
             sessionCount = enrollmentFee.sessionCount;
@@ -1265,6 +1290,7 @@ export const invoicesService = {
             studentName: `${enrollment.student.firstName} ${enrollment.student.lastName}`,
             ...(isProrated && { prorated: 'true' }),
             ...(sessionCount && { sessionCount: sessionCount.toString() }),
+            ...(manualSessions.has(enrollment.id) && { sessionSource: 'admin override', enrollmentId: enrollment.id }),
             ...(enrollment.perSessionFee && { perSessionFee: enrollment.perSessionFee }),
           },
         });
@@ -1276,6 +1302,16 @@ export const invoicesService = {
 
     if (lineItemsData.length === 0) {
       throw new AppError(404, 'No earnings to invoice for this teacher');
+    }
+
+    if (input.sessionOverrides?.length) {
+      // Keep zero counts too, even though excluded students have no line item.
+      lineItemsData[0].metadata.sessionOverrides = input.sessionOverrides;
+    }
+
+    // Keep the previous invoice current when validation produces no earnings.
+    if (existing) {
+      await db.update(invoices).set({ isLatest: false }).where(eq(invoices.id, existing.id));
     }
 
     // Generate invoice number (append version suffix if regenerated)
@@ -1399,7 +1435,7 @@ export const invoicesService = {
           ilike(users.firstName, `%${filters.search}%`),
           ilike(users.lastName, `%${filters.search}%`),
           // Match full names like "Harmeen Azmat" that span both columns
-          ilike(sql`${users.firstName} || ' ' || ${users.lastName}`, `%${filters.search}%`),
+          sql`${users.firstName} || ' ' || ${users.lastName} ILIKE ${`%${filters.search}%`}`,
           ilike(users.email, `%${filters.search}%`)
         )
       );
@@ -1593,6 +1629,47 @@ export const invoicesService = {
       message: `Generated ${teacherCount} teacher invoices`,
       teacherCount,
     };
+  },
+
+  async getTeacher1to1Sessions(teacherId: string, month: number, year: number) {
+    const [teacher] = await db.select({ role: users.role, paymentType: users.teacherPaymentType })
+      .from(users).where(eq(users.id, teacherId)).limit(1);
+    if (!teacher || teacher.role !== 'teacher') throw new AppError(404, 'Teacher not found');
+    if (teacher.paymentType === 'salaried') return [];
+    const assigned = await db.select({
+      enrollmentId: enrollments.id, studentId: enrollments.studentId,
+      firstName: users.firstName, lastName: users.lastName, enrolledAt: enrollments.enrolledAt,
+    }).from(enrollments)
+      .innerJoin(courseTeachers, eq(courseTeachers.courseId, enrollments.courseId))
+      .innerJoin(users, eq(users.id, enrollments.studentId))
+      .where(and(eq(courseTeachers.teacherId, teacherId), eq(enrollments.status, 'active'),
+        eq(enrollments.classType, '1-to-1')));
+    const previousCounts = await db.select({ metadata: invoiceLineItems.metadata })
+      .from(invoiceLineItems).innerJoin(invoices, eq(invoices.id, invoiceLineItems.invoiceId))
+      .where(and(eq(invoices.recipientId, teacherId), eq(invoices.type, 'teacher'),
+        eq(invoices.month, month), eq(invoices.year, year), eq(invoices.isLatest, true)));
+    const savedCounts = new Map<string, number>();
+    for (const line of previousCounts) {
+      const metadata = line.metadata as { enrollmentId?: string; sessionCount?: string; sessionSource?: string; sessionOverrides?: SessionOverride[] } | null;
+      for (const override of metadata?.sessionOverrides || []) {
+        if (Number.isSafeInteger(override.sessionCount) && override.sessionCount >= 0) {
+          savedCounts.set(override.enrollmentId, override.sessionCount);
+        }
+      }
+      if (metadata?.enrollmentId && metadata.sessionSource === 'admin override') {
+        const count = Number(metadata.sessionCount);
+        if (Number.isSafeInteger(count) && count >= 0) savedCounts.set(metadata.enrollmentId, count);
+      }
+    }
+    const result = [];
+    for (const enrollment of assigned) {
+      const date = new Date(enrollment.enrolledAt);
+      if (date.getUTCFullYear() * 12 + date.getUTCMonth() > year * 12 + month - 1) continue;
+      const sessions = await this.get1to1Sessions(enrollment.studentId, month, year);
+      const session = sessions.find(s => s.enrollmentId === enrollment.enrollmentId);
+      if (session) result.push({ ...session, existingSessionCount: savedCounts.get(enrollment.enrollmentId) ?? session.existingSessionCount, studentName: `${enrollment.firstName} ${enrollment.lastName}` });
+    }
+    return result;
   },
 
   async get1to1Sessions(studentId: string, month: number, year: number) {

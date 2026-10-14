@@ -47,6 +47,7 @@ export interface SessionOverride {
 }
 
 export interface OneToOneSession {
+  studentName?: string;
   enrollmentId: string;
   courseTitle: string;
   perSessionFee: string | null;
@@ -64,6 +65,7 @@ export interface GenerateStudentInvoiceInput {
 }
 
 export interface GenerateTeacherInvoiceInput {
+  sessionOverrides?: SessionOverride[];
   teacherId: string;
   month: number;
   year: number;
@@ -177,6 +179,11 @@ export const invoicesApi = {
   async downloadInvoice(invoiceId: string): Promise<{ pdfUrl: string; invoiceNumber: string }> {
     const response = await apiClient.get(`/invoices/${invoiceId}/download`);
     return response.data;
+  },
+
+  async getTeacher1to1Sessions(teacherId: string, month: number, year: number): Promise<OneToOneSession[]> {
+    const response = await apiClient.get(`/invoices/teacher/${teacherId}/1to1-sessions?month=${month}&year=${year}`);
+    return response.data.sessions;
   },
 
   async get1to1Sessions(studentId: string, month: number, year: number): Promise<OneToOneSession[]> {
