@@ -10,6 +10,9 @@ import fs from 'fs';
 import path from 'path';
 import logger from '../utils/logger';
 
+// Heading on invoice PDFs; the Junior Campus instance sets SCHOOL_NAME="Learners Preschool".
+const SCHOOL_NAME = process.env.SCHOOL_NAME || 'Learners Academy';
+
 // Use environment variable for uploads directory, fallback to local uploads folder
 const UPLOAD_BASE_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads');
 const UPLOADS_DIR = path.join(UPLOAD_BASE_DIR, 'invoices');
@@ -113,7 +116,7 @@ export const invoicesService = {
         // Header
         doc
           .fontSize(20)
-          .text('Learners Academy', { align: 'center' })
+          .text(SCHOOL_NAME, { align: 'center' })
           .fontSize(10)
           .text('Excellence in Education', { align: 'center' })
           .moveDown();
@@ -238,7 +241,7 @@ export const invoicesService = {
         // Header
         doc
           .fontSize(20)
-          .text('Learners Academy', { align: 'center' })
+          .text(SCHOOL_NAME, { align: 'center' })
           .fontSize(10)
           .text('Excellence in Education', { align: 'center' })
           .moveDown();
@@ -455,7 +458,7 @@ export const invoicesService = {
         // Header
         doc
           .fontSize(20)
-          .text('Learners Academy', { align: 'center' })
+          .text(SCHOOL_NAME, { align: 'center' })
           .fontSize(10)
           .text('Excellence in Education', { align: 'center' })
           .moveDown();
