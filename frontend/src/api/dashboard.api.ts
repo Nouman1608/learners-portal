@@ -21,6 +21,8 @@ export interface DashboardStats {
   paidFeesThisMonth?: number;
   paidFeesAmountThisMonth?: CurrencyAmount[];
   upcomingClasses?: number;
+  /** Sudo on the Senior Campus: the Junior Campus can be shown too. */
+  juniorCampusAvailable?: boolean;
   recentActivity?: {
     recentEnrollments: number;
     recentFees: number;
@@ -40,6 +42,8 @@ export interface DashboardStats {
   };
 }
 
+export type Campus = 'senior' | 'junior' | 'both';
+
 /**
  * Dashboard API Methods
  */
@@ -48,8 +52,8 @@ export const dashboardApi = {
   /**
    * Get dashboard stats (role-based)
    */
-  async getStats(): Promise<DashboardStats> {
-    const response = await apiClient.get('/dashboard/stats');
+  async getStats(campus: Campus = 'senior'): Promise<DashboardStats> {
+    const response = await apiClient.get('/dashboard/stats', { params: campus === 'senior' ? {} : { campus } });
     return response.data;
   },
 };

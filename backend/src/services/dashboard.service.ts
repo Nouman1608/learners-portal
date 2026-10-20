@@ -1,4 +1,4 @@
-import { db } from '../config/database';
+import { db, Database } from '../config/database';
 import { users } from '../db/schema/users';
 import { courses, courseEvents } from '../db/schema/courses';
 import { enrollments, fees } from '../db/schema/enrollments';
@@ -50,9 +50,9 @@ export const dashboardService = {
   /**
    * Get general dashboard stats (admin/sudo)
    */
-  async getGeneralStats(): Promise<DashboardStats> {
+  async getGeneralStats(database: Database = db): Promise<DashboardStats> {
     // Total users
-    const [totalUsersResult] = await db
+    const [totalUsersResult] = await database
       .select({ count: sql<number>`count(*)::int` })
       .from(users)
       .where(eq(users.isActive, true));
@@ -60,7 +60,7 @@ export const dashboardService = {
     const totalUsers = totalUsersResult?.count || 0;
 
     // Total courses
-    const [totalCoursesResult] = await db
+    const [totalCoursesResult] = await database
       .select({ count: sql<number>`count(*)::int` })
       .from(courses)
       .where(eq(courses.isActive, true));
@@ -68,7 +68,7 @@ export const dashboardService = {
     const totalCourses = totalCoursesResult?.count || 0;
 
     // Active students
-    const [activeStudentsResult] = await db
+    const [activeStudentsResult] = await database
       .select({ count: sql<number>`count(*)::int` })
       .from(users)
       .where(and(eq(users.role, 'student'), eq(users.isActive, true)));
@@ -76,7 +76,7 @@ export const dashboardService = {
     const activeStudents = activeStudentsResult?.count || 0;
 
     // Total teachers
-    const [totalTeachersResult] = await db
+    const [totalTeachersResult] = await database
       .select({ count: sql<number>`count(*)::int` })
       .from(users)
       .where(and(eq(users.role, 'teacher'), eq(users.isActive, true)));
@@ -84,7 +84,7 @@ export const dashboardService = {
     const totalTeachers = totalTeachersResult?.count || 0;
 
     // Active enrollments
-    const [activeEnrollmentsResult] = await db
+    const [activeEnrollmentsResult] = await database
       .select({ count: sql<number>`count(*)::int` })
       .from(enrollments)
       .where(eq(enrollments.status, 'active'));
@@ -92,7 +92,7 @@ export const dashboardService = {
     const activeEnrollments = activeEnrollmentsResult?.count || 0;
 
     // Pending fees
-    const [pendingFeesResult] = await db
+    const [pendingFeesResult] = await database
       .select({ count: sql<number>`count(*)::int` })
       .from(fees)
       .where(eq(fees.status, 'pending'));
@@ -100,7 +100,7 @@ export const dashboardService = {
     const pendingFees = pendingFeesResult?.count || 0;
 
     // Total fee amount (pending + overdue) - Deprecated but kept for backward compatibility
-    const [totalFeeAmountResult] = await db
+    const [totalFeeAmountResult] = await database
       .select({ sum: sql<string>`COALESCE(SUM(amount::numeric), 0)` })
       .from(fees)
       .where(sql`${fees.status} IN ('pending', 'overdue')`);
@@ -108,7 +108,7 @@ export const dashboardService = {
     const totalFeeAmount = totalFeeAmountResult?.sum || '0';
 
     // Total fees by currency (pending + overdue)
-    const totalFeesByCurrencyResult = await db
+    const totalFeesByCurrencyResult = await database
       .select({
         currency: sql<string>`COALESCE(${fees.currency}, 'PKR')`,
         amount: sql<string>`COALESCE(SUM(amount::numeric), 0)`,
@@ -126,7 +126,7 @@ export const dashboardService = {
     const currentMonth = new Date().getMonth() + 1; // 1-12
     const currentYear = new Date().getFullYear();
 
-    const [paidFeesCountResult] = await db
+    const [paidFeesCountResult] = await database
       .select({ count: sql<number>`count(*)::int` })
       .from(fees)
       .where(and(
@@ -137,7 +137,7 @@ export const dashboardService = {
 
     const paidFeesThisMonth = paidFeesCountResult?.count || 0;
 
-    const paidFeesAmountResult = await db
+    const paidFeesAmountResult = await database
       .select({
         currency: sql<string>`COALESCE(${fees.currency}, 'PKR')`,
         amount: sql<string>`COALESCE(SUM(amount::numeric), 0)`,
@@ -160,7 +160,7 @@ export const dashboardService = {
     const nextWeek = new Date();
     nextWeek.setDate(nextWeek.getDate() + 7);
 
-    const [upcomingClassesResult] = await db
+    const [upcomingClassesResult] = await database
       .select({ count: sql<number>`count(*)::int` })
       .from(courseEvents)
       .where(
@@ -177,14 +177,14 @@ export const dashboardService = {
     const lastWeek = new Date();
     lastWeek.setDate(lastWeek.getDate() - 7);
 
-    const [recentEnrollmentsResult] = await db
+    const [recentEnrollmentsResult] = await database
       .select({ count: sql<number>`count(*)::int` })
       .from(enrollments)
       .where(gte(enrollments.enrolledAt, lastWeek));
 
     const recentEnrollments = recentEnrollmentsResult?.count || 0;
 
-    const [recentFeesResult] = await db
+    const [recentFeesResult] = await database
       .select({ count: sql<number>`count(*)::int` })
       .from(fees)
       .where(gte(fees.createdAt, lastWeek));
@@ -206,6 +206,43 @@ export const dashboardService = {
       recentActivity: {
         recentEnrollments,
         recentFees,
+      },
+    };
+  },
+
+  /**
+   * Senior + Junior Campus stats for the sudo dashboard. Counts are added; money is added per
+   * currency only, never across currencies.
+   */
+  async getCombinedStats(juniorDatabase: Database): Promise<DashboardStats> {
+    const [senior, junior] = await Promise.all([
+      this.getGeneralStats(db),
+      this.getGeneralStats(juniorDatabase),
+    ]);
+
+    const addByCurrency = (a: CurrencyAmount[], b: CurrencyAmount[]): CurrencyAmount[] => {
+      const totals = new Map<string, number>();
+      for (const row of [...a, ...b]) {
+        totals.set(row.currency, (totals.get(row.currency) || 0) + parseFloat(row.amount || '0'));
+      }
+      return [...totals].map(([currency, amount]) => ({ currency, amount: amount.toFixed(2) }));
+    };
+
+    return {
+      totalUsers: senior.totalUsers + junior.totalUsers,
+      totalCourses: senior.totalCourses + junior.totalCourses,
+      activeStudents: senior.activeStudents + junior.activeStudents,
+      totalTeachers: senior.totalTeachers + junior.totalTeachers,
+      activeEnrollments: senior.activeEnrollments + junior.activeEnrollments,
+      pendingFees: senior.pendingFees + junior.pendingFees,
+      totalFeeAmount: (parseFloat(senior.totalFeeAmount) + parseFloat(junior.totalFeeAmount)).toFixed(2),
+      totalFeesByCurrency: addByCurrency(senior.totalFeesByCurrency, junior.totalFeesByCurrency),
+      paidFeesThisMonth: senior.paidFeesThisMonth + junior.paidFeesThisMonth,
+      paidFeesAmountThisMonth: addByCurrency(senior.paidFeesAmountThisMonth, junior.paidFeesAmountThisMonth),
+      upcomingClasses: senior.upcomingClasses + junior.upcomingClasses,
+      recentActivity: {
+        recentEnrollments: (senior.recentActivity?.recentEnrollments || 0) + (junior.recentActivity?.recentEnrollments || 0),
+        recentFees: (senior.recentActivity?.recentFees || 0) + (junior.recentActivity?.recentFees || 0),
       },
     };
   },

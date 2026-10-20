@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { dashboardApi, DashboardStats, CurrencyAmount } from '../api/dashboard.api';
+import { dashboardApi, DashboardStats, CurrencyAmount, Campus } from '../api/dashboard.api';
+import { brand } from '../brand';
 import toast from 'react-hot-toast';
 import { StatCardSkeleton } from '../components/common/Skeleton';
 import {
@@ -74,15 +75,19 @@ const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  // Sudo on the Senior Campus can switch the overview to the Junior Campus or both.
+  const [campus, setCampus] = useState<Campus>('senior');
+  const [juniorAvailable, setJuniorAvailable] = useState(false);
 
   useEffect(() => {
     loadStats();
-  }, []);
+  }, [campus]);
 
   const loadStats = async () => {
     try {
       setLoading(true);
-      const data = await dashboardApi.getStats();
+      const data = await dashboardApi.getStats(campus);
+      if (data.juniorCampusAvailable) setJuniorAvailable(true);
       setStats(data);
     } catch (error: any) {
       toast.error('Failed to load dashboard statistics');
@@ -150,7 +155,7 @@ const Dashboard: React.FC = () => {
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">
-            Learners Academy Dashboard
+            {brand.name} Dashboard
           </h1>
           <button
             onClick={handleLogout}
@@ -219,6 +224,39 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
+        {/* Campus switch (sudo, Senior Campus portal only) */}
+        {juniorAvailable && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="inline-flex rounded-lg bg-white shadow-card p-1" role="group" aria-label="Campus">
+              {([
+                ['senior', 'Senior Campus'],
+                ['junior', 'Junior Campus'],
+                ['both', 'Both'],
+              ] as [Campus, string][]).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setCampus(value)}
+                  aria-pressed={campus === value}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition ${
+                    campus === value ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <a
+              href="https://junior.learnersacademy.com.pk"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2 text-sm font-medium rounded-lg bg-white shadow-card text-indigo-600 hover:bg-indigo-50 transition"
+            >
+              Open Junior portal ↗
+            </a>
+          </div>
+        )}
+
         {/* Quick Stats */}
         {loading ? (
           <div className="mb-8">
@@ -229,7 +267,9 @@ const Dashboard: React.FC = () => {
           </div>
         ) : (
           <div className="mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Overview</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Overview{juniorAvailable && ` — ${campus === 'both' ? 'Senior + Junior Campus' : campus === 'junior' ? 'Junior Campus' : 'Senior Campus'}`}
+            </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 stagger-children">
               {/* Admin/Sudo Stats */}
               {(user?.role === 'sudo' || user?.role === 'admin') && (
