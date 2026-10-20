@@ -64,15 +64,15 @@ const BRANDS: Record<BrandKey, Brand> = {
     key: 'lp',
     name: 'Learners Preschool',
     campus: 'junior',
-    // Uses the Learners Academy logo until the preschool has its own.
-    logo: '/logo.svg',
-    logoClass: 'mx-auto h-32 w-auto mb-4',
-    logoOnDark: '/logo.svg',
-    logoOnDarkClass: 'h-20 w-auto',
-    favicon: '/favicon.svg',
-    loginBgClass: 'bg-gradient-to-br from-amber-50 to-orange-100',
-    buttonClass: 'bg-orange-500 hover:bg-orange-600 focus:ring-orange-400',
-    focusRingClass: 'focus:ring-orange-400 focus:border-orange-400',
+    // Logo blue #3F548D.
+    logo: '/brand/learners-preschool.png',
+    logoClass: 'mx-auto h-36 w-auto mb-4',
+    logoOnDark: '/brand/learners-preschool-reverse.png',
+    logoOnDarkClass: 'h-24 w-auto',
+    favicon: '/brand/learners-preschool-mark.png',
+    loginBgClass: 'bg-gradient-to-br from-slate-50 to-[#dfe5f3]',
+    buttonClass: 'bg-[#3F548D] hover:bg-[#33467a] focus:ring-[#3F548D]',
+    focusRingClass: 'focus:ring-[#3F548D] focus:border-[#3F548D]',
   },
 };
 
