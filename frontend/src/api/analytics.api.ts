@@ -279,6 +279,8 @@ export interface AnalyticsQueryParams {
   studentId?: string;
   groupBy?: 'day' | 'week' | 'month';
   limit?: number;
+  /** Sudo on the Senior Campus portal only. Omitted means this portal's own campus. */
+  campus?: 'senior' | 'junior' | 'both';
 }
 
 /**

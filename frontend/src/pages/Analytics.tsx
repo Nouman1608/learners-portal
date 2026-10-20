@@ -7,6 +7,7 @@ import AttendanceDashboard from '../components/analytics/AttendanceDashboard';
 import CourseDashboard from '../components/analytics/CourseDashboard';
 import GrowthDashboard from '../components/analytics/GrowthDashboard';
 import TeacherDashboard from '../components/analytics/TeacherDashboard';
+import { brand } from '../brand';
 
 type TabType = 'financial' | 'performance' | 'attendance' | 'courses' | 'growth' | 'teachers';
 
@@ -24,6 +25,8 @@ export default function Analytics() {
   // Determine available tabs based on role
   const isAdmin = hasRole(['admin', 'sudo']);
   const isTeacher = hasRole(['teacher', 'admin', 'sudo']);
+  // Sudo on the Senior Campus portal can also read the Junior Campus.
+  const canSwitchCampus = hasRole(['sudo']) && brand.campus === 'senior';
 
   const tabs: { id: TabType; label: string; allowed: boolean }[] = [
     { id: 'financial', label: 'Financial', allowed: isAdmin },
@@ -53,11 +56,12 @@ export default function Analytics() {
   };
 
   const resetFilters = () => {
-    setFilters({
+    setFilters(prev => ({
       groupBy: 'month',
       startDate: `${new Date().getFullYear()}-01-01`,
       endDate: new Date().toISOString().split('T')[0],
-    });
+      campus: prev.campus,
+    }));
   };
 
   return (
@@ -70,6 +74,29 @@ export default function Analytics() {
             Comprehensive insights and analytics across all system domains
           </p>
         </div>
+
+        {/* Campus switch (sudo, Senior Campus portal only) */}
+        {canSwitchCampus && (
+          <div className="inline-flex rounded-lg bg-white shadow p-1" role="group" aria-label="Campus">
+            {([
+              ['senior', 'Senior Campus'],
+              ['junior', 'Junior Campus'],
+              ['both', 'Both'],
+            ] as ['senior' | 'junior' | 'both', string][]).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setFilters(prev => ({ ...prev, campus: value === 'senior' ? undefined : value }))}
+                aria-pressed={(filters.campus ?? 'senior') === value}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition ${
+                  (filters.campus ?? 'senior') === value ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Filters */}
         <div className="bg-white shadow rounded-lg p-6">

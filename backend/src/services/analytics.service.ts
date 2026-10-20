@@ -1,4 +1,4 @@
-import { db } from '../config/database';
+import { db, Database } from '../config/database';
 import { users } from '../db/schema/users';
 import { courses, courseEvents } from '../db/schema/courses';
 import { enrollments, fees } from '../db/schema/enrollments';
@@ -34,6 +34,14 @@ function sumInPkr(amountCol: any, currencyCol: any): SQL<number> {
 }
 
 export const analyticsService = {
+  /** Database the queries run against: the senior DB, or the junior DB via withDatabase(). */
+  db: db as Database,
+
+  /** Same analytics over another campus's database (sudo campus view). */
+  withDatabase(database: Database) {
+    return { ...this, db: database };
+  },
+
   /**
    * FINANCIAL ANALYTICS
    */
@@ -67,7 +75,7 @@ export const analyticsService = {
       // dateFormat comes from the switch above and is never user input.
       const periodExpr = sql`TO_CHAR(${payments.paymentDate}, ${sql.raw(`'${dateFormat}'`)})`;
 
-      const rows = await db
+      const rows = await this.db
         .select({
           period: sql<string>`${periodExpr}`,
           currency: fees.currency,
@@ -124,7 +132,7 @@ export const analyticsService = {
    */
   async getPaymentMethodBreakdown(startDate: Date, endDate: Date) {
     try {
-      const rows = await db
+      const rows = await this.db
         .select({
           method: payments.paymentMethod,
           currency: fees.currency,
@@ -189,7 +197,7 @@ export const analyticsService = {
         END
       `;
 
-      const rows = await db
+      const rows = await this.db
         .select({
           range: sql<string>`${bucket}`,
           currency: fees.currency,
@@ -238,7 +246,7 @@ export const analyticsService = {
    */
   async getCourseRevenueBreakdown(startDate: Date, endDate: Date) {
     try {
-      const rows = await db
+      const rows = await this.db
         .select({
           courseId: fees.courseId,
           courseTitle: courses.title,
@@ -297,7 +305,7 @@ export const analyticsService = {
    */
   async getCollectionRate(startDate: Date, endDate: Date) {
     try {
-      const rows = await db
+      const rows = await this.db
         .select({
           currency: fees.currency,
           billed: sql<number>`COALESCE(SUM(${fees.amount}::numeric), 0)::float`,
@@ -353,7 +361,7 @@ export const analyticsService = {
    */
   async getCourseProfitability(startDate: Date, endDate: Date) {
     try {
-      const revenueRows = await db
+      const revenueRows = await this.db
         .select({
           courseId: fees.courseId,
           courseTitle: courses.title,
@@ -373,7 +381,7 @@ export const analyticsService = {
 
       // Only the latest version of each teacher invoice, otherwise regenerated
       // invoices would be counted more than once.
-      const costRows = await db
+      const costRows = await this.db
         .select({
           courseId: invoiceLineItems.courseId,
           costPKR: sql<number>`COALESCE(SUM(${invoiceLineItems.amount}::numeric * ${pkrRateExpr(invoices.currency)}), 0)::float`,
@@ -442,7 +450,7 @@ export const analyticsService = {
       if (courseId) conditions.push(eq(assessments.courseId, courseId));
       if (assessmentId) conditions.push(eq(assessmentResults.assessmentId, assessmentId));
 
-      let query = db
+      let query = this.db
         .select({
           scoreRange: sql<string>`${bucket}`,
           count: sql<number>`COUNT(*)::int`,
@@ -468,7 +476,7 @@ export const analyticsService = {
    */
   async getStudentPerformanceTrends(studentId: string) {
     try {
-      const trends = await db
+      const trends = await this.db
         .select({
           assessmentId: assessmentResults.assessmentId,
           assessmentTitle: assessments.title,
@@ -496,7 +504,7 @@ export const analyticsService = {
     try {
       const pct = sql`(${assessmentResults.score}::numeric / NULLIF(${assessments.maxScore}::numeric, 0) * 100)`;
 
-      const comparison = await db
+      const comparison = await this.db
         .select({
           courseId: courses.id,
           courseTitle: courses.title,
@@ -524,7 +532,7 @@ export const analyticsService = {
     try {
       const pct = sql`(${assessmentResults.score}::numeric / NULLIF(${assessments.maxScore}::numeric, 0) * 100)`;
 
-      let query = db
+      let query = this.db
         .select({
           studentId: users.id,
           firstName: users.firstName,
@@ -561,7 +569,7 @@ export const analyticsService = {
     try {
       const pct = sql`(${assessmentResults.score}::numeric / NULLIF(${assessments.maxScore}::numeric, 0) * 100)`;
 
-      let query = db
+      let query = this.db
         .select({
           totalAssessments: sql<number>`COUNT(*)::int`,
           passedCount: sql<number>`SUM(CASE WHEN ${pct} >= 60 THEN 1 ELSE 0 END)::int`,
@@ -598,7 +606,7 @@ export const analyticsService = {
   async getAtRiskStudents(limit: number = 20) {
     try {
       const [attendanceRows, scoreRows, overdueRows, studentRows] = await Promise.all([
-        db
+        this.db
           .select({
             studentId: attendanceRecords.studentId,
             sessions: sql<number>`COUNT(*)::int`,
@@ -607,7 +615,7 @@ export const analyticsService = {
           .from(attendanceRecords)
           .groupBy(attendanceRecords.studentId),
 
-        db
+        this.db
           .select({
             studentId: assessmentResults.studentId,
             avgScore: sql<number>`AVG((${assessmentResults.score}::numeric / NULLIF(${assessments.maxScore}::numeric, 0) * 100))::float`,
@@ -617,7 +625,7 @@ export const analyticsService = {
           .innerJoin(assessments, eq(assessmentResults.assessmentId, assessments.id))
           .groupBy(assessmentResults.studentId),
 
-        db
+        this.db
           .select({
             studentId: fees.studentId,
             overdueCount: sql<number>`COUNT(*)::int`,
@@ -627,7 +635,7 @@ export const analyticsService = {
           .where(sql`${fees.status} IN ('pending', 'overdue') AND ${fees.dueDate} < CURRENT_DATE`)
           .groupBy(fees.studentId),
 
-        db
+        this.db
           .select({
             studentId: users.id,
             firstName: users.firstName,
@@ -716,13 +724,14 @@ export const analyticsService = {
         conditions.push(lte(courseEvents.eventDate, endDate.toISOString().split('T')[0]));
       }
 
-      let query = db
+      let query = this.db
         .select({
           eventDate: courseEvents.eventDate,
           totalStudents: sql<number>`COUNT(DISTINCT ${attendanceRecords.studentId})::int`,
           presentCount: sql<number>`SUM(CASE WHEN ${attendanceRecords.status} = 'present' THEN 1 ELSE 0 END)::int`,
           lateCount: sql<number>`SUM(CASE WHEN ${attendanceRecords.status} = 'late' THEN 1 ELSE 0 END)::int`,
           absentCount: sql<number>`SUM(CASE WHEN ${attendanceRecords.status} = 'absent' THEN 1 ELSE 0 END)::int`,
+          recordCount: sql<number>`COUNT(*)::int`,
           attendanceRate: sql<number>`(SUM(CASE WHEN ${attendanceRecords.status} IN ('present', 'late') THEN 1 ELSE 0 END)::float / NULLIF(COUNT(*), 0)::float * 100)::float`,
         })
         .from(attendanceRecords)
@@ -747,7 +756,7 @@ export const analyticsService = {
    */
   async getAttendanceByStatus(courseId?: string) {
     try {
-      let query = db
+      let query = this.db
         .select({
           status: attendanceRecords.status,
           count: sql<number>`COUNT(*)::int`,
@@ -779,7 +788,7 @@ export const analyticsService = {
    */
   async getCoursePopularity() {
     try {
-      const popularity = await db
+      const popularity = await this.db
         .select({
           courseId: courses.id,
           courseTitle: courses.title,
@@ -805,7 +814,7 @@ export const analyticsService = {
    */
   async getEnrollmentTrends(startDate: Date, endDate: Date) {
     try {
-      const trends = await db
+      const trends = await this.db
         .select({
           month: sql<string>`TO_CHAR(${enrollments.enrolledAt}, 'YYYY-MM')`,
           enrollmentCount: sql<number>`COUNT(*)::int`,
@@ -832,7 +841,7 @@ export const analyticsService = {
    */
   async getRetentionMetrics(startDate: Date, endDate: Date) {
     try {
-      const [totalsRow] = await db
+      const [totalsRow] = await this.db
         .select({
           active: sql<number>`COUNT(CASE WHEN ${enrollments.status} = 'active' THEN 1 END)::int`,
           completed: sql<number>`COUNT(CASE WHEN ${enrollments.status} = 'completed' THEN 1 END)::int`,
@@ -841,7 +850,7 @@ export const analyticsService = {
         })
         .from(enrollments);
 
-      const dropTrend = await db
+      const dropTrend = await this.db
         .select({
           month: sql<string>`TO_CHAR(${enrollments.enrolledAt}, 'YYYY-MM')`,
           dropped: sql<number>`COUNT(CASE WHEN ${enrollments.status} = 'dropped' THEN 1 END)::int`,
@@ -857,7 +866,7 @@ export const analyticsService = {
         .groupBy(sql`TO_CHAR(${enrollments.enrolledAt}, 'YYYY-MM')`)
         .orderBy(sql`TO_CHAR(${enrollments.enrolledAt}, 'YYYY-MM')`);
 
-      const dropByCourse = await db
+      const dropByCourse = await this.db
         .select({
           courseId: courses.id,
           courseTitle: courses.title,
@@ -896,7 +905,7 @@ export const analyticsService = {
   async getLeadConversion(startDate: Date, endDate: Date) {
     try {
       const [byStatus, bySource, trend] = await Promise.all([
-        db
+        this.db
           .select({
             status: leads.status,
             count: sql<number>`COUNT(*)::int`,
@@ -906,7 +915,7 @@ export const analyticsService = {
           .groupBy(leads.status)
           .orderBy(desc(sql`COUNT(*)`)),
 
-        db
+        this.db
           .select({
             source: leads.source,
             total: sql<number>`COUNT(*)::int`,
@@ -917,7 +926,7 @@ export const analyticsService = {
           .groupBy(leads.source)
           .orderBy(desc(sql`COUNT(*)`)),
 
-        db
+        this.db
           .select({
             month: sql<string>`TO_CHAR(${leads.createdAt}, 'YYYY-MM')`,
             total: sql<number>`COUNT(*)::int`,
@@ -958,7 +967,7 @@ export const analyticsService = {
   async getTeacherWorkload() {
     try {
       const [classRows, studentRows, teachers] = await Promise.all([
-        db
+        this.db
           .select({
             teacherId: courseEvents.teacherId,
             courseCount: sql<number>`COUNT(DISTINCT ${courseEvents.courseId})::int`,
@@ -967,7 +976,7 @@ export const analyticsService = {
           .from(courseEvents)
           .groupBy(courseEvents.teacherId),
 
-        db
+        this.db
           .select({
             teacherId: courseEvents.teacherId,
             studentCount: sql<number>`COUNT(DISTINCT ${enrollments.studentId})::int`,
@@ -977,7 +986,7 @@ export const analyticsService = {
           .where(eq(enrollments.status, 'active'))
           .groupBy(courseEvents.teacherId),
 
-        db
+        this.db
           .select({
             teacherId: users.id,
             teacherName: sql<string>`CONCAT(${users.firstName}, ' ', ${users.lastName})`,

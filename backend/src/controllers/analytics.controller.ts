@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { analyticsService } from '../services/analytics.service';
+import * as campusMerge from '../services/analyticsCampus';
+import { campusServices, forCampuses } from '../services/analyticsCampus';
 import logger from '../utils/logger';
 
 // Validation schemas
@@ -13,6 +14,7 @@ const analyticsQuerySchema = z.object({
   studentId: z.string().uuid().optional(),
   groupBy: z.enum(['day', 'week', 'month']).optional(),
   limit: z.string().regex(/^\d+$/).optional(),
+  campus: z.enum(['senior', 'junior', 'both']).optional(),
 });
 
 /**
@@ -53,7 +55,7 @@ export const getFinancialAnalytics = async (req: Request, res: Response, next: N
       validated.endDate
     );
 
-    const [
+    const {
       revenueOverTime,
       paymentMethods,
       outstandingFees,
@@ -62,20 +64,41 @@ export const getFinancialAnalytics = async (req: Request, res: Response, next: N
       courseProfitability,
       previousRevenue,
       previousCollection,
-    ] = await Promise.all([
-      analyticsService.getRevenueOverTime(
-        start,
-        end,
-        validated.groupBy as 'day' | 'week' | 'month' | undefined
-      ),
-      analyticsService.getPaymentMethodBreakdown(start, end),
-      analyticsService.getOutstandingFeesAnalysis(),
-      analyticsService.getCourseRevenueBreakdown(start, end),
-      analyticsService.getCollectionRate(start, end),
-      analyticsService.getCourseProfitability(start, end),
-      analyticsService.getRevenueOverTime(previousStart, previousEnd, 'month'),
-      analyticsService.getCollectionRate(previousStart, previousEnd),
-    ]);
+    } = await forCampuses(
+      campusServices(req),
+      async (svc) => {
+        const [r, pm, of, cr, col, prof, prevR, prevC] = await Promise.all([
+          svc.getRevenueOverTime(start, end, validated.groupBy as 'day' | 'week' | 'month' | undefined),
+          svc.getPaymentMethodBreakdown(start, end),
+          svc.getOutstandingFeesAnalysis(),
+          svc.getCourseRevenueBreakdown(start, end),
+          svc.getCollectionRate(start, end),
+          svc.getCourseProfitability(start, end),
+          svc.getRevenueOverTime(previousStart, previousEnd, 'month'),
+          svc.getCollectionRate(previousStart, previousEnd),
+        ]);
+        return {
+          revenueOverTime: r,
+          paymentMethods: pm,
+          outstandingFees: of,
+          courseRevenue: cr,
+          collectionRate: col,
+          courseProfitability: prof,
+          previousRevenue: prevR,
+          previousCollection: prevC,
+        };
+      },
+      (a, b) => ({
+        revenueOverTime: campusMerge.mergeRevenue(a.revenueOverTime, b.revenueOverTime),
+        paymentMethods: campusMerge.mergeMethods(a.paymentMethods, b.paymentMethods),
+        outstandingFees: campusMerge.mergeOutstanding(a.outstandingFees, b.outstandingFees),
+        courseRevenue: campusMerge.mergeCourseRevenue(a.courseRevenue, b.courseRevenue),
+        collectionRate: campusMerge.mergeCollection(a.collectionRate, b.collectionRate),
+        courseProfitability: campusMerge.mergeProfitability(a.courseProfitability, b.courseProfitability),
+        previousRevenue: campusMerge.mergeRevenue(a.previousRevenue, b.previousRevenue),
+        previousCollection: campusMerge.mergeCollection(a.previousCollection, b.previousCollection),
+      })
+    );
 
     const totalRevenuePKR = revenueOverTime.reduce((s, r) => s + r.revenuePKR, 0);
     const previousRevenuePKR = previousRevenue.reduce((s, r) => s + r.revenuePKR, 0);
@@ -145,35 +168,44 @@ export const getPerformanceAnalytics = async (req: Request, res: Response, next:
       filters: validated
     });
 
-    const [
+    const limit = validated.limit ? parseInt(validated.limit) : undefined;
+    const {
       assessmentDistributions,
       coursePerformanceComparison,
       topPerformers,
       passFailRates,
       atRiskStudents,
-    ] = await Promise.all([
-      analyticsService.getAssessmentDistributions(
-        courseIdFilter,
-        validated.assessmentId
-      ),
-      analyticsService.getCoursePerformanceComparison(),
-      analyticsService.getTopPerformers(
-        courseIdFilter,
-        validated.limit ? parseInt(validated.limit) : undefined
-      ),
-      analyticsService.getPassFailRates(courseIdFilter),
-      analyticsService.getAtRiskStudents(
-        validated.limit ? parseInt(validated.limit) : undefined
-      ),
-    ]);
-
-    // Student trends (if studentId is provided)
-    let studentPerformanceTrends = null;
-    if (validated.studentId) {
-      studentPerformanceTrends = await analyticsService.getStudentPerformanceTrends(
-        validated.studentId
-      );
-    }
+      studentPerformanceTrends,
+    } = await forCampuses(
+      campusServices(req),
+      async (svc) => {
+        const [ad, cpc, tp, pf, ar] = await Promise.all([
+          svc.getAssessmentDistributions(courseIdFilter, validated.assessmentId),
+          svc.getCoursePerformanceComparison(),
+          svc.getTopPerformers(courseIdFilter, limit),
+          svc.getPassFailRates(courseIdFilter),
+          svc.getAtRiskStudents(limit),
+        ]);
+        // Student trends (if studentId is provided)
+        const st = validated.studentId ? await svc.getStudentPerformanceTrends(validated.studentId) : null;
+        return {
+          assessmentDistributions: ad,
+          coursePerformanceComparison: cpc,
+          topPerformers: tp,
+          passFailRates: pf,
+          atRiskStudents: ar,
+          studentPerformanceTrends: st,
+        };
+      },
+      (a, b) => ({
+        assessmentDistributions: campusMerge.mergeDistributions(a.assessmentDistributions, b.assessmentDistributions),
+        coursePerformanceComparison: campusMerge.mergeCoursePerformance(a.coursePerformanceComparison, b.coursePerformanceComparison),
+        topPerformers: campusMerge.mergeTopPerformers(a.topPerformers, b.topPerformers, limit ?? 10),
+        passFailRates: campusMerge.mergePassFail(a.passFailRates, b.passFailRates),
+        atRiskStudents: campusMerge.mergeAtRisk(a.atRiskStudents, b.atRiskStudents, limit ?? 20),
+        studentPerformanceTrends: campusMerge.mergeStudentTrends(a.studentPerformanceTrends, b.studentPerformanceTrends),
+      })
+    );
 
     res.json({
       assessmentDistributions,
@@ -211,17 +243,20 @@ export const getAttendanceAnalytics = async (req: Request, res: Response, next: 
     const startDate = validated.startDate ? new Date(validated.startDate) : undefined;
     const endDate = validated.endDate ? new Date(validated.endDate) : undefined;
 
-    const [
-      attendanceTrends,
-      attendanceByStatus,
-    ] = await Promise.all([
-      analyticsService.getAttendanceTrends(
-        courseIdFilter,
-        startDate,
-        endDate
-      ),
-      analyticsService.getAttendanceByStatus(courseIdFilter),
-    ]);
+    const { attendanceTrends, attendanceByStatus } = await forCampuses(
+      campusServices(req),
+      async (svc) => {
+        const [trends, byStatus] = await Promise.all([
+          svc.getAttendanceTrends(courseIdFilter, startDate, endDate),
+          svc.getAttendanceByStatus(courseIdFilter),
+        ]);
+        return { attendanceTrends: trends, attendanceByStatus: byStatus };
+      },
+      (a, b) => ({
+        attendanceTrends: campusMerge.mergeAttendanceTrends(a.attendanceTrends, b.attendanceTrends),
+        attendanceByStatus: campusMerge.mergeAttendanceByStatus(a.attendanceByStatus, b.attendanceByStatus),
+      })
+    );
 
     res.json({
       attendanceTrends,
@@ -244,15 +279,22 @@ export const getCourseAnalytics = async (req: Request, res: Response, next: Next
 
     const { start, end } = resolveDateRange(validated.startDate, validated.endDate);
 
-    const [
-      coursePopularity,
-      enrollmentTrends,
-      retention,
-    ] = await Promise.all([
-      analyticsService.getCoursePopularity(),
-      analyticsService.getEnrollmentTrends(start, end),
-      analyticsService.getRetentionMetrics(start, end),
-    ]);
+    const { coursePopularity, enrollmentTrends, retention } = await forCampuses(
+      campusServices(req),
+      async (svc) => {
+        const [popularity, trends, ret] = await Promise.all([
+          svc.getCoursePopularity(),
+          svc.getEnrollmentTrends(start, end),
+          svc.getRetentionMetrics(start, end),
+        ]);
+        return { coursePopularity: popularity, enrollmentTrends: trends, retention: ret };
+      },
+      (a, b) => ({
+        coursePopularity: campusMerge.mergePopularity(a.coursePopularity, b.coursePopularity),
+        enrollmentTrends: campusMerge.mergeEnrollmentTrends(a.enrollmentTrends, b.enrollmentTrends),
+        retention: campusMerge.mergeRetention(a.retention, b.retention),
+      })
+    );
 
     res.json({
       coursePopularity,
@@ -279,11 +321,22 @@ export const getGrowthAnalytics = async (req: Request, res: Response, next: Next
       validated.endDate
     );
 
-    const [leadConversion, retention, previousLeads] = await Promise.all([
-      analyticsService.getLeadConversion(start, end),
-      analyticsService.getRetentionMetrics(start, end),
-      analyticsService.getLeadConversion(previousStart, previousEnd),
-    ]);
+    const { leadConversion, retention, previousLeads } = await forCampuses(
+      campusServices(req),
+      async (svc) => {
+        const [leads, ret, prevLeads] = await Promise.all([
+          svc.getLeadConversion(start, end),
+          svc.getRetentionMetrics(start, end),
+          svc.getLeadConversion(previousStart, previousEnd),
+        ]);
+        return { leadConversion: leads, retention: ret, previousLeads: prevLeads };
+      },
+      (a, b) => ({
+        leadConversion: campusMerge.mergeLeads(a.leadConversion, b.leadConversion),
+        retention: campusMerge.mergeRetention(a.retention, b.retention),
+        previousLeads: campusMerge.mergeLeads(a.previousLeads, b.previousLeads),
+      })
+    );
 
     res.json({
       leadConversion,
@@ -323,7 +376,11 @@ export const getTeacherAnalytics = async (req: Request, res: Response, next: Nex
       filters: validated
     });
 
-    const teacherWorkload = await analyticsService.getTeacherWorkload();
+    const teacherWorkload = await forCampuses(
+      campusServices(req),
+      (svc) => svc.getTeacherWorkload(),
+      campusMerge.mergeWorkload
+    );
 
     res.json({
       teacherWorkload,
