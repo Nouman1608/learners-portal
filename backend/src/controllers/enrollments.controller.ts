@@ -44,6 +44,7 @@ const createEnrollmentSchema = z.object({
 
 const updateEnrollmentSchema = z.object({
   status: z.enum(['active', 'completed', 'dropped']).optional(),
+  attendanceMode: z.enum(['local', 'online']).optional(),
   enrolledAt: validDate.optional(),
   completedAt: z.string().datetime().optional(),
   startDate: validDate.optional(),

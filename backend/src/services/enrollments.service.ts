@@ -29,6 +29,7 @@ export interface CreateEnrollmentInput {
 
 export interface UpdateEnrollmentInput {
   status?: 'active' | 'completed' | 'dropped';
+  attendanceMode?: 'local' | 'online';
   completedAt?: Date;
   enrolledAt?: Date; // Editable enrollment date
   startDate?: string; // Enrollment start date (YYYY-MM-DD)
@@ -388,6 +389,16 @@ export const enrollmentsService = {
     // This prevents switching between regular monthly billing and usage-based billing mid-enrollment
     if ('classType' in input) {
       throw new AppError(400, 'Cannot change classType after enrollment creation. This would cause billing inconsistencies.');
+    }
+
+    // Local students are always billed in PKR (see createEnrollment), so a
+    // non-PKR online enrollment must have its currency fixed before going local
+    if (
+      input.attendanceMode === 'local' &&
+      existingEnrollment[0].currency &&
+      existingEnrollment[0].currency !== 'PKR'
+    ) {
+      throw new AppError(400, 'Cannot switch to Local while the enrollment currency is not PKR. Change the fee currency to PKR first.');
     }
 
     const updateData: any = { ...input };

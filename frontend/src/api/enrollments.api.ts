@@ -126,6 +126,7 @@ export interface CreateEnrollmentInput {
 
 export interface UpdateEnrollmentInput {
   status?: 'active' | 'completed' | 'dropped';
+  attendanceMode?: 'local' | 'online';
   enrolledAt?: string; // Enrollment date (YYYY-MM-DD)
   completedAt?: string;
   startDate?: string;

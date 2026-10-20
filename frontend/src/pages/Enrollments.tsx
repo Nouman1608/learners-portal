@@ -192,6 +192,38 @@ export default function Enrollments() {
     }
   };
 
+  const handleModeChange = async (id: string, attendanceMode: 'local' | 'online') => {
+    try {
+      await enrollmentsApi.updateEnrollment(id, { attendanceMode });
+      toast.success('Enrollment mode updated');
+      loadEnrollments();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to update mode');
+    }
+  };
+
+  const renderModeCell = (enrollment: Enrollment) => {
+    const modeClass = enrollment.attendanceMode === 'online' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700';
+    if (!isAdmin) {
+      return (
+        <span className={`text-xs px-2 py-0.5 rounded-full ${modeClass}`}>
+          {enrollment.attendanceMode === 'online' ? 'Online' : 'Local'}
+        </span>
+      );
+    }
+    return (
+      <select
+        value={enrollment.attendanceMode}
+        onChange={(e) => handleModeChange(enrollment.id, e.target.value as 'local' | 'online')}
+        className={`text-xs px-2 py-0.5 rounded-full border-none cursor-pointer ${modeClass}`}
+        title="Change attendance mode"
+      >
+        <option value="local">Local</option>
+        <option value="online">Online</option>
+      </select>
+    );
+  };
+
   const handleConfirmDrop = async (willReturn: boolean, tentativeReturnDate?: string) => {
     if (!enrollmentToDrop) return;
 
@@ -662,11 +694,7 @@ export default function Enrollments() {
                       </td>
                     )}
                     <td className="px-3 py-2 whitespace-nowrap">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        enrollment.attendanceMode === 'online' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700'
-                      }`}>
-                        {enrollment.attendanceMode === 'online' ? 'Online' : 'Local'}
-                      </span>
+                      {renderModeCell(enrollment)}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       {isAdmin ? (
@@ -860,11 +888,7 @@ export default function Enrollments() {
                         </div>
                       )}
                       <div className="flex gap-2 items-center">
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          enrollment.attendanceMode === 'online' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700'
-                        }`}>
-                          {enrollment.attendanceMode === 'online' ? 'Online' : 'Local'}
-                        </span>
+                        {renderModeCell(enrollment)}
                         {isAdmin && editingEnrolledAt === enrollment.id ? (
                           <input
                             type="date"
