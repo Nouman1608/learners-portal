@@ -1,19 +1,23 @@
 /**
  * Which school this portal instance presents itself as.
  *
- * One deployment serves two public sites. The hostname decides the brand:
- * portal.marlbridge.com shows Marlbridge; every other host (learnerspreschool.cloud,
- * portal.learnersacademy.com.pk, localhost) shows Learners Academy. Only the
- * presentation changes: users, data and login are shared.
+ * The hostname decides the brand:
+ * - junior.learnersacademy.com.pk shows Learners Preschool. It is the Junior Campus:
+ *   a separate backend and database, so its users and data are its own.
+ * - portal.marlbridge.com shows Marlbridge (Senior Campus data, shared login).
+ * - every other host (learnerspreschool.cloud, portal.learnersacademy.com.pk,
+ *   localhost) shows Learners Academy, the Senior Campus.
  *
  * Tailwind classes live here as whole strings so the build keeps them.
- * VITE_BRAND=mb previews the Marlbridge look on localhost.
+ * VITE_BRAND=mb or VITE_BRAND=lp previews those looks on localhost.
  */
-export type BrandKey = 'la' | 'mb';
+export type BrandKey = 'la' | 'mb' | 'lp';
 
 export interface Brand {
   key: BrandKey;
   name: string;
+  /** Which campus's data this host serves; forms only offer that campus's options. */
+  campus: 'senior' | 'junior';
   /** Logo for light backgrounds (login card). */
   logo: string;
   logoClass: string;
@@ -32,6 +36,7 @@ const BRANDS: Record<BrandKey, Brand> = {
   la: {
     key: 'la',
     name: 'Learners Academy',
+    campus: 'senior',
     logo: '/logo.svg',
     logoClass: 'mx-auto h-32 w-auto mb-4',
     logoOnDark: '/logo.svg',
@@ -44,6 +49,7 @@ const BRANDS: Record<BrandKey, Brand> = {
   mb: {
     key: 'mb',
     name: 'Marlbridge',
+    campus: 'senior',
     // Marlbridge's own tokens: navy #0B1F3A, rule #24395A, gold #C9A227.
     logo: '/brand/marlbridge-stacked.svg',
     logoClass: 'mx-auto h-28 w-auto mb-5',
@@ -54,12 +60,30 @@ const BRANDS: Record<BrandKey, Brand> = {
     buttonClass: 'bg-[#0B1F3A] hover:bg-[#24395A] focus:ring-[#C9A227]',
     focusRingClass: 'focus:ring-[#C9A227] focus:border-[#C9A227]',
   },
+  lp: {
+    key: 'lp',
+    name: 'Learners Preschool',
+    campus: 'junior',
+    // Uses the Learners Academy logo until the preschool has its own.
+    logo: '/logo.svg',
+    logoClass: 'mx-auto h-32 w-auto mb-4',
+    logoOnDark: '/logo.svg',
+    logoOnDarkClass: 'h-20 w-auto',
+    favicon: '/favicon.svg',
+    loginBgClass: 'bg-gradient-to-br from-amber-50 to-orange-100',
+    buttonClass: 'bg-orange-500 hover:bg-orange-600 focus:ring-orange-400',
+    focusRingClass: 'focus:ring-orange-400 focus:border-orange-400',
+  },
 };
 
 function detectBrand(): BrandKey {
   const override = import.meta.env.VITE_BRAND as string | undefined;
-  if (override === 'mb' || override === 'la') return override;
-  if (typeof window !== 'undefined' && window.location.hostname.includes('marlbridge')) return 'mb';
+  if (override === 'mb' || override === 'la' || override === 'lp') return override;
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host.startsWith('junior.')) return 'lp';
+    if (host.includes('marlbridge')) return 'mb';
+  }
   return 'la';
 }
 

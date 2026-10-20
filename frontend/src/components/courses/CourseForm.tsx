@@ -7,6 +7,7 @@ import { coursesApi, roomsApi, Course, CreateCourseInput, UpdateCourseInput, Cre
 import { usersApi } from '../../api/users.api';
 import SearchableSelect from '../common/SearchableSelect';
 import toast from 'react-hot-toast';
+import { brand } from '../../brand';
 
 const courseSchema = z.object({
   courseCategory: z.enum(['senior', 'junior']),
@@ -72,8 +73,8 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
           isActive: course.isActive,
         }
       : {
-          courseCategory: 'senior' as 'senior' | 'junior',
-          courseLevel: 'ig' as 'ig' | 'alevel' | '',
+          courseCategory: brand.campus as 'senior' | 'junior',
+          courseLevel: (brand.campus === 'junior' ? '' : 'ig') as 'ig' | 'alevel' | '',
           subject: '',
           teacherName: '',
           studentName: '',
@@ -334,7 +335,7 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
                   id="courseCategory"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 >
-                  <option value="senior">Senior</option>
+                  {brand.campus === 'senior' && <option value="senior">Senior</option>}
                   <option value="junior">Junior</option>
                 </select>
                 {errors.courseCategory && (
@@ -353,8 +354,12 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 >
                   <option value="">None</option>
-                  <option value="ig">IG</option>
-                  <option value="alevel">A Level</option>
+                  {brand.campus === 'senior' && (
+                    <>
+                      <option value="ig">IG</option>
+                      <option value="alevel">A Level</option>
+                    </>
+                  )}
                 </select>
                 {errors.courseLevel && (
                   <p className="mt-1 text-sm text-red-600">{errors.courseLevel.message}</p>

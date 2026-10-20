@@ -22,6 +22,8 @@ const envSchema = z.object({
   MICROSOFT_CLIENT_SECRET: z.string().optional(),
   MICROSOFT_REDIRECT_URI: z.string().optional(),
   OAUTH_ENCRYPTION_KEY: z.string().optional(),
+  // Name shown in emails; the Junior Campus instance sets "Learners Preschool".
+  SCHOOL_NAME: z.string().default('Learners Academy'),
   UPLOAD_DIR: z.string().default('./uploads'),
   MAX_FILE_SIZE: z.string().default('5242880'),
   RATE_LIMIT_WINDOW_MS: z.string().default('60000'),

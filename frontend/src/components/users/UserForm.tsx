@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { User, Role } from '../../types';
 import { CreateUserInput, UpdateUserInput } from '../../api/users.api';
 import { useAuth } from '../../context/AuthContext';
+import { brand } from '../../brand';
 
 interface UserFormProps {
   user?: User | null;
@@ -23,7 +24,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit }) => {
     email: user?.email || '',
     phone: user?.phone || '',
     parentPhone: user?.parentPhone || '',
-    studentCategory: (user as any)?.studentCategory || '',
+    studentCategory: (user as any)?.studentCategory || (brand.campus === 'junior' ? 'junior' : ''),
     studentSubcategory: (user as any)?.studentSubcategory || '',
     whatsappGroupLink: (user as any)?.whatsappGroupLink || '',
     teamsUsername: (user as any)?.teamsUsername || '',
@@ -356,7 +357,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit }) => {
                   >
                     <option value="">Select category</option>
                     <option value="junior">Junior</option>
-                    <option value="senior">Senior</option>
+                    {brand.campus === 'senior' && <option value="senior">Senior</option>}
                   </select>
                 </div>
 

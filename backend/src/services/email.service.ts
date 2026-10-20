@@ -14,6 +14,8 @@ const SMTP_CONFIG = {
 };
 
 const EMAIL_FROM = process.env.EMAIL_FROM || 'learners-academy@example.com';
+// The Junior Campus instance runs the same code with SCHOOL_NAME="Learners Preschool".
+const SCHOOL_NAME = process.env.SCHOOL_NAME || 'Learners Academy';
 
 export interface SendInvoiceEmailInput {
   to: string;
@@ -68,7 +70,7 @@ export const emailService = {
           : this.generateTeacherEmailText(input);
 
       const mailOptions = {
-        from: `Learners Academy <${EMAIL_FROM}>`,
+        from: `${SCHOOL_NAME} <${EMAIL_FROM}>`,
         to: input.to,
         subject,
         text: textContent,
@@ -112,7 +114,7 @@ export const emailService = {
       <body>
         <div class="container">
           <div class="header">
-            <h1>Learners Academy</h1>
+            <h1>${SCHOOL_NAME}</h1>
             <p>Your Monthly Invoice</p>
           </div>
           <div class="content">
@@ -127,7 +129,7 @@ export const emailService = {
             </p>
           </div>
           <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} Learners Academy. All rights reserved.</p>
+            <p>&copy; ${new Date().getFullYear()} ${SCHOOL_NAME}. All rights reserved.</p>
             
           </div>
         </div>
@@ -156,7 +158,7 @@ export const emailService = {
       <body>
         <div class="container">
           <div class="header">
-            <h1>Learners Academy</h1>
+            <h1>${SCHOOL_NAME}</h1>
             <p>Your Monthly Payment Invoice</p>
           </div>
           <div class="content">
@@ -171,7 +173,7 @@ export const emailService = {
             </p>
           </div>
           <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} Learners Academy. All rights reserved.</p>
+            <p>&copy; ${new Date().getFullYear()} ${SCHOOL_NAME}. All rights reserved.</p>
            
           </div>
         </div>
@@ -185,7 +187,7 @@ export const emailService = {
    */
   generateStudentEmailText(input: SendInvoiceEmailInput): string {
     return `
-Learners Academy
+${SCHOOL_NAME}
 Your Monthly Invoice
 
 Dear ${input.recipientName},
@@ -201,7 +203,7 @@ If you have any questions or concerns regarding this invoice, please contact our
 
 This is an automated email. Please do not reply to this message.
 
-© ${new Date().getFullYear()} Learners Academy. All rights reserved.
+© ${new Date().getFullYear()} ${SCHOOL_NAME}. All rights reserved.
 
     `;
   },
@@ -211,7 +213,7 @@ This is an automated email. Please do not reply to this message.
    */
   generateTeacherEmailText(input: SendInvoiceEmailInput): string {
     return `
-Learners Academy
+${SCHOOL_NAME}
 Your Monthly Payment Invoice
 
 Dear ${input.recipientName},
@@ -227,7 +229,7 @@ If you have any questions regarding this payment invoice, please contact our adm
 
 This is an automated email. Please do not reply to this message.
 
-© ${new Date().getFullYear()} Learners Academy. All rights reserved.
+© ${new Date().getFullYear()} ${SCHOOL_NAME}. All rights reserved.
 
     `;
   },
