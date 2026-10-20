@@ -10,6 +10,8 @@ router.post('/login', authRateLimiter, logActivity('login', 'auth'), authControl
 router.post('/logout', authenticate, logActivity('logout', 'auth'), authController.logout);
 router.get('/me', authenticate, authController.me);
 router.post('/refresh', authenticate, authController.refresh);
+router.post('/campus-handoff', authenticate, logActivity('campus_handoff', 'auth'), authController.createCampusHandoff);
+router.post('/campus-handoff/accept', authRateLimiter, logActivity('login', 'auth'), authController.acceptCampusHandoff);
 router.post('/change-password', authenticate, logActivity('change_password', 'auth'), authController.changeSelfPassword);
 router.post('/setup-account', authenticate, logActivity('setup_account', 'auth'), authController.setupAccount);
 router.patch('/profile', authenticate, logActivity('update_profile', 'auth'), authController.updateProfile);

@@ -27,6 +27,7 @@ import TeamsSettings from './pages/TeamsSettings';
 import AccountSettings from './pages/AccountSettings';
 import Analytics from './pages/Analytics';
 import ParentPortal from './pages/ParentPortal';
+import CampusSignIn from './pages/CampusSignIn';
 
 function App() {
   return (
@@ -36,6 +37,7 @@ function App() {
         <Routes>
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
+          <Route path="/sso" element={<CampusSignIn />} />
 
           {/* Protected routes */}
           <Route

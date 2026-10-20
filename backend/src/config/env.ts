@@ -22,6 +22,10 @@ const envSchema = z.object({
   MICROSOFT_CLIENT_SECRET: z.string().optional(),
   MICROSOFT_REDIRECT_URI: z.string().optional(),
   OAUTH_ENCRYPTION_KEY: z.string().optional(),
+  // One-click sign-in from one campus portal to the other (sudo only). Both instances share the
+  // secret; HANDOFF_TARGET_URL is the other portal (set on the Senior Campus instance only).
+  CAMPUS_HANDOFF_SECRET: z.string().min(32).optional().or(z.literal('')),
+  HANDOFF_TARGET_URL: z.string().url().optional().or(z.literal('')),
   // Name shown in emails; the Junior Campus instance sets "Learners Preschool".
   SCHOOL_NAME: z.string().default('Learners Academy'),
   UPLOAD_DIR: z.string().default('./uploads'),

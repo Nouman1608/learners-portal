@@ -31,6 +31,18 @@ export const authApi = {
   setupAccount: async (data: { currentPassword: string; newPassword: string; teamsUsername: string }): Promise<void> => {
     await apiClient.post('/auth/setup-account', data);
   },
+
+  /** Sudo: one-time sign-in link for the other campus portal. */
+  createCampusHandoff: async (): Promise<string> => {
+    const response = await apiClient.post<{ url: string }>('/auth/campus-handoff');
+    return response.data.url;
+  },
+
+  /** Exchanges a one-time pass from the other campus portal for a session here. */
+  acceptCampusHandoff: async (token: string): Promise<User> => {
+    const response = await apiClient.post<AuthResponse>('/auth/campus-handoff/accept', { token });
+    return response.data.user;
+  },
 };
 
 export default authApi;

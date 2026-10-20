@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { dashboardApi, DashboardStats, CurrencyAmount, Campus } from '../api/dashboard.api';
 import { brand } from '../brand';
+import { authApi } from '../api/auth.api';
 import toast from 'react-hot-toast';
 import { StatCardSkeleton } from '../components/common/Skeleton';
 import {
@@ -93,6 +94,24 @@ const Dashboard: React.FC = () => {
       toast.error('Failed to load dashboard statistics');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // One-click sign-in: the tab is opened straight away (so popup blockers allow it),
+  // then pointed at the one-time sign-in link once the server has issued it.
+  const openJuniorPortal = async () => {
+    const tab = window.open('', '_blank');
+    try {
+      const url = await authApi.createCampusHandoff();
+      if (tab) {
+        tab.opener = null;
+        tab.location.href = url;
+      } else {
+        window.location.href = url;
+      }
+    } catch (error: any) {
+      tab?.close();
+      toast.error(error.response?.data?.error || 'Could not open the Junior portal');
     }
   };
 
@@ -246,14 +265,13 @@ const Dashboard: React.FC = () => {
                 </button>
               ))}
             </div>
-            <a
-              href="https://junior.learnersacademy.com.pk"
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              type="button"
+              onClick={openJuniorPortal}
               className="px-4 py-2 text-sm font-medium rounded-lg bg-white shadow-card text-indigo-600 hover:bg-indigo-50 transition"
             >
               Open Junior portal ↗
-            </a>
+            </button>
           </div>
         )}
 
