@@ -1,4 +1,5 @@
 import { db } from '../config/database';
+import teacherOneToOneRates from '../config/teacherOneToOneRates.json';
 import { invoices, invoiceLineItems } from '../db/schema/invoices';
 import { fees, enrollments, users, courses, courseTeachers, courseEvents } from '../db/schema';
 import { eq, and, or, desc, sql, gte, lte, ilike } from 'drizzle-orm';
@@ -308,7 +309,9 @@ export const invoicesService = {
               checkPageBreak(20);
 
               const studentFee = student.metadata?.studentFee ? parseFloat(student.metadata.studentFee) : 0;
-              const rateText = `${parseFloat(student.unitPrice).toFixed(1)}%`;
+              const rateText = student.metadata?.classType === '1-to-1'
+                ? `${student.quantity} x ${parseFloat(student.unitPrice).toFixed(2)}`
+                : `${parseFloat(student.unitPrice).toFixed(1)}%`;
 
               doc
                 .fontSize(9)
@@ -362,7 +365,9 @@ export const invoicesService = {
               // Check if we need a new page for this student
               checkPageBreak(20);
 
-              const rateText = `PKR ${parseFloat(student.unitPrice).toFixed(2)}`;
+              const rateText = student.metadata?.classType === '1-to-1'
+                ? `${student.quantity} x ${parseFloat(student.unitPrice).toFixed(2)}`
+                : `PKR ${parseFloat(student.unitPrice).toFixed(2)}`;
 
               doc
                 .fontSize(9)
@@ -986,8 +991,9 @@ export const invoicesService = {
     const onlineFixedAmountIg = teacher.onlineStudentFixedAmountIg ? parseFloat(teacher.onlineStudentFixedAmountIg) : 0;
     const onlineFixedAmountAlevel = teacher.onlineStudentFixedAmountAlevel ? parseFloat(teacher.onlineStudentFixedAmountAlevel) : 0;
 
+    const oneToOneClassRate = (teacherOneToOneRates as Record<string, number>)[input.teacherId] ?? teacherOneToOneRates.default;
     const hasLocalConfig = localFeePercentage > 0;
-    const hasOnlineConfig = onlineFixedAmountIg > 0 || onlineFixedAmountAlevel > 0;
+    const hasOnlineConfig = onlineFixedAmountIg > 0 || onlineFixedAmountAlevel > 0 || oneToOneClassRate !== null;
     const hasSalaryConfig = isSalaried && monthlySalary > 0;
 
     if (!hasSalaryConfig && !hasLocalConfig && !hasOnlineConfig) {
@@ -1154,7 +1160,11 @@ export const invoicesService = {
 
         if (studentFee === 0) continue;
 
-        const earning = (studentFee * localFeePercentage) / 100;
+        const isOneToOne = enrollment.classType === '1-to-1';
+        const quantity = isOneToOne ? (sessionCount ?? 0) : 1;
+        const earning = isOneToOne
+          ? Math.round(oneToOneClassRate * quantity * 100) / 100
+          : (studentFee * localFeePercentage) / 100;
 
         const description = enrollment.classType === '1-to-1' && sessionCount
           ? `1-to-1 Local - ${teacherCourse.course.title} - ${enrollment.student.firstName} ${enrollment.student.lastName} (${sessionCount} sessions)`
@@ -1164,8 +1174,8 @@ export const invoicesService = {
           description,
           courseId: teacherCourse.courseId,
           feeId,
-          quantity: '1',
-          unitPrice: localFeePercentage.toString(),
+          quantity: quantity.toString(),
+          unitPrice: (isOneToOne ? oneToOneClassRate : localFeePercentage).toString(),
           amount: earning.toString(),
           metadata: {
             attendanceMode: 'local',
@@ -1253,11 +1263,17 @@ export const invoicesService = {
 
         // Determine the appropriate online amount based on course level
         const courseLevel = teacherCourse.course.courseLevel || 'ig';
-        const onlineAmount = courseLevel === 'alevel' ? onlineFixedAmountAlevel : onlineFixedAmountIg;
+        const groupAmount = courseLevel === 'alevel' ? onlineFixedAmountAlevel : onlineFixedAmountIg;
 
         // If the student's fee is pro-rated (e.g. pro-rated first month), pro-rate
         // the teacher's fixed amount by the same ratio (fee paid / full monthly fee)
-        let onlineEarning = onlineAmount;
+        const isOneToOne = enrollment.classType === '1-to-1';
+        if (isOneToOne && (oneToOneClassRate === null || !Number.isFinite(oneToOneClassRate) || oneToOneClassRate < 0)) {
+          throw new AppError(400, 'Set the teacher one-to-one class rate before generating this invoice.');
+        }
+        const quantity = isOneToOne ? (sessionCount ?? 0) : 1;
+        const onlineAmount = isOneToOne ? oneToOneClassRate! : groupAmount;
+        let onlineEarning = Math.round(onlineAmount * quantity * 100) / 100;
         let isProrated = false;
         if (
           enrollment.classType !== '1-to-1' &&
@@ -1280,7 +1296,7 @@ export const invoicesService = {
           description,
           courseId: teacherCourse.courseId,
           feeId,
-          quantity: '1',
+          quantity: quantity.toString(),
           unitPrice: onlineAmount.toString(),
           amount: onlineEarning.toString(),
           metadata: {
