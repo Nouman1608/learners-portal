@@ -10,6 +10,7 @@
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { SecureStorage } from '@aparajita/capacitor-secure-storage';
+import { appCampus } from './appCampus';
 
 export const isNativeApp = Capacitor.isNativePlatform();
 
@@ -17,7 +18,7 @@ export const isNativeApp = Capacitor.isNativePlatform();
 // website they stay relative to the portal host; the app has no host of its
 // own, so it points them at the live portal.
 const FILE_HOST = isNativeApp
-  ? new URL(import.meta.env.VITE_NATIVE_API_URL).origin
+  ? new URL(appCampus?.apiUrl ?? import.meta.env.VITE_NATIVE_API_URL).origin
   : (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '');
 
 /** Full address of a stored file ("/uploads/..."). */

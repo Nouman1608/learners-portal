@@ -11,6 +11,8 @@
  * Tailwind classes live here as whole strings so the build keeps them.
  * VITE_BRAND=mb or VITE_BRAND=lp previews those looks on localhost.
  */
+import { appCampus } from './appCampus';
+
 export type BrandKey = 'la' | 'mb' | 'lp';
 
 export interface Brand {
@@ -77,6 +79,8 @@ const BRANDS: Record<BrandKey, Brand> = {
 };
 
 function detectBrand(): BrandKey {
+  // In the mobile app the school picked on the home screen decides.
+  if (appCampus) return appCampus.key;
   const override = import.meta.env.VITE_BRAND as string | undefined;
   if (override === 'mb' || override === 'la' || override === 'lp') return override;
   if (typeof window !== 'undefined') {

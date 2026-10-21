@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import { brand } from '../brand';
+import { appCampus, forgetAppCampus } from '../appCampus';
+import { setAuthToken } from '../native';
 
 const Login: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -19,6 +21,11 @@ const Login: React.FC = () => {
       navigate('/dashboard');
     }
   }, [user, justLoggedIn, navigate]);
+
+  const changeSchool = async () => {
+    await setAuthToken(null);
+    forgetAppCampus();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,6 +135,16 @@ const Login: React.FC = () => {
             )}
           </button>
         </form>
+
+        {/* Mobile app: back to the school chooser */}
+        {appCampus && (
+          <p className="text-center text-sm text-gray-600">
+            Not {appCampus.label}?{' '}
+            <button type="button" onClick={changeSchool} className="font-medium text-indigo-600 hover:text-indigo-700">
+              Change school
+            </button>
+          </p>
+        )}
 
         {/* Development Hint */}
         {import.meta.env.DEV && (

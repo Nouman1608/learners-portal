@@ -1,11 +1,12 @@
 import axios from 'axios';
 import { isNativeApp, MOBILE_CLIENT_HEADER, getAuthToken, setAuthToken } from '../native';
+import { appCampus } from '../appCampus';
 
 // In production the API is proxied at /api on the same host, so one build serves
 // every portal hostname and the auth cookie (SameSite=strict) stays first-party.
-// The mobile app has no host of its own, so it calls the live portal directly.
+// The mobile app has no host of its own, so it calls the chosen school's portal directly.
 const API_URL = isNativeApp
-  ? import.meta.env.VITE_NATIVE_API_URL
+  ? appCampus?.apiUrl ?? import.meta.env.VITE_NATIVE_API_URL
   : import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api');
 
 export const apiClient = axios.create({
