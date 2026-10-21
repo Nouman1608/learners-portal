@@ -1,13 +1,18 @@
-import { APP_CAMPUSES, chooseAppCampus } from '../appCampus';
+import { APP_CAMPUSES, chooseAppCampus, isWebChooser } from '../appCampus';
 import { setAuthToken } from '../native';
 
 /**
- * The mobile app's home screen: pick which school to sign in to. Shown on first launch
- * and after "Change school". Each school is its own portal, so any saved login is
- * dropped when switching.
+ * Pick which school to sign in to. In the mobile app this is the home screen (first launch
+ * and after "Change school"; any saved login is dropped when switching). On the web it is
+ * the front door at learnerspreschool.cloud, linking to each school's own portal.
  */
 export default function CampusChooser() {
   const pick = async (key: (typeof APP_CAMPUSES)[number]['key']) => {
+    if (isWebChooser) {
+      const campus = APP_CAMPUSES.find((c) => c.key === key)!;
+      window.location.href = `${campus.webUrl}/login`;
+      return;
+    }
     await setAuthToken(null);
     chooseAppCampus(key);
   };
@@ -28,9 +33,9 @@ export default function CampusChooser() {
               <img src={campus.logo} alt="" className="max-w-[80px] max-h-[80px]" />
             </span>
             <span>
-              <span className="block text-lg font-semibold text-gray-900">{campus.label}</span>
+              <span className="block text-lg font-semibold text-gray-900">{campus.school}</span>
               {campus.school !== campus.label && (
-                <span className="block text-sm text-gray-500">{campus.school}</span>
+                <span className="block text-sm text-gray-500">{campus.label}</span>
               )}
             </span>
           </button>

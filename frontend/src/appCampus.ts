@@ -19,6 +19,8 @@ export interface AppCampus {
   school: string;
   logo: string;
   apiUrl: string;
+  /** The school's own portal address (the web chooser links there). */
+  webUrl: string;
 }
 
 export const APP_CAMPUSES: AppCampus[] = [
@@ -28,6 +30,7 @@ export const APP_CAMPUSES: AppCampus[] = [
     school: 'Learners Academy',
     logo: '/logo.svg',
     apiUrl: 'https://portal.learnersacademy.com.pk/api',
+    webUrl: 'https://portal.learnersacademy.com.pk',
   },
   {
     key: 'lp',
@@ -35,6 +38,7 @@ export const APP_CAMPUSES: AppCampus[] = [
     school: 'Learners Preschool',
     logo: '/brand/learners-preschool.png',
     apiUrl: 'https://junior.learnersacademy.com.pk/api',
+    webUrl: 'https://junior.learnersacademy.com.pk',
   },
   {
     key: 'mb',
@@ -42,6 +46,7 @@ export const APP_CAMPUSES: AppCampus[] = [
     school: 'Marlbridge',
     logo: '/brand/marlbridge-emblem-cream.png',
     apiUrl: 'https://portal.marlbridge.com/api',
+    webUrl: 'https://portal.marlbridge.com',
   },
 ];
 
@@ -61,8 +66,16 @@ function read(): AppCampus | null {
 /** The school chosen in the app, or null on the website / before the first choice. */
 export const appCampus: AppCampus | null = read();
 
-/** True in the app until a school has been picked: show the home screen instead. */
-export const needsCampusChoice = isNative && appCampus === null;
+/**
+ * learnerspreschool.cloud is the shared front door on the web: it shows the three schools
+ * and sends people to each school's own portal address.
+ */
+const CHOOSER_HOSTS = ['learnerspreschool.cloud', 'www.learnerspreschool.cloud'];
+export const isWebChooser =
+  !isNative && typeof window !== 'undefined' && CHOOSER_HOSTS.includes(window.location.hostname);
+
+/** Show the school chooser instead of the portal: in the app until a school is picked, and on the front door. */
+export const needsCampusChoice = (isNative && appCampus === null) || isWebChooser;
 
 /** Saves the choice and restarts the app's page so everything picks it up. */
 export function chooseAppCampus(key: AppCampusKey): void {
