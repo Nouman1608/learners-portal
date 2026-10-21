@@ -37,12 +37,13 @@ export interface UpdateCourseInput {
 /** Junior Campus grades ("Grade 7", "Nursery", "KG", "Quran", ...) are titled by the grade alone: several teachers share them. */
 export const JUNIOR_GRADE_NAME = /^\s*(grade\s*\d+|nursery|pg|prep|pre-school|kg|quran)\s*$/i;
 
-/** Senior: IG / A Level. Junior Campus: its category (Preschool / Academy / ATP), never shown in titles. */
+/** Senior: IG / A Level. Junior Campus: its category (Preschool / Academy / ATP), never shown in titles except "ATP Grade N". */
 export type CourseLevel = 'ig' | 'alevel' | 'preschool' | 'academy' | 'aitchison';
 
 function buildCourseTitle(parts: { courseCategory?: string; courseLevel?: string; subject?: string; teacherName?: string; studentName?: string }): string {
   if (parts.courseCategory === 'junior' && parts.subject && JUNIOR_GRADE_NAME.test(parts.subject)) {
-    return parts.subject.trim();
+    // ATP has its own grades, kept apart from Academy's by the prefix
+    return (parts.courseLevel === 'aitchison' ? 'ATP ' : '') + parts.subject.trim();
   }
   const categoryMap: Record<string, string> = { senior: 'S', junior: 'J' };
   const levelMap: Record<string, string> = { ig: 'IG', alevel: 'A Level' };
