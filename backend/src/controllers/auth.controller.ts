@@ -13,11 +13,11 @@ import logger from '../utils/logger';
 import env from '../config/env';
 
 // The mobile app identifies itself with this header. It gets its token in the
-// response body (it sends it back as a Bearer header) and a longer session, so
-// people are not logged out of the app every 15 minutes.
+// response body (it sends it back as a Bearer header); the website uses a cookie.
+// Both stay signed in for 30 days (owner's choice: no 15-minute timeout).
 const MOBILE_CLIENT = 'learners-mobile';
 const MOBILE_SESSION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-const WEB_SESSION_MS = 15 * 60 * 1000; // 15 minutes
+const WEB_SESSION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 const isMobileClient = (req: Request) => req.get('X-Client') === MOBILE_CLIENT;
 
@@ -62,7 +62,7 @@ async function startSession(res: Response, user: UserRow, mobile: boolean): Prom
       username: user.username,
       role: user.role,
     },
-    mobile ? '30d' : undefined
+    '30d'
   );
 
   const expiresAt = new Date(Date.now() + (mobile ? MOBILE_SESSION_MS : WEB_SESSION_MS));
@@ -209,7 +209,7 @@ export const refresh = async (req: Request, res: Response) => {
         username: req.user.username,
         role: req.user.role,
       },
-      mobile ? '30d' : undefined
+      '30d'
     );
 
     const expiresAt = new Date(Date.now() + (mobile ? MOBILE_SESSION_MS : WEB_SESSION_MS));
