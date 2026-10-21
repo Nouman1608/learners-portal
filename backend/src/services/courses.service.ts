@@ -34,8 +34,8 @@ export interface UpdateCourseInput {
   isActive?: boolean;
 }
 
-/** Junior Campus grades ("Grade 7", "Nursery", ...) are titled by the grade alone: several teachers share them. */
-export const JUNIOR_GRADE_NAME = /^\s*(grade\s*\d+|nursery|prep|pre-school|kg)\s*$/i;
+/** Junior Campus grades ("Grade 7", "Nursery", "KG", "Quran", ...) are titled by the grade alone: several teachers share them. */
+export const JUNIOR_GRADE_NAME = /^\s*(grade\s*\d+|nursery|prep|pre-school|kg|quran)\s*$/i;
 
 /** Senior: IG / A Level. Junior Campus: its category (Preschool / Academy / ATP), never shown in titles. */
 export type CourseLevel = 'ig' | 'alevel' | 'preschool' | 'academy' | 'aitchison';
