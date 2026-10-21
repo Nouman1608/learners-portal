@@ -10,6 +10,7 @@ import EmptyState from '../components/common/EmptyState';
 import { useSortableData } from '../hooks/useSortableData';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
+import { JUNIOR_CATEGORIES, isJuniorPortal } from '../brand';
 
 const Users: React.FC = () => {
   const { user: currentUser } = useAuth();
@@ -295,6 +296,16 @@ const Users: React.FC = () => {
           <option value="true">Active</option>
           <option value="false">Inactive</option>
         </select>
+        {isJuniorPortal ? (
+          <select
+            value={subcategoryFilter}
+            onChange={(e) => setSubcategoryFilter(e.target.value)}
+            className="px-3 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"
+          >
+            <option value="">All Categories</option>
+            {JUNIOR_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+          </select>
+        ) : (
         <select
           value={categoryFilter}
           onChange={(e) => {
@@ -307,7 +318,8 @@ const Users: React.FC = () => {
           <option value="junior">Junior</option>
           <option value="senior">Senior</option>
         </select>
-        {categoryFilter && (
+        )}
+        {!isJuniorPortal && categoryFilter && (
           <select
             value={subcategoryFilter}
             onChange={(e) => setSubcategoryFilter(e.target.value)}

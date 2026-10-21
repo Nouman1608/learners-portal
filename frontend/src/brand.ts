@@ -98,6 +98,17 @@ export const terms = brand.campus === 'junior'
   ? { course: 'Grade', courses: 'Grades', courseLc: 'grade', coursesLc: 'grades' }
   : { course: 'Course', courses: 'Courses', courseLc: 'course', coursesLc: 'courses' };
 
+/**
+ * The Junior Campus's only categories. Students keep them in student_subcategory; grades and
+ * classes keep them in course_level (the senior IG / A Level column, unused for junior).
+ */
+export const JUNIOR_CATEGORIES = [
+  { value: 'preschool', label: 'Preschool' },
+  { value: 'academy', label: 'Academy' },
+  { value: 'aitchison', label: 'ATP' },
+];
+export const isJuniorPortal = brand.campus === 'junior';
+
 /** Sets the tab title and favicon to match the brand. Call once at startup. */
 export function applyBrand(): void {
   document.title = brand.name;

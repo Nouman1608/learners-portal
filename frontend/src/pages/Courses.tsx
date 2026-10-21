@@ -12,7 +12,7 @@ import CourseActionsModal from '../components/courses/CourseActionsModal';
 import { useSortableData } from '../hooks/useSortableData';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
-import { terms } from '../brand';
+import { terms, JUNIOR_CATEGORIES, isJuniorPortal } from '../brand';
 
 export default function Courses() {
   const { user } = useAuth();
@@ -319,6 +319,7 @@ export default function Courses() {
           <option value="inactive">Inactive</option>
         </select>
 
+        {!isJuniorPortal && (
         <select
           value={filterCategory}
           onChange={(e) => setFilterCategory(e.target.value)}
@@ -328,15 +329,25 @@ export default function Courses() {
           <option value="senior">Senior</option>
           <option value="junior">Junior</option>
         </select>
+        )}
 
         <select
           value={filterLevel}
           onChange={(e) => setFilterLevel(e.target.value)}
           className="px-3 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"
         >
-          <option value="all">All Levels</option>
-          <option value="ig">IG</option>
-          <option value="alevel">A-Level</option>
+          {isJuniorPortal ? (
+            <>
+              <option value="all">All Categories</option>
+              {JUNIOR_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </>
+          ) : (
+            <>
+              <option value="all">All Levels</option>
+              <option value="ig">IG</option>
+              <option value="alevel">A-Level</option>
+            </>
+          )}
         </select>
 
         {uniqueSubjects.length > 0 && (

@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
+
+// Senior: IG / A Level. Junior Campus: its category (Preschool / Academy / ATP).
+const COURSE_LEVELS = ['ig', 'alevel', 'preschool', 'academy', 'aitchison'] as const;
 import coursesService from '../services/courses.service';
 import roomsService from '../services/rooms.service';
 import teamsOAuthService from '../services/teams-oauth.service';
@@ -8,7 +11,7 @@ import logger from '../utils/logger';
 
 const createCourseSchema = z.object({
   courseCategory: z.enum(['senior', 'junior']),
-  courseLevel: z.enum(['ig', 'alevel']).optional().or(z.literal('')),
+  courseLevel: z.enum(COURSE_LEVELS).optional().or(z.literal('')),
   subject: z.string().max(100).optional().or(z.literal('')),
   teacherName: z.string().min(1, 'Teacher name is required').max(100),
   studentName: z.string().max(100).optional().or(z.literal('')),
@@ -19,7 +22,7 @@ const createCourseSchema = z.object({
 
 const updateCourseSchema = z.object({
   courseCategory: z.enum(['senior', 'junior']).optional(),
-  courseLevel: z.enum(['ig', 'alevel']).optional().or(z.literal('')),
+  courseLevel: z.enum(COURSE_LEVELS).optional().or(z.literal('')),
   subject: z.string().max(100).optional().or(z.literal('')),
   teacherName: z.string().min(1).max(100).optional(),
   studentName: z.string().max(100).optional().or(z.literal('')),

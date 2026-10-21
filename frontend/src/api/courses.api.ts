@@ -1,12 +1,15 @@
 import apiClient from './client';
 
+/** Senior: IG / A Level. Junior Campus: its category (Preschool / Academy / ATP). */
+export type CourseLevel = 'ig' | 'alevel' | 'preschool' | 'academy' | 'aitchison';
+
 export interface Course {
   id: string;
   title: string;
   description?: string;
   duration: number;
   courseCategory?: 'senior' | 'junior';
-  courseLevel?: 'ig' | 'alevel';
+  courseLevel?: CourseLevel;
   subject?: string;
   teacherName?: string;
   studentName?: string;
@@ -67,7 +70,7 @@ export interface Room {
 
 export interface CreateCourseInput {
   courseCategory: 'senior' | 'junior';
-  courseLevel?: 'ig' | 'alevel';
+  courseLevel?: CourseLevel;
   subject?: string;
   teacherName: string;
   studentName?: string;
@@ -78,7 +81,7 @@ export interface CreateCourseInput {
 
 export interface UpdateCourseInput {
   courseCategory?: 'senior' | 'junior';
-  courseLevel?: 'ig' | 'alevel' | ''; // '' clears
+  courseLevel?: CourseLevel | ''; // '' clears
   subject?: string; // '' clears
   teacherName?: string;
   studentName?: string; // '' clears

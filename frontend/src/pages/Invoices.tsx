@@ -18,6 +18,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import EmptyState from '../components/common/EmptyState';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
+import { JUNIOR_CATEGORIES, isJuniorPortal } from '../brand';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -422,8 +423,8 @@ export default function Invoices() {
             </div>
           )}
 
-          {/* Category Filter (Admin only) */}
-          {isAdmin && (
+          {/* Category Filter (Admin only; the junior portal only has junior) */}
+          {isAdmin && !isJuniorPortal && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Category
@@ -444,20 +445,29 @@ export default function Invoices() {
           {isAdmin && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Subcategory
+                {isJuniorPortal ? 'Category' : 'Subcategory'}
               </label>
               <select
                 value={filterSubcategory}
                 onChange={(e) => setFilterSubcategory(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
               >
-                <option value="all">All Types</option>
-                <option value="local">Local</option>
-                <option value="online">Online</option>
-                <option value="aitchison">Aitchison</option>
-                <option value="preschool">Preschool</option>
-                <option value="summer_camp">Summer Camp</option>
-                <option value="academy">Academy</option>
+                {isJuniorPortal ? (
+                  <>
+                    <option value="all">All Categories</option>
+                    {JUNIOR_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  </>
+                ) : (
+                  <>
+                    <option value="all">All Types</option>
+                    <option value="local">Local</option>
+                    <option value="online">Online</option>
+                    <option value="aitchison">Aitchison</option>
+                    <option value="preschool">Preschool</option>
+                    <option value="summer_camp">Summer Camp</option>
+                    <option value="academy">Academy</option>
+                  </>
+                )}
               </select>
             </div>
           )}

@@ -7,7 +7,7 @@ import { coursesApi, roomsApi, Course, CreateCourseInput, UpdateCourseInput, Cre
 import { usersApi } from '../../api/users.api';
 import SearchableSelect from '../common/SearchableSelect';
 import toast from 'react-hot-toast';
-import { brand, terms } from '../../brand';
+import { brand, terms, JUNIOR_CATEGORIES, isJuniorPortal } from '../../brand';
 
 /** Junior Campus grades ("Grade 7", "Nursery", ...): titled by the grade alone, several teachers. Mirrors the backend. */
 const JUNIOR_GRADE_NAME = /^\s*(grade\s*\d+|nursery|prep|pre-school|kg)\s*$/i;
@@ -18,7 +18,7 @@ const multiTeacher = brand.campus === 'junior';
 
 const courseSchema = z.object({
   courseCategory: z.enum(['senior', 'junior']),
-  courseLevel: z.enum(['ig', 'alevel']).optional().or(z.literal('')),
+  courseLevel: z.enum(['ig', 'alevel', 'preschool', 'academy', 'aitchison']).optional().or(z.literal('')),
   subject: z.string().max(100).optional().or(z.literal('')),
   teacherName: z.string().max(100),
   studentName: z.string().max(100).optional().or(z.literal('')),
@@ -86,7 +86,7 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
         }
       : {
           courseCategory: brand.campus as 'senior' | 'junior',
-          courseLevel: (brand.campus === 'junior' ? '' : 'ig') as 'ig' | 'alevel' | '',
+          courseLevel: (brand.campus === 'junior' ? 'academy' : 'ig') as CourseFormData['courseLevel'],
           subject: '',
           teacherName: '',
           studentName: '',
@@ -360,7 +360,8 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
             <div className="space-y-6">
             {/* Course Name Parts */}
             <div className="grid grid-cols-2 gap-4">
-              {/* Category */}
+              {/* Category (Senior / Junior): the junior portal only has junior */}
+              {!isJuniorPortal && (
               <div>
                 <label htmlFor="courseCategory" className="block text-sm font-medium text-gray-700 mb-1">
                   Category *
@@ -377,20 +378,23 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
                   <p className="mt-1 text-sm text-red-600">{errors.courseCategory.message}</p>
                 )}
               </div>
+              )}
 
               {/* Level */}
               <div>
                 <label htmlFor="courseLevel" className="block text-sm font-medium text-gray-700 mb-1">
-                  Level {watchCategory === 'senior' ? '*' : ''}
+                  {isJuniorPortal ? 'Category' : 'Level'} {watchCategory === 'senior' ? '*' : ''}
                 </label>
                 <select
                   {...register('courseLevel')}
                   id="courseLevel"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 >
-                  <option value="">None</option>
-                  {brand.campus === 'senior' && (
+                  {isJuniorPortal ? (
+                    <>{JUNIOR_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</>
+                  ) : (
                     <>
+                      <option value="">None</option>
                       <option value="ig">IG</option>
                       <option value="alevel">A Level</option>
                     </>

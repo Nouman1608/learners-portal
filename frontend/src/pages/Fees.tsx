@@ -8,7 +8,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import EmptyState from '../components/common/EmptyState';
 import { useSortableData } from '../hooks/useSortableData';
 import SearchableSelect from '../components/common/SearchableSelect';
-import { terms } from '../brand';
+import { terms, JUNIOR_CATEGORIES, isJuniorPortal } from '../brand';
 
 export default function Fees() {
   const { user } = useAuth();
@@ -351,6 +351,7 @@ export default function Fees() {
           />
         </div>
 
+        {!isJuniorPortal && (
         <select
           value={filterCategory}
           onChange={(e) => setFilterCategory(e.target.value)}
@@ -360,19 +361,29 @@ export default function Fees() {
           <option value="senior">Senior</option>
           <option value="junior">Junior</option>
         </select>
+        )}
 
         <select
           value={filterSubcategory}
           onChange={(e) => setFilterSubcategory(e.target.value)}
           className="px-3 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"
         >
-          <option value="all">All Types</option>
-          <option value="local">Local</option>
-          <option value="online">Online</option>
-          <option value="aitchison">Aitchison</option>
-          <option value="preschool">Preschool</option>
-          <option value="summer_camp">Summer Camp</option>
-          <option value="academy">Academy</option>
+          {isJuniorPortal ? (
+            <>
+              <option value="all">All Categories</option>
+              {JUNIOR_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </>
+          ) : (
+            <>
+              <option value="all">All Types</option>
+              <option value="local">Local</option>
+              <option value="online">Online</option>
+              <option value="aitchison">Aitchison</option>
+              <option value="preschool">Preschool</option>
+              <option value="summer_camp">Summer Camp</option>
+              <option value="academy">Academy</option>
+            </>
+          )}
         </select>
 
         {(searchQuery || filterStatus !== 'all' || filterPeriod !== 'all' || filterCourse !== 'all' || filterStudent !== 'all' || filterCategory !== 'all' || filterSubcategory !== 'all') && (

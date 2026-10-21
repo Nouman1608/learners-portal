@@ -6,6 +6,14 @@ export function teacherCourseTitle(title: string): string {
   return title.replace(/^[SJ]\s+/, '').replace(/^(IG|A Level)\s+/, '');
 }
 
+/** Badge text for a course level: IG / A LEVEL, or the junior category (Preschool / Academy / ATP). */
+export function courseLevelLabel(level: string): string {
+  const labels: Record<string, string> = {
+    ig: 'IG', alevel: 'A LEVEL', preschool: 'Preschool', academy: 'Academy', aitchison: 'ATP',
+  };
+  return labels[level] ?? level.toUpperCase();
+}
+
 /**
  * Extract only the subject from a course title.
  * Used for student-facing views.

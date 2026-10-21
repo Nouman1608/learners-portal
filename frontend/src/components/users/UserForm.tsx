@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { User, Role } from '../../types';
 import { CreateUserInput, UpdateUserInput } from '../../api/users.api';
 import { useAuth } from '../../context/AuthContext';
-import { brand } from '../../brand';
+import { brand, JUNIOR_CATEGORIES, isJuniorPortal } from '../../brand';
 
 interface UserFormProps {
   user?: User | null;
@@ -339,6 +339,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit }) => {
             {/* Student Category - Only show for students */}
             {formData.role === 'student' && (
               <>
+                {!isJuniorPortal && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Student Category
@@ -360,12 +361,13 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit }) => {
                     {brand.campus === 'senior' && <option value="senior">Senior</option>}
                   </select>
                 </div>
+                )}
 
                 {/* Student Subcategory - Show based on selected category */}
                 {formData.studentCategory && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Subcategory
+                      {isJuniorPortal ? 'Category' : 'Subcategory'}
                     </label>
                     <select
                       value={formData.studentSubcategory}
@@ -373,8 +375,10 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit }) => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       disabled={loading}
                     >
-                      <option value="">Select subcategory</option>
-                      {formData.studentCategory === 'junior' && (
+                      <option value="">{isJuniorPortal ? 'Select category' : 'Select subcategory'}</option>
+                      {isJuniorPortal ? (
+                        <>{JUNIOR_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</>
+                      ) : formData.studentCategory === 'junior' && (
                         <>
                           <option value="aitchison">Aitchison</option>
                           <option value="preschool">Preschool</option>

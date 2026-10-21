@@ -12,7 +12,7 @@ import crypto from 'crypto';
 
 export interface CreateCourseInput {
   courseCategory: 'senior' | 'junior';
-  courseLevel?: 'ig' | 'alevel';
+  courseLevel?: CourseLevel;
   subject?: string;
   teacherName: string;
   studentName?: string;
@@ -24,7 +24,7 @@ export interface CreateCourseInput {
 
 export interface UpdateCourseInput {
   courseCategory?: 'senior' | 'junior';
-  courseLevel?: '' | 'ig' | 'alevel';
+  courseLevel?: '' | CourseLevel;
   subject?: string;
   teacherName?: string;
   studentName?: string;
@@ -37,6 +37,9 @@ export interface UpdateCourseInput {
 /** Junior Campus grades ("Grade 7", "Nursery", ...) are titled by the grade alone: several teachers share them. */
 export const JUNIOR_GRADE_NAME = /^\s*(grade\s*\d+|nursery|prep|pre-school|kg)\s*$/i;
 
+/** Senior: IG / A Level. Junior Campus: its category (Preschool / Academy / ATP), never shown in titles. */
+export type CourseLevel = 'ig' | 'alevel' | 'preschool' | 'academy' | 'aitchison';
+
 function buildCourseTitle(parts: { courseCategory?: string; courseLevel?: string; subject?: string; teacherName?: string; studentName?: string }): string {
   if (parts.courseCategory === 'junior' && parts.subject && JUNIOR_GRADE_NAME.test(parts.subject)) {
     return parts.subject.trim();
@@ -45,7 +48,7 @@ function buildCourseTitle(parts: { courseCategory?: string; courseLevel?: string
   const levelMap: Record<string, string> = { ig: 'IG', alevel: 'A Level' };
   return [
     parts.courseCategory ? categoryMap[parts.courseCategory] || parts.courseCategory : '',
-    parts.courseLevel ? levelMap[parts.courseLevel] || parts.courseLevel : '',
+    parts.courseLevel ? levelMap[parts.courseLevel] || '' : '',
     parts.subject || '',
     parts.teacherName || '',
     parts.studentName || '',

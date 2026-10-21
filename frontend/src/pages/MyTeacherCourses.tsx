@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { coursesApi, Course } from '../api/courses.api';
-import { teacherCourseTitle } from '../utils/course';
+import { teacherCourseTitle, courseLevelLabel } from '../utils/course';
 import toast from 'react-hot-toast';
 import {
   AcademicCapIcon,
@@ -421,7 +421,7 @@ const MyTeacherCourses: React.FC = () => {
                       </span>
                       {course.courseLevel && (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          {course.courseLevel.toUpperCase()}
+                          {courseLevelLabel(course.courseLevel)}
                         </span>
                       )}
                     </div>
