@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { AcademicCapIcon, CheckCircleIcon, ClockIcon, VideoCameraIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import EmptyState from '../components/common/EmptyState';
+import { terms } from '../brand';
 
 const MyCourses: React.FC = () => {
   const { user } = useAuth();
@@ -33,7 +34,7 @@ const MyCourses: React.FC = () => {
       setFilteredCourses(data.courses);
     } catch (error: any) {
       console.error('Error loading courses:', error);
-      toast.error(error.response?.data?.message || 'Failed to load courses');
+      toast.error(error.response?.data?.message || `Failed to load ${terms.coursesLc}`);
     } finally {
       setLoading(false);
     }
@@ -113,7 +114,7 @@ const MyCourses: React.FC = () => {
   if (loading && !overview) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <LoadingSpinner size="lg" message="Loading your courses..." />
+        <LoadingSpinner size="lg" message={`Loading your ${terms.coursesLc}...`} />
       </div>
     );
   }
@@ -123,7 +124,7 @@ const MyCourses: React.FC = () => {
       {/* Header */}
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <h1 className="text-2xl font-bold text-gray-900">My Courses</h1>
+          <h1 className="text-2xl font-bold text-gray-900">My {terms.courses}</h1>
         </div>
       </header>
 
@@ -132,7 +133,7 @@ const MyCourses: React.FC = () => {
         {/* Summary Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-sm font-medium text-gray-500">Total Courses</h3>
+            <h3 className="text-sm font-medium text-gray-500">Total {terms.courses}</h3>
             <p className="text-3xl font-bold text-gray-900 mt-2">{overview?.courses.length || 0}</p>
           </div>
           <div className="bg-white rounded-lg shadow p-6">
@@ -159,7 +160,7 @@ const MyCourses: React.FC = () => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search courses by name..."
+              placeholder={`Search ${terms.coursesLc} by name...`}
               className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-transparent sm:text-sm"
             />
           </div>
@@ -169,7 +170,7 @@ const MyCourses: React.FC = () => {
         {filteredCourses.length === 0 ? (
           <EmptyState
             icon={AcademicCapIcon}
-            title={searchQuery ? 'No courses found matching your search' : 'You are not enrolled in any courses yet'}
+            title={searchQuery ? `No ${terms.coursesLc} found matching your search` : `You are not enrolled in any ${terms.coursesLc} yet`}
           />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

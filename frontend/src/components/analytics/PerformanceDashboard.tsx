@@ -5,6 +5,7 @@ import LineChart from './charts/LineChart';
 import { ArrowDownTrayIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { exportCsv, stampedFilename } from '../../utils/csv';
 import toast from 'react-hot-toast';
+import { terms } from '../../brand';
 
 interface PerformanceDashboardProps {
   filters: AnalyticsQueryParams;
@@ -119,7 +120,7 @@ export default function PerformanceDashboard({ filters }: PerformanceDashboardPr
             yKeys={['avgScore']}
             colors={['#10b981']}
             height={350}
-            title="Average Score by Course"
+            title={`Average Score by ${terms.course}`}
             yLabel="Average Score (%)"
           />
         </div>

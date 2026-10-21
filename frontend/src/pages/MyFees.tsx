@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import { BanknotesIcon, CheckCircleIcon, ClockIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { useSortableData } from '../hooks/useSortableData';
+import { terms } from '../brand';
 
 const MyFees: React.FC = () => {
   const { user } = useAuth();
@@ -151,7 +152,7 @@ const MyFees: React.FC = () => {
                 <thead className="bg-gray-50">
                   <tr>
                     <th onClick={() => requestSort('courseTitle')} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                      Course {getSortIndicator('courseTitle')}
+                      {terms.course} {getSortIndicator('courseTitle')}
                     </th>
                     <th onClick={() => requestSort('month')} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
                       Period {getSortIndicator('month')}

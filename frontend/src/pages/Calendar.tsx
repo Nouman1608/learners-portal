@@ -18,6 +18,7 @@ import ConfirmDialog from '../components/common/ConfirmDialog';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import SearchableSelect from '../components/common/SearchableSelect';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
+import { terms } from '../brand';
 
 type CalendarView = 'month' | 'week' | 'day' | 'agenda';
 
@@ -47,7 +48,7 @@ const exportToCSV = (events: Event[], filename: string) => {
     return a.startTime.localeCompare(b.startTime);
   });
 
-  const headers = ['Day', 'Start Time', 'End Time', 'Course', 'Teacher', 'Type', 'Location'];
+  const headers = ['Day', 'Start Time', 'End Time', terms.course, 'Teacher', 'Type', 'Location'];
   const rows = sortedEvents.map(event => [
     dayNames[new Date(event.eventDate).getDay()],
     event.startTime,
@@ -90,7 +91,7 @@ const exportToICal = (events: Event[], filename: string) => {
       ? 'Microsoft Teams'
       : event.room?.name || 'TBA';
     const description = [
-      `Course: ${event.course.title}`,
+      `${terms.course}: ${event.course.title}`,
       `Teacher: ${teacherName}`,
       `Type: ${event.classType}`,
       event.teamsMeetingUrl ? `Teams Link: ${event.teamsMeetingUrl}` : '',
@@ -1092,7 +1093,7 @@ const CalendarPage: React.FC = () => {
 
               <div className="space-y-4">
                 <div>
-                  <p className="text-sm text-gray-600">Course</p>
+                  <p className="text-sm text-gray-600">{terms.course}</p>
                   <p className="font-medium text-lg">{selectedEvent.course.title}</p>
                 </div>
 

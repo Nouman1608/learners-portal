@@ -7,19 +7,31 @@ import { coursesApi, roomsApi, Course, CreateCourseInput, UpdateCourseInput, Cre
 import { usersApi } from '../../api/users.api';
 import SearchableSelect from '../common/SearchableSelect';
 import toast from 'react-hot-toast';
-import { brand } from '../../brand';
+import { brand, terms } from '../../brand';
+
+/** Junior Campus grades ("Grade 7", "Nursery", ...): titled by the grade alone, several teachers. Mirrors the backend. */
+const JUNIOR_GRADE_NAME = /^\s*(grade\s*\d+|nursery|prep|pre-school|kg)\s*$/i;
+const isJuniorGrade = (category?: string, subject?: string) =>
+  category === 'junior' && !!subject && JUNIOR_GRADE_NAME.test(subject);
+// On the junior portal a class can have several teachers (grades are shared).
+const multiTeacher = brand.campus === 'junior';
 
 const courseSchema = z.object({
   courseCategory: z.enum(['senior', 'junior']),
   courseLevel: z.enum(['ig', 'alevel']).optional().or(z.literal('')),
   subject: z.string().max(100).optional().or(z.literal('')),
-  teacherName: z.string().min(1, 'Teacher name is required').max(100),
+  teacherName: z.string().max(100),
   studentName: z.string().max(100).optional().or(z.literal('')),
   description: z.string().optional(),
   duration: z.number().int().positive('Duration must be a positive number'),
   whatsappGroupLink: z.string().url('Must be a valid URL').optional().or(z.literal('')),
   teacherId: z.preprocess((val) => val === '' ? undefined : val, z.string().uuid('Please select a teacher').optional()),
   isActive: z.boolean().optional(),
+}).superRefine((data, ctx) => {
+  // A grade's title is the grade alone, so it needs no teacher name.
+  if (!data.teacherName.trim() && !isJuniorGrade(data.courseCategory, data.subject)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['teacherName'], message: 'Teacher name is required' });
+  }
 });
 
 type CourseFormData = z.infer<typeof courseSchema>;
@@ -94,13 +106,21 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
 
   const categoryMap: Record<string, string> = { senior: 'S', junior: 'J' };
   const levelMap: Record<string, string> = { ig: 'IG', alevel: 'A Level' };
-  const generatedTitle = [
-    watchCategory ? categoryMap[watchCategory] || '' : '',
-    watchLevel ? levelMap[watchLevel] || '' : '',
-    watchSubject || '',
-    watchTeacherName || '',
-    watchStudentName || '',
-  ].filter(Boolean).join(' ');
+  const isGrade = isJuniorGrade(watchCategory, watchSubject);
+  const generatedTitle = isGrade
+    ? (watchSubject || '').trim()
+    : [
+        watchCategory ? categoryMap[watchCategory] || '' : '',
+        watchLevel ? levelMap[watchLevel] || '' : '',
+        watchSubject || '',
+        watchTeacherName || '',
+        watchStudentName || '',
+      ].filter(Boolean).join(' ');
+
+  // Junior portal: every teacher of this grade/class (the single "Assign Teacher" pick elsewhere).
+  const [teacherIds, setTeacherIds] = useState<string[]>(
+    () => (course?.teachers ?? []).map((t) => t.teacherId)
+  );
 
   useEffect(() => {
     // Fetch teachers and rooms
@@ -214,7 +234,22 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
       }
 
       // Handle teacher assignment separately
-      if (data.teacherId) {
+      if (multiTeacher) {
+        // Junior portal: make the assigned teachers exactly the ones picked.
+        try {
+          const currentTeachers = await coursesApi.getCourseTeachers(courseId);
+          const current = new Set(currentTeachers.map((t) => t.teacherId));
+          for (const id of teacherIds) {
+            if (!current.has(id)) await coursesApi.assignTeacher(courseId, { teacherId: id, percentageCut: '100.00' });
+          }
+          for (const id of current) {
+            if (!teacherIds.includes(id)) await coursesApi.removeTeacher(courseId, id);
+          }
+        } catch (teacherError: any) {
+          console.error('Teacher assignment error:', teacherError);
+          toast(`${terms.course} saved but the teacher list may not have updated. Please check it.`, { icon: '⚠️' });
+        }
+      } else if (data.teacherId) {
         try {
           // Get current teachers for this course
           const currentTeachers = await coursesApi.getCourseTeachers(courseId);
@@ -230,7 +265,7 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
         } catch (teacherError: any) {
           console.error('Teacher assignment error:', teacherError);
           // Don't fail the whole operation if teacher assignment fails
-          toast('Course saved but teacher assignment may have failed. Please check teacher assignments.', {
+          toast(`${terms.course} saved but teacher assignment may have failed. Please check teacher assignments.`, {
             icon: '⚠️',
           });
         }
@@ -270,21 +305,21 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
 
           if (successCount > 0) {
             toast.success(isEditing
-              ? `Course updated with ${successCount} new timeslot(s)`
-              : `Course created with ${successCount} timeslot(s)`);
+              ? `${terms.course} updated with ${successCount} new timeslot(s)`
+              : `${terms.course} created with ${successCount} timeslot(s)`);
           } else {
-            toast.success(isEditing ? 'Course updated successfully' : 'Course created successfully');
+            toast.success(isEditing ? `${terms.course} updated successfully` : `${terms.course} created successfully`);
           }
         } catch (timeslotError: any) {
           console.error('Timeslot creation error:', timeslotError);
           toast(isEditing
-            ? 'Course updated but some timeslots may have failed. Please check timeslots.'
-            : 'Course created but some timeslots may have failed. Please check timeslots.', {
+            ? `${terms.course} updated but some timeslots may have failed. Please check timeslots.`
+            : `${terms.course} created but some timeslots may have failed. Please check timeslots.`, {
             icon: '⚠️',
           });
         }
       } else {
-        toast.success(isEditing ? 'Course updated successfully' : 'Course created successfully');
+        toast.success(isEditing ? `${terms.course} updated successfully` : `${terms.course} created successfully`);
       }
 
       onSuccess();
@@ -292,7 +327,7 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
     } catch (error: any) {
       console.error('Course creation error:', error);
       console.error('Error response:', error.response?.data);
-      const errorMessage = error.response?.data?.error || error.message || 'Failed to save course';
+      const errorMessage = error.response?.data?.error || error.message || `Failed to save ${terms.courseLc}`;
       toast.error(errorMessage);
     }
   };
@@ -309,7 +344,7 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 flex-shrink-0">
           <h2 className="text-xl font-bold text-gray-900">
-            {isEditing ? 'Edit Course' : 'Create New Course'}
+            {isEditing ? `Edit ${terms.course}` : `Create New ${terms.course}`}
           </h2>
           <button
             onClick={onClose}
@@ -371,21 +406,22 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
               {/* Subject */}
               <div>
                 <label htmlFor="subject" className="block text-sm font-medium text-gray-700 mb-1">
-                  Subject {watchCategory === 'senior' ? '*' : ''}
+                  {multiTeacher ? 'Grade / Subject' : 'Subject'} {watchCategory === 'senior' ? '*' : ''}
                 </label>
                 <input
                   {...register('subject')}
                   type="text"
                   id="subject"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="e.g., Physics, Maths"
+                  placeholder={multiTeacher ? 'e.g., Grade 7, Nursery, Quran' : 'e.g., Physics, Maths'}
                 />
                 {errors.subject && (
                   <p className="mt-1 text-sm text-red-600">{errors.subject.message}</p>
                 )}
               </div>
 
-              {/* Teacher Name */}
+              {/* Teacher Name (not used in a grade's title) */}
+              {!isGrade && (
               <div>
                 <label htmlFor="teacherName" className="block text-sm font-medium text-gray-700 mb-1">
                   Teacher Name *
@@ -401,9 +437,11 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
                   <p className="mt-1 text-sm text-red-600">{errors.teacherName.message}</p>
                 )}
               </div>
+              )}
             </div>
 
             {/* Student Name (for 1-to-1) */}
+            {!isGrade && (
             <div>
               <label htmlFor="studentName" className="block text-sm font-medium text-gray-700 mb-1">
                 Student Name (1-to-1 only)
@@ -416,10 +454,11 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
                 placeholder="Leave empty for group classes"
               />
             </div>
+            )}
 
             {/* Generated Title Preview */}
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-              <label className="block text-xs font-medium text-gray-500 mb-1">Generated Course Title</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Generated {terms.course} Title</label>
               <p className="text-sm font-medium text-gray-900">{generatedTitle || 'Fill in the fields above'}</p>
             </div>
 
@@ -492,7 +531,49 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
               </p>
             </div>
 
-            {/* Teacher */}
+            {/* Teachers: several per grade on the junior portal */}
+            {multiTeacher ? (
+              <div>
+                <SearchableSelect
+                  options={teachers
+                    .filter((teacher) => !teacherIds.includes(teacher.id))
+                    .map((teacher) => ({
+                      value: teacher.id,
+                      label: `${teacher.firstName} ${teacher.lastName}`,
+                      sublabel: teacher.email,
+                    }))}
+                  value=""
+                  onChange={(value) => value && setTeacherIds((ids) => (ids.includes(value) ? ids : [...ids, value]))}
+                  label="Teachers"
+                  placeholder="Search and add a teacher"
+                />
+                {teacherIds.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {teacherIds.map((id) => {
+                      const teacher = teachers.find((t) => t.id === id);
+                      const name = teacher
+                        ? `${teacher.firstName} ${teacher.lastName}`
+                        : course?.teachers?.find((t) => t.teacherId === id)?.teacher?.firstName ?? 'Teacher';
+                      return (
+                        <span key={id} className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-sm text-indigo-700">
+                          {name}
+                          <button
+                            type="button"
+                            onClick={() => setTeacherIds((ids) => ids.filter((x) => x !== id))}
+                            className="text-indigo-400 hover:text-indigo-700"
+                            aria-label={`Remove ${name}`}
+                          >
+                            <XMarkIcon className="h-4 w-4" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="mt-1 text-xs text-gray-500">No teachers yet. Add every teacher who teaches this {terms.courseLc}.</p>
+                )}
+              </div>
+            ) : (
             <Controller
               name="teacherId"
               control={control}
@@ -511,7 +592,8 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
                 />
               )}
             />
-            {isEditing && course.teachers && course.teachers.length > 1 && (
+            )}
+            {!multiTeacher && isEditing && course.teachers && course.teachers.length > 1 && (
               <p className="mt-1 text-xs text-blue-600">
                 Note: This course has multiple teachers assigned. Use the Manage Timeslots view to see all teachers.
               </p>
@@ -776,7 +858,7 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
               disabled={isSubmitting}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSubmitting ? 'Saving...' : isEditing ? 'Update Course' : 'Create Course'}
+              {isSubmitting ? 'Saving...' : isEditing ? `Update ${terms.course}` : `Create ${terms.course}`}
             </button>
           </div>
         </form>

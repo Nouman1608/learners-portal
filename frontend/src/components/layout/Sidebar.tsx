@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import authApi from '../../api/auth.api';
 import toast from 'react-hot-toast';
-import { brand } from '../../brand';
+import { brand, terms } from '../../brand';
 import { isNativeApp, DISPLAY_SIZES, getDisplayScale, setDisplayScale } from '../../native';
 import {
   HomeIcon,
@@ -42,9 +42,9 @@ interface SidebarProps {
 const navigationItems: NavItem[] = [
   { name: 'Dashboard', path: '/dashboard', icon: HomeIcon },
   { name: 'Users', path: '/users', icon: UserGroupIcon, roles: ['sudo', 'admin'] },
-  { name: 'Courses', path: '/courses', icon: AcademicCapIcon, roles: ['sudo', 'admin'] },
-  { name: 'My Teaching Courses', path: '/my-teaching-courses', icon: BookOpenIcon, roles: ['teacher'] },
-  { name: 'My Courses', path: '/my-courses', icon: BookOpenIcon, roles: ['student'] },
+  { name: terms.courses, path: '/courses', icon: AcademicCapIcon, roles: ['sudo', 'admin'] },
+  { name: `My Teaching ${terms.courses}`, path: '/my-teaching-courses', icon: BookOpenIcon, roles: ['teacher'] },
+  { name: `My ${terms.courses}`, path: '/my-courses', icon: BookOpenIcon, roles: ['student'] },
   { name: 'Enrollments', path: '/enrollments', icon: UserPlusIcon, roles: ['sudo', 'admin', 'teacher'] },
   { name: 'Leads', path: '/leads', icon: UserGroupIcon, roles: ['sudo', 'admin'] },
   { name: 'Message Templates', path: '/message-templates', icon: ChatBubbleLeftRightIcon, roles: ['sudo'] },

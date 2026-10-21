@@ -13,6 +13,7 @@ import { useSortableData } from '../hooks/useSortableData';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import SearchableSelect from '../components/common/SearchableSelect';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
+import { terms } from '../brand';
 
 export default function Enrollments() {
   const { user } = useAuth();
@@ -356,7 +357,7 @@ export default function Enrollments() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by student name, email, or course..."
+            placeholder={`Search by student name, email, or ${terms.courseLc}...`}
             className="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
           />
           {searchQuery && (
@@ -397,12 +398,12 @@ export default function Enrollments() {
         {/* Course Filter */}
         <div className="flex-1">
           <label className="block text-xs font-medium text-gray-700 mb-1">
-            Filter by Course
+            Filter by {terms.course}
           </label>
           <div className="w-full">
             <SearchableSelect
               options={[
-                { value: '', label: 'All Courses' },
+                { value: '', label: `All ${terms.courses}` },
                 ...Array.from(new Set(enrollments.map(e => e.course.id)))
                   .map(courseId => {
                     const course = enrollments.find(e => e.course.id === courseId)?.course;
@@ -412,7 +413,7 @@ export default function Enrollments() {
               ]}
               value={filterCourse}
               onChange={(v) => setFilterCourse(v)}
-              placeholder="All Courses"
+              placeholder={`All ${terms.courses}`}
               size="sm"
             />
           </div>
@@ -555,7 +556,7 @@ export default function Enrollments() {
                     Student {getSortIndicator('student.firstName')}
                   </th>
                   <th onClick={() => requestSort('course.title')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                    Course {getSortIndicator('course.title')}
+                    {terms.course} {getSortIndicator('course.title')}
                   </th>
                   {!isTeacher && (
                     <th onClick={() => requestSort('customFeePerMonth')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
@@ -858,7 +859,7 @@ export default function Enrollments() {
                     </div>
                     <div className="mt-2 space-y-1 text-sm">
                       <div>
-                        <span className="text-gray-500 text-xs">Course:</span>
+                        <span className="text-gray-500 text-xs">{terms.course}:</span>
                         <span className="ml-1 text-gray-900">
                           {enrollment.course.title}
                         </span>

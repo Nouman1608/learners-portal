@@ -9,6 +9,7 @@ import DeltaBadge from './DeltaBadge';
 import { ArrowDownTrayIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { exportCsv, stampedFilename } from '../../utils/csv';
 import toast from 'react-hot-toast';
+import { terms } from '../../brand';
 
 interface FinancialDashboardProps {
   filters: AnalyticsQueryParams;
@@ -93,7 +94,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
       stampedFilename('course-profitability'),
       courseProfitability,
       [
-        { header: 'Course', value: c => c.courseTitle },
+        { header: terms.course, value: c => c.courseTitle },
         { header: 'Students', value: c => c.studentCount },
         { header: 'Revenue (PKR)', value: c => Math.round(c.revenuePKR) },
         { header: 'Teacher cost (PKR)', value: c => Math.round(c.teacherCostPKR) },
@@ -279,19 +280,19 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
       {/* Course profitability */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Course profitability</h3>
+          <h3 className="text-lg font-semibold text-gray-900">{terms.course} profitability</h3>
           <p className="mt-1 text-sm text-gray-500">
             Revenue collected less teacher invoices for the same period, converted to PKR.
           </p>
         </div>
         {courseProfitability.length === 0 ? (
-          <p className="px-6 py-12 text-center text-gray-500">No course revenue in this period</p>
+          <p className="px-6 py-12 text-center text-gray-500">No {terms.courseLc} revenue in this period</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Course</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{terms.course}</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Students</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Revenue</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Teacher cost</th>

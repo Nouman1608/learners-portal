@@ -9,10 +9,11 @@ import { coursesApi, Course } from '../../api/courses.api';
 import SearchableSelect from '../common/SearchableSelect';
 import toast from 'react-hot-toast';
 import LoadingSpinner from '../common/LoadingSpinner';
+import { terms } from '../../brand';
 
 const enrollmentSchema = z.object({
   studentId: z.string().uuid('Please select a student'),
-  courseId: z.string().uuid('Please select a course'),
+  courseId: z.string().uuid(`Please select a ${terms.courseLc}`),
   enrolledAt: z.string().optional(),
   attendanceMode: z.enum(['local', 'online']).optional(),
   classType: z.enum(['online', 'hybrid', '1-to-1']).optional(),
@@ -113,7 +114,7 @@ export default function EnrollmentForm({ onClose, onSuccess }: EnrollmentFormPro
       setStudents(studentsData);
       setCourses(coursesData);
     } catch (error: any) {
-      toast.error('Failed to load students and courses');
+      toast.error(`Failed to load students and ${terms.coursesLc}`);
     } finally {
       setLoading(false);
     }
@@ -206,8 +207,8 @@ export default function EnrollmentForm({ onClose, onSuccess }: EnrollmentFormPro
                     }))}
                     value={field.value}
                     onChange={field.onChange}
-                    label="Select Course"
-                    placeholder="Search and select a course"
+                    label={`Select ${terms.course}`}
+                    placeholder={`Search and select a ${terms.courseLc}`}
                     required
                     error={errors.courseId?.message}
                   />

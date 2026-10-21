@@ -22,6 +22,7 @@ import ConfirmDialog from '../components/common/ConfirmDialog';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import EmptyState from '../components/common/EmptyState';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
+import { terms } from '../brand';
 
 type ViewMode = 'cards' | 'table';
 
@@ -72,7 +73,7 @@ const MyTeacherCourses: React.FC = () => {
       setFilteredCourses(teacherCourses);
     } catch (error: any) {
       console.error('Error loading courses:', error);
-      toast.error(error.response?.data?.message || 'Failed to load courses');
+      toast.error(error.response?.data?.message || `Failed to load ${terms.coursesLc}`);
     } finally {
       setLoading(false);
     }
@@ -102,8 +103,8 @@ const MyTeacherCourses: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     const confirmed = await confirmDialog({
-      title: 'Delete Course',
-      message: 'Are you sure you want to delete this course?',
+      title: `Delete ${terms.course}`,
+      message: `Are you sure you want to delete this ${terms.courseLc}?`,
       confirmLabel: 'Delete',
       variant: 'danger',
     });
@@ -111,10 +112,10 @@ const MyTeacherCourses: React.FC = () => {
 
     try {
       await coursesApi.deleteCourse(id);
-      toast.success('Course deleted successfully');
+      toast.success(`${terms.course} deleted successfully`);
       loadCourses();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to delete course');
+      toast.error(error.response?.data?.error || `Failed to delete ${terms.courseLc}`);
     }
   };
 
@@ -153,13 +154,13 @@ const MyTeacherCourses: React.FC = () => {
 
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) {
-      toast.error('No courses selected');
+      toast.error(`No ${terms.coursesLc} selected`);
       return;
     }
 
     const confirmedBulk = await confirmDialog({
-      title: 'Bulk Delete Courses',
-      message: `Are you sure you want to delete ${selectedIds.size} course(s)?`,
+      title: `Bulk Delete ${terms.courses}`,
+      message: `Are you sure you want to delete ${selectedIds.size} ${terms.courseLc}(s)?`,
       confirmLabel: 'Delete All',
       variant: 'danger',
     });
@@ -168,11 +169,11 @@ const MyTeacherCourses: React.FC = () => {
     try {
       const promises = Array.from(selectedIds).map(id => coursesApi.deleteCourse(id));
       await Promise.all(promises);
-      toast.success(`${selectedIds.size} course(s) deleted successfully`);
+      toast.success(`${selectedIds.size} ${terms.courseLc}(s) deleted successfully`);
       setSelectedIds(new Set());
       loadCourses();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to delete courses');
+      toast.error(error.response?.data?.error || `Failed to delete ${terms.coursesLc}`);
     }
   };
 
@@ -220,7 +221,7 @@ const MyTeacherCourses: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <LoadingSpinner size="lg" message="Loading your courses..." />
+        <LoadingSpinner size="lg" message={`Loading your ${terms.coursesLc}...`} />
       </div>
     );
   }
@@ -233,10 +234,10 @@ const MyTeacherCourses: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                {isAdmin ? 'All Courses' : 'My Teaching Courses'}
+                {isAdmin ? `All ${terms.courses}` : `My Teaching ${terms.courses}`}
               </h1>
               <p className="mt-1 text-sm text-gray-500">
-                {filteredCourses.length} course{filteredCourses.length !== 1 ? 's' : ''}
+                {filteredCourses.length} {filteredCourses.length !== 1 ? terms.coursesLc : terms.courseLc}
                 {selectedIds.size > 0 && ` (${selectedIds.size} selected)`}
               </p>
             </div>
@@ -273,7 +274,7 @@ const MyTeacherCourses: React.FC = () => {
                   className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   <PlusIcon className="h-5 w-5 mr-2" />
-                  Add Course
+                  Add {terms.course}
                 </button>
               )}
             </div>
@@ -286,7 +287,7 @@ const MyTeacherCourses: React.FC = () => {
         {/* Summary Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-sm font-medium text-gray-500">Total Courses</h3>
+            <h3 className="text-sm font-medium text-gray-500">Total {terms.courses}</h3>
             <p className="text-3xl font-bold text-gray-900 mt-2">{courses.length}</p>
           </div>
           <div className="bg-white rounded-lg shadow p-6">
@@ -313,7 +314,7 @@ const MyTeacherCourses: React.FC = () => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search courses by name or description..."
+              placeholder={`Search ${terms.coursesLc} by name or description...`}
               className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-transparent sm:text-sm"
             />
             {searchQuery && (
@@ -369,10 +370,10 @@ const MyTeacherCourses: React.FC = () => {
             <EmptyState
               icon={AcademicCapIcon}
               title={searchQuery || filterActive !== 'all'
-                ? 'No courses found matching your search'
+                ? `No ${terms.coursesLc} found matching your search`
                 : isAdmin
-                ? 'No courses created yet'
-                : 'You are not assigned to any courses yet'}
+                ? `No ${terms.coursesLc} created yet`
+                : `You are not assigned to any ${terms.coursesLc} yet`}
             />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -528,7 +529,7 @@ const MyTeacherCourses: React.FC = () => {
                               handleEdit(course);
                             }}
                             className="flex-1 inline-flex items-center justify-center px-3 py-2 text-sm text-blue-700 bg-blue-50 rounded hover:bg-blue-100"
-                            title="Edit Course"
+                            title={`Edit ${terms.course}`}
                           >
                             <PencilIcon className="h-4 w-4 mr-1" />
                             Edit
@@ -540,7 +541,7 @@ const MyTeacherCourses: React.FC = () => {
                                 handleDelete(course.id);
                               }}
                               className="flex-1 inline-flex items-center justify-center px-3 py-2 text-sm text-red-700 bg-red-50 rounded hover:bg-red-100"
-                              title="Delete Course"
+                              title={`Delete ${terms.course}`}
                             >
                               <TrashIcon className="h-4 w-4 mr-1" />
                               Delete
@@ -560,10 +561,10 @@ const MyTeacherCourses: React.FC = () => {
             <EmptyState
               icon={AcademicCapIcon}
               title={searchQuery || filterActive !== 'all'
-                ? 'No courses found matching your search'
+                ? `No ${terms.coursesLc} found matching your search`
                 : isAdmin
-                ? 'No courses created yet'
-                : 'You are not assigned to any courses yet'}
+                ? `No ${terms.coursesLc} created yet`
+                : `You are not assigned to any ${terms.coursesLc} yet`}
             />
           ) : (
             <div className="bg-white shadow-card rounded-xl overflow-hidden border border-gray-200">
@@ -582,7 +583,7 @@ const MyTeacherCourses: React.FC = () => {
                         </th>
                       )}
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Course
+                        {terms.course}
                       </th>
                       <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Duration
@@ -663,7 +664,7 @@ const MyTeacherCourses: React.FC = () => {
                               <button
                                 onClick={() => handleEdit(course)}
                                 className="p-1.5 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-colors"
-                                title="Edit Course"
+                                title={`Edit ${terms.course}`}
                               >
                                 <PencilIcon className="h-4 w-4" />
                               </button>
@@ -671,7 +672,7 @@ const MyTeacherCourses: React.FC = () => {
                                 <button
                                   onClick={() => handleDelete(course.id)}
                                   className="p-1.5 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-lg transition-colors"
-                                  title="Delete Course"
+                                  title={`Delete ${terms.course}`}
                                 >
                                   <TrashIcon className="h-4 w-4" />
                                 </button>

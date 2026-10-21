@@ -12,6 +12,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import EmptyState from '../components/common/EmptyState';
 import SearchableSelect from '../components/common/SearchableSelect';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
+import { terms } from '../brand';
 
 const Assessments: React.FC = () => {
   const { user } = useAuth();
@@ -221,12 +222,12 @@ const Assessments: React.FC = () => {
               {/* Course Filter */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Course
+                  {terms.course}
                 </label>
                 <div className="w-full">
                   <SearchableSelect
                     options={[
-                      { value: 'all', label: 'All Courses' },
+                      { value: 'all', label: `All ${terms.courses}` },
                       ...courses.map((course) => ({
                         value: course.id,
                         label: course.title,
@@ -234,7 +235,7 @@ const Assessments: React.FC = () => {
                     ]}
                     value={selectedCourse}
                     onChange={(v) => setSelectedCourse(v || 'all')}
-                    placeholder="All Courses"
+                    placeholder={`All ${terms.courses}`}
                     size="sm"
                   />
                 </div>
@@ -353,7 +354,7 @@ const Assessments: React.FC = () => {
 
                     {/* Course */}
                     <p className="text-sm text-gray-600 mb-2">
-                      <span className="font-medium">Course:</span> {assessment.course.title}
+                      <span className="font-medium">{terms.course}:</span> {assessment.course.title}
                     </p>
 
                     {/* Teacher */}

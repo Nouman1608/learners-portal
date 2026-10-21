@@ -3,6 +3,7 @@ import { analyticsApi, TeacherAnalytics, AnalyticsQueryParams } from '../../api/
 import BarChart from './charts/BarChart';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
+import { terms } from '../../brand';
 
 interface TeacherDashboardProps {
   filters: AnalyticsQueryParams;
@@ -67,7 +68,7 @@ export default function TeacherDashboard({ filters }: TeacherDashboardProps) {
           <p className="mt-2 text-3xl font-bold text-gray-900">{totalClasses}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-sm font-medium text-gray-600">Avg Courses/Teacher</p>
+          <p className="text-sm font-medium text-gray-600">Avg {terms.courses}/Teacher</p>
           <p className="mt-2 text-3xl font-bold text-blue-600">
             {avgCoursesPerTeacher.toFixed(1)}
           </p>
@@ -92,8 +93,8 @@ export default function TeacherDashboard({ filters }: TeacherDashboardProps) {
             yKeys={['courses']}
             colors={['#3b82f6']}
             height={350}
-            title="Courses per Teacher"
-            yLabel="Number of Courses"
+            title={`${terms.courses} per Teacher`}
+            yLabel={`Number of ${terms.courses}`}
           />
         </div>
 
@@ -124,7 +125,7 @@ export default function TeacherDashboard({ filters }: TeacherDashboardProps) {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Teacher</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Courses</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">{terms.courses}</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Classes</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Students</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Workload</th>
@@ -192,7 +193,7 @@ export default function TeacherDashboard({ filters }: TeacherDashboardProps) {
                 </div>
                 <div className="space-y-2 text-sm text-gray-600">
                   <div className="flex justify-between">
-                    <span>Courses:</span>
+                    <span>{terms.courses}:</span>
                     <span className="font-medium">{teacher.courseCount}</span>
                   </div>
                   <div className="flex justify-between">

@@ -12,6 +12,7 @@ import CourseActionsModal from '../components/courses/CourseActionsModal';
 import { useSortableData } from '../hooks/useSortableData';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
+import { terms } from '../brand';
 
 export default function Courses() {
   const { user } = useAuth();
@@ -48,7 +49,7 @@ export default function Courses() {
       const data = await coursesApi.getCourses(false);
       setCourses(data);
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to load courses');
+      toast.error(error.response?.data?.error || `Failed to load ${terms.coursesLc}`);
     } finally {
       setLoading(false);
     }
@@ -64,7 +65,7 @@ export default function Courses() {
     const action = newStatus ? 'activate' : 'deactivate';
 
     const confirmed = await confirmDialog({
-      title: `${action.charAt(0).toUpperCase() + action.slice(1)} Course`,
+      title: `${action.charAt(0).toUpperCase() + action.slice(1)} ${terms.course}`,
       message: `Are you sure you want to ${action} "${displayTitle(course.title)}"?`,
       confirmLabel: action.charAt(0).toUpperCase() + action.slice(1),
       variant: action === 'deactivate' ? 'danger' : 'info',
@@ -73,10 +74,10 @@ export default function Courses() {
 
     try {
       await coursesApi.toggleCourseStatus(course.id, newStatus);
-      toast.success(`Course ${action}d successfully`);
+      toast.success(`${terms.course} ${action}d successfully`);
       loadCourses();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || `Failed to ${action} course`);
+      toast.error(error.response?.data?.error || `Failed to ${action} ${terms.courseLc}`);
     }
   };
 
@@ -94,7 +95,7 @@ export default function Courses() {
       toast.success(result.message);
       loadCourses();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to permanently delete course');
+      toast.error(error.response?.data?.error || `Failed to permanently delete ${terms.courseLc}`);
     }
   };
 
@@ -114,10 +115,10 @@ export default function Courses() {
   const handleEndCourse = async (course: Course, endDate: string) => {
     try {
       const result = await coursesApi.endCourse(course.id, endDate);
-      toast.success(`Course ended. ${result.affectedEnrollments} enrollment(s) completed.`);
+      toast.success(`${terms.course} ended. ${result.affectedEnrollments} enrollment(s) completed.`);
       loadCourses();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to end course');
+      toast.error(error.response?.data?.error || `Failed to end ${terms.courseLc}`);
     }
   };
 
@@ -131,7 +132,7 @@ export default function Courses() {
       console.log('Teams Meeting State:', result);
       await confirmDialog({
         title: `Teams Meeting State`,
-        message: `Course: ${displayTitle(course.title)}\nMeeting ID: ${result.timeslot?.teamsMeetingId || 'N/A'}\nSubject: ${result.meetingState?.subject || 'N/A'}\nStart: ${result.meetingState?.startDateTime || 'N/A'}\nEnd: ${result.meetingState?.endDateTime || 'N/A'}\nJoin URL: ${result.meetingState?.joinUrl || 'N/A'}\n\nFull response logged to console.`,
+        message: `${terms.course}: ${displayTitle(course.title)}\nMeeting ID: ${result.timeslot?.teamsMeetingId || 'N/A'}\nSubject: ${result.meetingState?.subject || 'N/A'}\nStart: ${result.meetingState?.startDateTime || 'N/A'}\nEnd: ${result.meetingState?.endDateTime || 'N/A'}\nJoin URL: ${result.meetingState?.joinUrl || 'N/A'}\n\nFull response logged to console.`,
         confirmLabel: 'OK',
         variant: 'info',
         hideCancel: true,
@@ -178,13 +179,13 @@ export default function Courses() {
 
   const handleBulkDeactivate = async () => {
     if (selectedIds.size === 0) {
-      toast.error('No courses selected');
+      toast.error(`No ${terms.coursesLc} selected`);
       return;
     }
 
     const confirmed2 = await confirmDialog({
       title: 'Bulk Deactivate',
-      message: `Are you sure you want to deactivate ${selectedIds.size} course(s)?`,
+      message: `Are you sure you want to deactivate ${selectedIds.size} ${terms.courseLc}(s)?`,
       confirmLabel: 'Deactivate All',
       variant: 'danger',
     });
@@ -199,11 +200,11 @@ export default function Courses() {
         return Promise.resolve();
       });
       await Promise.all(promises);
-      toast.success(`${selectedIds.size} course(s) deactivated successfully`);
+      toast.success(`${selectedIds.size} ${terms.courseLc}(s) deactivated successfully`);
       setSelectedIds(new Set());
       loadCourses();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to deactivate courses');
+      toast.error(error.response?.data?.error || `Failed to deactivate ${terms.coursesLc}`);
     }
   };
 
@@ -247,16 +248,16 @@ export default function Courses() {
   const { items: sortedCourses, requestSort, getSortIndicator } = useSortableData(filteredCourses);
 
   if (loading) {
-    return <LoadingSpinner message="Loading courses..." className="py-12" />;
+    return <LoadingSpinner message={`Loading ${terms.coursesLc}...`} className="py-12" />;
   }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="sm:flex sm:items-center sm:justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Courses</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{terms.courses}</h1>
           <p className="mt-1 text-sm text-gray-500">
-            {filteredCourses.length} course{filteredCourses.length !== 1 ? 's' : ''} {selectedIds.size > 0 && `(${selectedIds.size} selected)`}
+            {filteredCourses.length} {filteredCourses.length !== 1 ? terms.coursesLc : terms.courseLc} {selectedIds.size > 0 && `(${selectedIds.size} selected)`}
           </p>
         </div>
         {canManageCourses && (
@@ -265,7 +266,7 @@ export default function Courses() {
             className="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             <PlusIcon className="h-5 w-5 mr-2" />
-            Add Course
+            Add {terms.course}
           </button>
         )}
       </div>
@@ -281,7 +282,7 @@ export default function Courses() {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search courses by title or description..."
+            placeholder={`Search ${terms.coursesLc} by title or description...`}
             className="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
           />
           {searchTerm && (
@@ -387,7 +388,7 @@ export default function Courses() {
       {filteredCourses.length === 0 ? (
         <EmptyState
           icon={AcademicCapIcon}
-          title={searchTerm || filterActive !== 'all' || filterCategory !== 'all' || filterLevel !== 'all' || filterClassType !== 'all' || filterTeacher !== 'all' ? 'No courses match your filters' : 'No courses found'}
+          title={searchTerm || filterActive !== 'all' || filterCategory !== 'all' || filterLevel !== 'all' || filterClassType !== 'all' || filterTeacher !== 'all' ? `No ${terms.coursesLc} match your filters` : `No ${terms.coursesLc} found`}
         />
       ) : (
         <div className="bg-white shadow-card rounded-xl overflow-hidden border border-gray-200">
@@ -407,7 +408,7 @@ export default function Courses() {
                     </th>
                   )}
                   <th onClick={() => requestSort('title')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                    Course {getSortIndicator('title')}
+                    {terms.course} {getSortIndicator('title')}
                   </th>
                   <th onClick={() => requestSort('duration')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
                     Duration {getSortIndicator('duration')}
@@ -526,7 +527,7 @@ export default function Courses() {
                           <button
                             onClick={() => handleEdit(course)}
                             className="p-1.5 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Edit Course"
+                            title={`Edit ${terms.course}`}
                           >
                             <PencilIcon className="h-4 w-4" />
                           </button>
@@ -654,7 +655,7 @@ export default function Courses() {
                       className="w-full inline-flex items-center justify-center px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
                     >
                       <PencilIcon className="h-4 w-4 mr-2" />
-                      Edit Course
+                      Edit {terms.course}
                     </button>
                     {isAdmin && (
                       <button

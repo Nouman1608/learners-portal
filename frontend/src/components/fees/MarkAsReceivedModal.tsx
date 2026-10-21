@@ -2,6 +2,7 @@ import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { feesApi, Fee } from '../../api/enrollments.api';
+import { terms } from '../../brand';
 
 interface MarkAsReceivedModalProps {
   isOpen: boolean;
@@ -119,7 +120,7 @@ const MarkAsReceivedModal = ({ isOpen, onClose, onSuccess, fees, isBulk }: MarkA
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Course:</span>
+                    <span className="text-sm text-gray-600">{terms.course}:</span>
                     <span className="text-sm font-medium text-gray-900">{fees[0].course.title}</span>
                   </div>
                   <div className="flex justify-between">

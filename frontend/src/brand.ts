@@ -93,6 +93,11 @@ function detectBrand(): BrandKey {
 
 export const brand: Brand = BRANDS[detectBrand()];
 
+/** What the UI calls a course: "Grade" on the Junior Campus, "Course" everywhere else. */
+export const terms = brand.campus === 'junior'
+  ? { course: 'Grade', courses: 'Grades', courseLc: 'grade', coursesLc: 'grades' }
+  : { course: 'Course', courses: 'Courses', courseLc: 'course', coursesLc: 'courses' };
+
 /** Sets the tab title and favicon to match the brand. Call once at startup. */
 export function applyBrand(): void {
   document.title = brand.name;

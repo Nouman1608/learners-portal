@@ -34,7 +34,13 @@ export interface UpdateCourseInput {
   isActive?: boolean;
 }
 
+/** Junior Campus grades ("Grade 7", "Nursery", ...) are titled by the grade alone: several teachers share them. */
+export const JUNIOR_GRADE_NAME = /^\s*(grade\s*\d+|nursery|prep|pre-school|kg)\s*$/i;
+
 function buildCourseTitle(parts: { courseCategory?: string; courseLevel?: string; subject?: string; teacherName?: string; studentName?: string }): string {
+  if (parts.courseCategory === 'junior' && parts.subject && JUNIOR_GRADE_NAME.test(parts.subject)) {
+    return parts.subject.trim();
+  }
   const categoryMap: Record<string, string> = { senior: 'S', junior: 'J' };
   const levelMap: Record<string, string> = { ig: 'IG', alevel: 'A Level' };
   return [

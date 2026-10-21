@@ -6,6 +6,7 @@ import DeltaBadge from './DeltaBadge';
 import { ArrowDownTrayIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { exportCsv, stampedFilename } from '../../utils/csv';
 import toast from 'react-hot-toast';
+import { terms } from '../../brand';
 
 interface GrowthDashboardProps {
   filters: AnalyticsQueryParams;
@@ -159,7 +160,7 @@ export default function GrowthDashboard({ filters }: GrowthDashboardProps) {
               yKeys={['dropped']}
               colors={['#ef4444']}
               height={350}
-              title="Drop-outs by course (all time)"
+              title={`Drop-outs by ${terms.courseLc} (all time)`}
               yLabel="Students"
             />
           ) : (

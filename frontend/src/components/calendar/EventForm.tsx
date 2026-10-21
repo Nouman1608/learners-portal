@@ -7,9 +7,10 @@ import { calendarApi, CreateEventInput, UpdateEventInput, Event } from '../../ap
 import { coursesApi, Course } from '../../api/courses.api';
 import { usersApi, User } from '../../api/users.api';
 import SearchableSelect from '../common/SearchableSelect';
+import { terms } from '../../brand';
 
 const eventSchema = z.object({
-  courseId: z.string().uuid('Please select a course'),
+  courseId: z.string().uuid(`Please select a ${terms.courseLc}`),
   teacherId: z.string().uuid('Please select a teacher').optional(),
   roomId: z.string().uuid().optional(),
   eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
@@ -188,8 +189,8 @@ const EventForm: React.FC<EventFormProps> = ({ event, onClose, onSuccess }) => {
                   }))}
                   value={field.value}
                   onChange={field.onChange}
-                  label="Course"
-                  placeholder="Search and select a course"
+                  label={terms.course}
+                  placeholder={`Search and select a ${terms.courseLc}`}
                   required
                   disabled={!!event}
                   error={errors.courseId?.message}
@@ -300,7 +301,7 @@ const EventForm: React.FC<EventFormProps> = ({ event, onClose, onSuccess }) => {
               <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3">
                 <p className="text-sm text-yellow-800">
                   <strong>Note:</strong> This is a manual event creation. For recurring events,
-                  please use the timeslot system in course management.
+                  please use the timeslot system in {terms.courseLc} management.
                 </p>
               </div>
             )}

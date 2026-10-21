@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { studentPortalApi, AcademicResult } from '../../api/student-portal.api';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
+import { terms } from '../../brand';
 
 interface AcademicReportProps {
   studentId: string;
@@ -111,14 +112,14 @@ export default function AcademicReport({ studentId }: AcademicReportProps) {
       {/* Filter */}
       <div className="bg-white rounded-lg shadow p-4">
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Filter by Course
+          Filter by {terms.course}
         </label>
         <select
           value={selectedCourse}
           onChange={(e) => setSelectedCourse(e.target.value)}
           className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
-          <option value="">All Courses</option>
+          <option value="">All {terms.courses}</option>
           {courses.map((course) => (
             <option key={course.title} value={course.title}>
               {course.title}
@@ -139,7 +140,7 @@ export default function AcademicReport({ studentId }: AcademicReportProps) {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Course
+                  {terms.course}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Assessment

@@ -9,6 +9,7 @@ import { useSortableData } from '../hooks/useSortableData';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import EmptyState from '../components/common/EmptyState';
 import SearchableSelect from '../components/common/SearchableSelect';
+import { terms } from '../brand';
 
 export default function Attendance() {
   const { user, hasRole } = useAuth();
@@ -162,7 +163,7 @@ export default function Attendance() {
                       Date {getSortIndicatorEvents('eventDate')}
                     </th>
                     <th onClick={() => requestSortEvents('course.title')} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                      Course {getSortIndicatorEvents('course.title')}
+                      {terms.course} {getSortIndicatorEvents('course.title')}
                     </th>
                     <th onClick={() => requestSortEvents('startTime')} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
                       Time {getSortIndicatorEvents('startTime')}
@@ -255,7 +256,7 @@ export default function Attendance() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">My Attendance</h1>
           <p className="mt-2 text-sm text-gray-600">
-            View your attendance history across all courses
+            View your attendance history across all {terms.coursesLc}
           </p>
         </div>
 
@@ -285,12 +286,12 @@ export default function Attendance() {
         {uniqueCourses.length > 1 && (
           <div className="bg-white rounded-lg shadow p-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Filter by Course
+              Filter by {terms.course}
             </label>
             <div className="w-full md:w-64">
               <SearchableSelect
                 options={[
-                  { value: '', label: 'All Courses' },
+                  { value: '', label: `All ${terms.courses}` },
                   ...uniqueCourses.map((course) => ({
                     value: course.id,
                     label: `${course.code} - ${course.title}`,
@@ -298,7 +299,7 @@ export default function Attendance() {
                 ]}
                 value={courseFilter}
                 onChange={(v) => setCourseFilter(v)}
-                placeholder="All Courses"
+                placeholder={`All ${terms.courses}`}
                 size="sm"
               />
             </div>
@@ -316,7 +317,7 @@ export default function Attendance() {
                       Date {getSortIndicatorAttendance('event.eventDate')}
                     </th>
                     <th onClick={() => requestSortAttendance('course.title')} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                      Course {getSortIndicatorAttendance('course.title')}
+                      {terms.course} {getSortIndicatorAttendance('course.title')}
                     </th>
                     <th onClick={() => requestSortAttendance('event.startTime')} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
                       Time {getSortIndicatorAttendance('event.startTime')}
@@ -380,14 +381,14 @@ export default function Attendance() {
         ) : (
           <div className="bg-white shadow rounded-lg p-8 text-center">
             <p className="text-gray-500">
-              {courseFilter ? 'No attendance records found for the selected course.' : 'No attendance records found.'}
+              {courseFilter ? `No attendance records found for the selected ${terms.courseLc}.` : 'No attendance records found.'}
             </p>
             {courseFilter && (
               <button
                 onClick={() => setCourseFilter('')}
                 className="mt-4 text-sm text-blue-600 hover:text-blue-800 font-medium"
               >
-                Clear filter to see all courses
+                Clear filter to see all {terms.coursesLc}
               </button>
             )}
           </div>

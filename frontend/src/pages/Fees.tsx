@@ -8,6 +8,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import EmptyState from '../components/common/EmptyState';
 import { useSortableData } from '../hooks/useSortableData';
 import SearchableSelect from '../components/common/SearchableSelect';
+import { terms } from '../brand';
 
 export default function Fees() {
   const { user } = useAuth();
@@ -253,7 +254,7 @@ export default function Fees() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by student name, email, or course..."
+            placeholder={`Search by student name, email, or ${terms.courseLc}...`}
             className="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
           />
           {searchQuery && (
@@ -323,9 +324,9 @@ export default function Fees() {
             size="sm"
             value={filterCourse}
             onChange={(v) => setFilterCourse(v || 'all')}
-            placeholder="All Courses"
+            placeholder={`All ${terms.courses}`}
             options={[
-              { value: 'all', label: 'All Courses' },
+              { value: 'all', label: `All ${terms.courses}` },
               ...uniqueCourses.map(([courseId, courseTitle]) => ({
                 value: courseId,
                 label: courseTitle,
@@ -421,7 +422,7 @@ export default function Fees() {
                     Student {getSortIndicator('student.firstName')}
                   </th>
                   <th onClick={() => requestSort('course.title')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                    Course {getSortIndicator('course.title')}
+                    {terms.course} {getSortIndicator('course.title')}
                   </th>
                   <th onClick={() => requestSort('month')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
                     Period {getSortIndicator('month')}

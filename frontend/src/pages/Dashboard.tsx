@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { dashboardApi, DashboardStats, CurrencyAmount, Campus } from '../api/dashboard.api';
-import { brand } from '../brand';
+import { brand, terms } from '../brand';
 import { authApi } from '../api/auth.api';
 import toast from 'react-hot-toast';
 import { StatCardSkeleton } from '../components/common/Skeleton';
@@ -35,9 +35,9 @@ interface QuickAccessItem {
 
 const quickAccessItems: QuickAccessItem[] = [
   { name: 'Users', path: '/users', icon: UserGroupIcon, description: 'Manage users & roles', color: 'blue', roles: ['sudo', 'admin'] },
-  { name: 'Courses', path: '/courses', icon: AcademicCapIcon, description: 'Create & manage courses', color: 'purple', roles: ['sudo', 'admin'] },
-  { name: 'My Teaching Courses', path: '/my-teaching-courses', icon: BookOpenIcon, description: 'View assigned courses', color: 'indigo', roles: ['teacher'] },
-  { name: 'My Courses', path: '/my-courses', icon: BookOpenIcon, description: 'View enrolled courses', color: 'indigo', roles: ['student'] },
+  { name: terms.courses, path: '/courses', icon: AcademicCapIcon, description: `Create & manage ${terms.coursesLc}`, color: 'purple', roles: ['sudo', 'admin'] },
+  { name: `My Teaching ${terms.courses}`, path: '/my-teaching-courses', icon: BookOpenIcon, description: `View assigned ${terms.coursesLc}`, color: 'indigo', roles: ['teacher'] },
+  { name: `My ${terms.courses}`, path: '/my-courses', icon: BookOpenIcon, description: `View enrolled ${terms.coursesLc}`, color: 'indigo', roles: ['student'] },
   { name: 'Enrollments', path: '/enrollments', icon: UserPlusIcon, description: 'Manage student enrollments', color: 'green', roles: ['sudo', 'admin', 'teacher'] },
   { name: 'Leads', path: '/leads', icon: UserGroupIcon, description: 'Track & manage leads', color: 'teal', roles: ['sudo', 'admin'] },
   { name: 'Message Templates', path: '/message-templates', icon: ChatBubbleLeftRightIcon, description: 'Manage WhatsApp templates', color: 'emerald', roles: ['sudo'] },
@@ -299,7 +299,7 @@ const Dashboard: React.FC = () => {
                     </p>
                   </div>
                   <div className="bg-white rounded-xl shadow-card hover:shadow-card-hover transition-all duration-300 p-6 border-l-4 border-purple-500">
-                    <h3 className="text-sm font-medium text-gray-500">Total Courses</h3>
+                    <h3 className="text-sm font-medium text-gray-500">Total {terms.courses}</h3>
                     <p className="text-3xl font-bold text-gray-900 mt-2">
                       {stats?.totalCourses || 0}
                     </p>
@@ -389,7 +389,7 @@ const Dashboard: React.FC = () => {
               {user?.role === 'teacher' && stats?.teacher && (
                 <>
                   <div className="bg-white rounded-xl shadow-card hover:shadow-card-hover transition-all duration-300 p-6 border-l-4 border-purple-500">
-                    <h3 className="text-sm font-medium text-gray-500">My Courses</h3>
+                    <h3 className="text-sm font-medium text-gray-500">My {terms.courses}</h3>
                     <p className="text-3xl font-bold text-gray-900 mt-2">
                       {stats.teacher.myCourses}
                     </p>

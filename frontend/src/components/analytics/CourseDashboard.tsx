@@ -4,6 +4,7 @@ import BarChart from './charts/BarChart';
 import LineChart from './charts/LineChart';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
+import { terms } from '../../brand';
 
 interface CourseDashboardProps {
   filters: AnalyticsQueryParams;
@@ -24,7 +25,7 @@ export default function CourseDashboard({ filters }: CourseDashboardProps) {
       setData(analytics);
     } catch (error) {
       console.error('Failed to fetch course analytics:', error);
-      toast.error('Failed to load course analytics');
+      toast.error(`Failed to load ${terms.courseLc} analytics`);
     } finally {
       setLoading(false);
     }
@@ -34,7 +35,7 @@ export default function CourseDashboard({ filters }: CourseDashboardProps) {
     return (
       <div className="flex items-center justify-center py-12">
         <ArrowPathIcon className="h-8 w-8 animate-spin text-blue-600" />
-        <span className="ml-2 text-gray-600">Loading course analytics...</span>
+        <span className="ml-2 text-gray-600">Loading {terms.courseLc} analytics...</span>
       </div>
     );
   }
@@ -42,7 +43,7 @@ export default function CourseDashboard({ filters }: CourseDashboardProps) {
   if (!data) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-500">No course data available</p>
+        <p className="text-gray-500">No {terms.courseLc} data available</p>
       </div>
     );
   }
@@ -58,7 +59,7 @@ export default function CourseDashboard({ filters }: CourseDashboardProps) {
       {/* Key Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-sm font-medium text-gray-600">Total Courses</p>
+          <p className="text-sm font-medium text-gray-600">Total {terms.courses}</p>
           <p className="mt-2 text-3xl font-bold text-gray-900">{totalCourses}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
@@ -70,7 +71,7 @@ export default function CourseDashboard({ filters }: CourseDashboardProps) {
           <p className="mt-2 text-3xl font-bold text-green-600">{totalActive}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-sm font-medium text-gray-600">Avg per Course</p>
+          <p className="text-sm font-medium text-gray-600">Avg per {terms.course}</p>
           <p className="mt-2 text-3xl font-bold text-gray-900">
             {avgEnrollmentPerCourse.toFixed(1)}
           </p>
@@ -85,7 +86,7 @@ export default function CourseDashboard({ filters }: CourseDashboardProps) {
           yKeys={['activeEnrollments', 'completedEnrollments']}
           colors={['#10b981', '#3b82f6']}
           height={350}
-          title="Course Enrollment Status"
+          title={`${terms.course} Enrollment Status`}
           yLabel="Number of Students"
         />
       </div>
@@ -108,13 +109,13 @@ export default function CourseDashboard({ filters }: CourseDashboardProps) {
       {/* Course Details Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Course Details</h3>
+          <h3 className="text-lg font-semibold text-gray-900">{terms.course} Details</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Course</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{terms.course}</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Active</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Completed</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>

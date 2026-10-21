@@ -5,6 +5,7 @@ import {
   BanknotesIcon,
   BookOpenIcon,
 } from '@heroicons/react/24/outline';
+import { terms } from '../../brand';
 
 interface ParentDashboardProps {
   overview: StudentOverview;
@@ -23,7 +24,7 @@ export default function ParentDashboard({ overview }: ParentDashboardProps) {
         <p className="text-blue-100 mt-1">{student.email}</p>
         <div className="mt-4 flex items-center space-x-6">
           <div>
-            <p className="text-sm text-blue-200">Enrolled Courses</p>
+            <p className="text-sm text-blue-200">Enrolled {terms.courses}</p>
             <p className="text-2xl font-bold">{courses.length}</p>
           </div>
           <div>
@@ -160,7 +161,7 @@ export default function ParentDashboard({ overview }: ParentDashboardProps) {
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">
-            Enrolled Courses
+            Enrolled {terms.courses}
           </h3>
         </div>
         <div className="overflow-x-auto">
@@ -168,7 +169,7 @@ export default function ParentDashboard({ overview }: ParentDashboardProps) {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Course
+                  {terms.course}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Status

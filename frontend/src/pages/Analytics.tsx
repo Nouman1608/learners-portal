@@ -7,7 +7,7 @@ import AttendanceDashboard from '../components/analytics/AttendanceDashboard';
 import CourseDashboard from '../components/analytics/CourseDashboard';
 import GrowthDashboard from '../components/analytics/GrowthDashboard';
 import TeacherDashboard from '../components/analytics/TeacherDashboard';
-import { brand } from '../brand';
+import { brand, terms } from '../brand';
 
 type TabType = 'financial' | 'performance' | 'attendance' | 'courses' | 'growth' | 'teachers';
 
@@ -32,7 +32,7 @@ export default function Analytics() {
     { id: 'financial', label: 'Financial', allowed: isAdmin },
     { id: 'performance', label: 'Performance', allowed: isTeacher },
     { id: 'attendance', label: 'Attendance', allowed: isTeacher },
-    { id: 'courses', label: 'Courses', allowed: isTeacher },
+    { id: 'courses', label: terms.courses, allowed: isTeacher },
     { id: 'growth', label: 'Growth', allowed: isAdmin },
     { id: 'teachers', label: 'Teachers', allowed: isAdmin },
   ];

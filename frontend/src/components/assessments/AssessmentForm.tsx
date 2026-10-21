@@ -8,9 +8,10 @@ import { coursesApi, Course } from '../../api/courses.api';
 import { usersApi, User } from '../../api/users.api';
 import { useAuth } from '../../context/AuthContext';
 import SearchableSelect from '../common/SearchableSelect';
+import { terms } from '../../brand';
 
 const assessmentSchema = z.object({
-  courseId: z.string().uuid('Please select a course'),
+  courseId: z.string().uuid(`Please select a ${terms.courseLc}`),
   teacherId: z.string().uuid('Please select a teacher').optional(),
   title: z.string().min(1, 'Title is required').max(255, 'Title must be less than 255 characters'),
   description: z.string().max(5000, 'Description must be less than 5000 characters').optional(),
@@ -97,7 +98,7 @@ const AssessmentForm: React.FC<AssessmentFormProps> = ({ assessment, onClose, on
       }
     } catch (error: any) {
       console.error('Error loading courses:', error);
-      toast.error('Failed to load courses');
+      toast.error(`Failed to load ${terms.coursesLc}`);
     }
   };
 
@@ -260,8 +261,8 @@ const AssessmentForm: React.FC<AssessmentFormProps> = ({ assessment, onClose, on
                   }))}
                   value={field.value}
                   onChange={field.onChange}
-                  label="Course"
-                  placeholder="Search and select a course"
+                  label={terms.course}
+                  placeholder={`Search and select a ${terms.courseLc}`}
                   required
                   disabled={!!assessment}
                   error={errors.courseId?.message}
