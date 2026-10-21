@@ -40,7 +40,7 @@ export const APP_CAMPUSES: AppCampus[] = [
     key: 'mb',
     label: 'Marlbridge',
     school: 'Marlbridge',
-    logo: '/brand/marlbridge-stacked.svg',
+    logo: '/brand/marlbridge-emblem-cream.png',
     apiUrl: 'https://portal.marlbridge.com/api',
   },
 ];
