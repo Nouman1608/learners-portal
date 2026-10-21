@@ -10,7 +10,7 @@ import toast from 'react-hot-toast';
 import { brand, terms, JUNIOR_CATEGORIES, isJuniorPortal } from '../../brand';
 
 /** Junior Campus grades ("Grade 7", "Nursery", "KG", "Quran", ...): titled by the grade alone, several teachers. Mirrors the backend. */
-const JUNIOR_GRADE_NAME = /^\s*(grade\s*\d+|nursery|prep|pre-school|kg|quran)\s*$/i;
+const JUNIOR_GRADE_NAME = /^\s*(grade\s*\d+|nursery|pg|prep|pre-school|kg|quran)\s*$/i;
 const isJuniorGrade = (category?: string, subject?: string) =>
   category === 'junior' && !!subject && JUNIOR_GRADE_NAME.test(subject);
 // On the junior portal a class can have several teachers (grades are shared).
