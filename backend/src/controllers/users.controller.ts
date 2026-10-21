@@ -12,7 +12,8 @@ const createUserSchema = z.object({
   }),
   firstName: z.string().min(1, 'First name is required').max(100),
   lastName: z.string().min(1, 'Last name is required').max(100),
-  email: z.string().email('Invalid email address'),
+  // Optional for students (small children have none); the service fills a stand-in address.
+  email: z.string().email('Invalid email address').optional().or(z.literal('')),
   phone: z.string().optional(),
   parentPhone: z.string().optional(),
   studentCategory: z.string().optional(),

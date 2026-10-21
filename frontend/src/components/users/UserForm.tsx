@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, Role } from '../../types';
-import { CreateUserInput, UpdateUserInput } from '../../api/users.api';
+import { CreateUserInput, UpdateUserInput, isNoEmailAddress } from '../../api/users.api';
 import { useAuth } from '../../context/AuthContext';
 import { brand, JUNIOR_CATEGORIES, isJuniorPortal } from '../../brand';
 
@@ -21,7 +21,8 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit }) => {
     role: user?.role || 'student',
     firstName: user?.firstName || '',
     lastName: user?.lastName || '',
-    email: user?.email || '',
+    // A stand-in address (student without email) shows as blank
+    email: user?.email && !isNoEmailAddress(user.email) ? user.email : '',
     phone: user?.phone || '',
     parentPhone: user?.parentPhone || '',
     studentCategory: (user as any)?.studentCategory || (brand.campus === 'junior' ? 'junior' : ''),
@@ -38,6 +39,8 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit }) => {
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  // Junior Campus children often have no email of their own.
+  const emailOptional = isJuniorPortal && formData.role === 'student';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,7 +54,8 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit }) => {
           username: formData.username,
           firstName: formData.firstName,
           lastName: formData.lastName,
-          email: formData.email,
+          // Blank keeps the current address (a student's stand-in address stays as it is)
+          email: formData.email || undefined,
           phone: formData.phone ?? '',
           parentPhone: formData.parentPhone ?? '',
           isActive: formData.isActive,
@@ -102,7 +106,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit }) => {
           role: formData.role as 'admin' | 'teacher' | 'student',
           firstName: formData.firstName,
           lastName: formData.lastName,
-          email: formData.email,
+          email: formData.email || undefined,
           phone: formData.phone || undefined,
           parentPhone: formData.parentPhone || undefined,
         };
@@ -293,15 +297,15 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit }) => {
             {/* Email */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email *
+                Email {emailOptional ? '(optional)' : '*'}
               </label>
               <input
                 type="email"
-                required
+                required={!emailOptional}
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Enter email"
+                placeholder={emailOptional ? 'Leave blank if the child has no email' : 'Enter email'}
                 disabled={loading}
               />
             </div>

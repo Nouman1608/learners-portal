@@ -1,4 +1,7 @@
 import apiClient from './client';
+
+/** Stand-in address the portal gives a student created without an email (see users.service). */
+export const isNoEmailAddress = (email?: string | null) => !!email && email.endsWith('@no-email.invalid');
 import { User } from '../types';
 
 // Re-export User type for convenience
@@ -10,7 +13,7 @@ export interface CreateUserInput {
   role: 'admin' | 'teacher' | 'student';
   firstName: string;
   lastName: string;
-  email: string;
+  email?: string; // optional for students
   phone?: string;
   parentPhone?: string;
   studentCategory?: string; // 'junior' or 'senior'

@@ -6,13 +6,19 @@ import { AppError } from '../middleware/errorHandler';
 import { Role } from '../types';
 import logger from '../utils/logger';
 
+/**
+ * Stand-in address for a student created without an email (email is required and unique in
+ * the database). The .invalid domain can never receive mail.
+ */
+export const noEmailAddress = (username: string) => `${username.trim().toLowerCase()}@no-email.invalid`;
+
 export interface CreateUserInput {
   username: string;
   password: string;
   role: Role;
   firstName: string;
   lastName: string;
-  email: string;
+  email?: string; // optional for students
   phone?: string;
   parentPhone?: string;
   studentCategory?: string;
@@ -71,11 +77,16 @@ export const usersService = {
       throw new AppError(400, 'Username already exists');
     }
 
+    if (!input.email) {
+      if (input.role !== 'student') throw new AppError(400, 'Email is required');
+      input = { ...input, email: noEmailAddress(input.username) };
+    }
+
     // Check if email already exists
     const existingEmail = await db
       .select()
       .from(users)
-      .where(eq(users.email, input.email))
+      .where(eq(users.email, input.email!))
       .limit(1);
 
     if (existingEmail.length > 0) {
@@ -94,7 +105,7 @@ export const usersService = {
         role: input.role,
         firstName: input.firstName,
         lastName: input.lastName,
-        email: input.email,
+        email: input.email!,
         phone: input.phone || null,
         parentPhone: input.parentPhone || null,
         studentCategory: input.studentCategory || null,
