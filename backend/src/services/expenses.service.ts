@@ -20,7 +20,7 @@ export interface ExpenseInput {
 
 export interface MonthSummary {
   month: number; // 1-12
-  incomePKR: number; // fee payments received
+  incomePKR: number; // payments received for the month's fees
   teacherPayPKR: number; // teacher invoices for the month
   expensesPKR: number; // entered expenses
   byCategory: Record<string, number>; // PKR per expense category
@@ -41,11 +41,12 @@ async function summaryFor(database: Database, year: number): Promise<MonthSummar
     month: i + 1, incomePKR: 0, teacherPayPKR: 0, expensesPKR: 0, byCategory: {}, netPKR: 0,
   }));
 
+  // By the month the fee is for (like teacher invoices), not the day it was paid
   const income = await database.execute(sql`
-    select extract(month from p.payment_date)::int as month,
+    select f.month as month,
            coalesce(sum(p.amount::numeric * ${pkrRateExpr(sql`f.currency`)}), 0)::float as pkr
     from payments p join fees f on f.id = p.fee_id
-    where extract(year from p.payment_date) = ${year}
+    where f.year = ${year}
     group by 1`);
   for (const r of income.rows as any[]) months[r.month - 1].incomePKR = r.pkr;
 

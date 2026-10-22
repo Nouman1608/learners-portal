@@ -297,7 +297,7 @@ const Expenses: React.FC = () => {
           </tbody>
         </table>
         <p className="px-4 py-3 text-xs text-gray-500">
-          Fees received = payments recorded that month. Teacher pay = the month's teacher invoices – so under Salaries, enter only pay that is not on a teacher invoice (admin and other staff).
+          Fees received = payments received so far for that month's fees (so the current month grows as fees come in). Teacher pay = the month's teacher invoices – so under Salaries, enter only pay that is not on a teacher invoice (admin and other staff).
           Other currencies are converted to PKR at the portal's rates.
         </p>
       </div>
