@@ -21,7 +21,7 @@ import logger from '../utils/logger';
  * SQL CASE mapping a currency column to its PKR rate. Built from
  * currency.service so the rates have a single source of truth.
  */
-function pkrRateExpr(currencyCol: any): SQL {
+export function pkrRateExpr(currencyCol: any): SQL {
   const whens = currencyService
     .getSupportedCurrencies()
     .map(r => sql`WHEN ${r.code} THEN ${r.rateToPKR}`);

@@ -25,6 +25,7 @@ import {
   CreditCardIcon,
   ReceiptPercentIcon,
   PencilIcon,
+  WalletIcon,
 } from '@heroicons/react/24/outline';
 
 interface NavItem {
@@ -57,6 +58,7 @@ const navigationItems: NavItem[] = [
   { name: 'Invoices', path: '/invoices', icon: DocumentTextIcon, roles: ['sudo', 'admin', 'teacher'] },
   { name: 'My Invoices', path: '/my-invoices', icon: ReceiptPercentIcon, roles: ['student'] },
   { name: 'Analytics', path: '/analytics', icon: ChartBarIcon, roles: ['sudo', 'admin'] },
+  { name: 'Expenses', path: '/expenses', icon: WalletIcon, roles: ['sudo'] },
   { name: 'Logs', path: '/logs', icon: ClockIcon, roles: ['sudo', 'admin'] },
   { name: 'Account Settings', path: '/account-settings', icon: UserCircleIcon, roles: ['student', 'teacher'] },
   { name: 'Teams Settings', path: '/settings/teams', icon: Cog6ToothIcon, roles: ['sudo', 'admin', 'teacher'] },

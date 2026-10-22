@@ -10,6 +10,7 @@ import Courses from './pages/Courses';
 import Enrollments from './pages/Enrollments';
 import Leads from './pages/Leads';
 import MessageTemplates from './pages/MessageTemplates';
+import Expenses from './pages/Expenses';
 import Fees from './pages/Fees';
 import Calendar from './pages/Calendar';
 import Assessments from './pages/Assessments';
@@ -90,6 +91,17 @@ function App() {
               <ProtectedRoute allowedRoles={['sudo', 'admin']}>
                 <Layout>
                   <Leads />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/expenses"
+            element={
+              <ProtectedRoute allowedRoles={['sudo']}>
+                <Layout>
+                  <Expenses />
                 </Layout>
               </ProtectedRoute>
             }
