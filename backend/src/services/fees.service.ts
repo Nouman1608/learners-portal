@@ -1,5 +1,5 @@
 import { db } from '../config/database';
-import { fees, enrollments, users, courses, payments, courseEvents, courseTeachers, invoices } from '../db/schema';
+import { fees, enrollments, users, courses, payments, courseEvents, courseTeachers, invoices, feeInvoiceSent } from '../db/schema';
 import { eq, and, desc, sql, lte, gte, ne, inArray } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
@@ -104,8 +104,7 @@ export const feesService = {
         status: fees.status,
         receivedAt: fees.receivedAt,
         serialNumber: fees.serialNumber,
-        invoiceSentAt: fees.invoiceSentAt,
-        invoiceSentBy: fees.invoiceSentBy,
+        invoiceSentAt: feeInvoiceSent.sentAt,
         billingType: fees.billingType,
         isCatchUp: fees.isCatchUp,
         feeNotes: fees.feeNotes,
@@ -127,7 +126,8 @@ export const feesService = {
       })
       .from(fees)
       .innerJoin(users, eq(fees.studentId, users.id))
-      .innerJoin(courses, eq(fees.courseId, courses.id));
+      .innerJoin(courses, eq(fees.courseId, courses.id))
+      .leftJoin(feeInvoiceSent, eq(feeInvoiceSent.feeId, fees.id));
 
     const conditions = [];
     if (filters?.studentId) {
@@ -169,8 +169,7 @@ export const feesService = {
         status: fees.status,
         receivedAt: fees.receivedAt,
         serialNumber: fees.serialNumber,
-        invoiceSentAt: fees.invoiceSentAt,
-        invoiceSentBy: fees.invoiceSentBy,
+        invoiceSentAt: feeInvoiceSent.sentAt,
         billingType: fees.billingType,
         isCatchUp: fees.isCatchUp,
         feeNotes: fees.feeNotes,
@@ -193,6 +192,7 @@ export const feesService = {
       .from(fees)
       .innerJoin(users, eq(fees.studentId, users.id))
       .innerJoin(courses, eq(fees.courseId, courses.id))
+      .leftJoin(feeInvoiceSent, eq(feeInvoiceSent.feeId, fees.id))
       .where(eq(fees.id, feeId))
       .limit(1);
 
@@ -254,19 +254,22 @@ export const feesService = {
    * students have been sent their invoice but have not paid yet.
    */
   async setInvoiceSent(feeId: string, sent: boolean, userId: string) {
-    const [updated] = await db
-      .update(fees)
-      .set({
-        invoiceSentAt: sent ? new Date() : null,
-        invoiceSentBy: sent ? userId : null,
-      })
-      .where(eq(fees.id, feeId))
-      .returning({ id: fees.id, invoiceSentAt: fees.invoiceSentAt, invoiceSentBy: fees.invoiceSentBy });
-
-    if (!updated) {
+    const [fee] = await db.select({ id: fees.id }).from(fees).where(eq(fees.id, feeId)).limit(1);
+    if (!fee) {
       throw new AppError(404, 'Fee not found');
     }
-    return updated;
+
+    if (!sent) {
+      await db.delete(feeInvoiceSent).where(eq(feeInvoiceSent.feeId, feeId));
+      return { id: feeId, invoiceSentAt: null };
+    }
+
+    const sentAt = new Date();
+    await db
+      .insert(feeInvoiceSent)
+      .values({ feeId, sentAt, sentBy: userId })
+      .onConflictDoUpdate({ target: feeInvoiceSent.feeId, set: { sentAt, sentBy: userId } });
+    return { id: feeId, invoiceSentAt: sentAt };
   },
 
   async markAsReceived(feeId: string, receivedBy: string, input: MarkAsReceivedInput) {

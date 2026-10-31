@@ -49,13 +49,19 @@ export const fees = pgTable('fees', {
   receivedAt: timestamp('received_at'),
   receivedBy: uuid('received_by').references(() => users.id, { onDelete: 'set null' }),
   serialNumber: varchar('serial_number', { length: 255 }), // Serial number for cash payments
-  invoiceSentAt: timestamp('invoice_sent_at'), // Set when an admin ticks "invoice sent" for this fee
-  invoiceSentBy: uuid('invoice_sent_by').references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
   uniqueFee: unique().on(table.enrollmentId, table.month, table.year),
 }));
+
+// One row per fee whose invoice an admin has marked as sent (tick box on the Fees page).
+// Kept in its own table so no change to the fees table itself is needed.
+export const feeInvoiceSent = pgTable('fee_invoice_sent', {
+  feeId: uuid('fee_id').primaryKey().references(() => fees.id, { onDelete: 'cascade' }),
+  sentAt: timestamp('sent_at').defaultNow().notNull(),
+  sentBy: uuid('sent_by').references(() => users.id, { onDelete: 'set null' }),
+});
 
 export const payments = pgTable('payments', {
   id: uuid('id').primaryKey().defaultRandom(),

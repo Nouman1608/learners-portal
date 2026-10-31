@@ -1,5 +1,5 @@
 {
-  "id": "cff31062-5cea-4f53-a6b0-04ebba0997b3",
+  "id": "c81dae1c-ee10-4399-a9e1-a10a7bf2f1dd",
   "prevId": "740ef01d-d822-4ade-9f5d-1b14468664be",
   "version": "5",
   "dialect": "pg",
@@ -1145,6 +1145,62 @@
         }
       }
     },
+    "fee_invoice_sent": {
+      "name": "fee_invoice_sent",
+      "schema": "",
+      "columns": {
+        "fee_id": {
+          "name": "fee_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "sent_at": {
+          "name": "sent_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "sent_by": {
+          "name": "sent_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "fee_invoice_sent_fee_id_fees_id_fk": {
+          "name": "fee_invoice_sent_fee_id_fees_id_fk",
+          "tableFrom": "fee_invoice_sent",
+          "tableTo": "fees",
+          "columnsFrom": [
+            "fee_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "fee_invoice_sent_sent_by_users_id_fk": {
+          "name": "fee_invoice_sent_sent_by_users_id_fk",
+          "tableFrom": "fee_invoice_sent",
+          "tableTo": "users",
+          "columnsFrom": [
+            "sent_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
     "fees": {
       "name": "fees",
       "schema": "",
@@ -1268,18 +1324,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "invoice_sent_at": {
-          "name": "invoice_sent_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "invoice_sent_by": {
-          "name": "invoice_sent_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -1342,19 +1386,6 @@
           "tableTo": "users",
           "columnsFrom": [
             "received_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "fees_invoice_sent_by_users_id_fk": {
-          "name": "fees_invoice_sent_by_users_id_fk",
-          "tableFrom": "fees",
-          "tableTo": "users",
-          "columnsFrom": [
-            "invoice_sent_by"
           ],
           "columnsTo": [
             "id"
