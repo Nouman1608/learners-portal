@@ -20,6 +20,7 @@ export default function Fees() {
   const [filterStudent, setFilterStudent] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterSubcategory, setFilterSubcategory] = useState<string>('all');
+  const [filterInvoice, setFilterInvoice] = useState<'all' | 'sent' | 'not_sent'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showMarkReceivedModal, setShowMarkReceivedModal] = useState(false);
@@ -56,6 +57,20 @@ export default function Fees() {
     setFeesToMark([fee]);
     setIsBulkOperation(false);
     setShowMarkReceivedModal(true);
+  };
+
+  // Tick / untick "invoice sent". Updates the row straight away and puts it back if saving fails.
+  const handleToggleInvoiceSent = async (fee: Fee) => {
+    const sent = !fee.invoiceSentAt;
+    const previous = fee.invoiceSentAt ?? null;
+    setFees((all) => all.map((f) => (f.id === fee.id ? { ...f, invoiceSentAt: sent ? new Date().toISOString() : null } : f)));
+    try {
+      const result = await feesApi.setInvoiceSent(fee.id, sent);
+      setFees((all) => all.map((f) => (f.id === fee.id ? { ...f, invoiceSentAt: result.invoiceSentAt } : f)));
+    } catch (error: any) {
+      setFees((all) => all.map((f) => (f.id === fee.id ? { ...f, invoiceSentAt: previous } : f)));
+      toast.error(error.response?.data?.error || 'Failed to update invoice sent');
+    }
   };
 
   const handleEditSessions = (fee: Fee) => {
@@ -161,6 +176,10 @@ export default function Fees() {
     if (filterSubcategory !== 'all' && fee.student.studentSubcategory !== filterSubcategory) {
       return false;
     }
+
+    // Invoice sent filter
+    if (filterInvoice === 'sent' && !fee.invoiceSentAt) return false;
+    if (filterInvoice === 'not_sent' && fee.invoiceSentAt) return false;
 
     // Search filter
     if (searchQuery.trim()) {
@@ -304,6 +323,16 @@ export default function Fees() {
         </select>
 
         <select
+          value={filterInvoice}
+          onChange={(e) => setFilterInvoice(e.target.value as any)}
+          className="px-3 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"
+        >
+          <option value="all">Invoice: All</option>
+          <option value="sent">Invoice sent</option>
+          <option value="not_sent">Invoice not sent</option>
+        </select>
+
+        <select
           value={filterPeriod}
           onChange={(e) => setFilterPeriod(e.target.value)}
           className="px-3 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"
@@ -386,7 +415,7 @@ export default function Fees() {
           )}
         </select>
 
-        {(searchQuery || filterStatus !== 'all' || filterPeriod !== 'all' || filterCourse !== 'all' || filterStudent !== 'all' || filterCategory !== 'all' || filterSubcategory !== 'all') && (
+        {(searchQuery || filterStatus !== 'all' || filterPeriod !== 'all' || filterCourse !== 'all' || filterStudent !== 'all' || filterCategory !== 'all' || filterSubcategory !== 'all' || filterInvoice !== 'all') && (
           <button
             onClick={() => {
               setSearchQuery('');
@@ -396,6 +425,7 @@ export default function Fees() {
               setFilterStudent('all');
               setFilterCategory('all');
               setFilterSubcategory('all');
+              setFilterInvoice('all');
             }}
             className="px-3 py-1.5 text-sm text-gray-700 hover:text-gray-900"
           >
@@ -408,7 +438,7 @@ export default function Fees() {
       {filteredFees.length === 0 ? (
         <EmptyState
           icon={BanknotesIcon}
-          title={searchQuery || filterStatus !== 'all' || filterPeriod !== 'all' || filterCourse !== 'all' || filterStudent !== 'all' || filterCategory !== 'all' || filterSubcategory !== 'all'
+          title={searchQuery || filterStatus !== 'all' || filterPeriod !== 'all' || filterCourse !== 'all' || filterStudent !== 'all' || filterCategory !== 'all' || filterSubcategory !== 'all' || filterInvoice !== 'all'
             ? 'No fees match your filters'
             : 'No fees found'}
         />
@@ -446,6 +476,9 @@ export default function Fees() {
                   </th>
                   <th onClick={() => requestSort('status')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
                     Status {getSortIndicator('status')}
+                  </th>
+                  <th onClick={() => requestSort('invoiceSentAt')} className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                    Invoice Sent {getSortIndicator('invoiceSentAt')}
                   </th>
                   <th onClick={() => requestSort('receivedAt')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
                     Received At {getSortIndicator('receivedAt')}
@@ -499,6 +532,16 @@ export default function Fees() {
                           {fee.status}
                         </span>
                       </div>
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-center">
+                      <input
+                        type="checkbox"
+                        checked={!!fee.invoiceSentAt}
+                        disabled={!isAdmin}
+                        onChange={() => handleToggleInvoiceSent(fee)}
+                        title={fee.invoiceSentAt ? `Invoice sent on ${new Date(fee.invoiceSentAt).toLocaleDateString()}` : 'Tick when the invoice has been sent'}
+                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:cursor-default"
+                      />
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
                       {fee.receivedAt ? new Date(fee.receivedAt).toLocaleDateString() : '-'}
@@ -580,6 +623,19 @@ export default function Fees() {
                       {new Date(fee.dueDate).toLocaleDateString()}
                     </span>
                   </div>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={!!fee.invoiceSentAt}
+                      disabled={!isAdmin}
+                      onChange={() => handleToggleInvoiceSent(fee)}
+                      className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-gray-500">Invoice sent</span>
+                    {fee.invoiceSentAt && (
+                      <span className="text-gray-900">{new Date(fee.invoiceSentAt).toLocaleDateString()}</span>
+                    )}
+                  </label>
                   {fee.receivedAt && (
                     <div>
                       <span className="text-gray-500">Received At:</span>

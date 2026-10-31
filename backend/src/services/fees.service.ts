@@ -104,6 +104,8 @@ export const feesService = {
         status: fees.status,
         receivedAt: fees.receivedAt,
         serialNumber: fees.serialNumber,
+        invoiceSentAt: fees.invoiceSentAt,
+        invoiceSentBy: fees.invoiceSentBy,
         billingType: fees.billingType,
         isCatchUp: fees.isCatchUp,
         feeNotes: fees.feeNotes,
@@ -167,6 +169,8 @@ export const feesService = {
         status: fees.status,
         receivedAt: fees.receivedAt,
         serialNumber: fees.serialNumber,
+        invoiceSentAt: fees.invoiceSentAt,
+        invoiceSentBy: fees.invoiceSentBy,
         billingType: fees.billingType,
         isCatchUp: fees.isCatchUp,
         feeNotes: fees.feeNotes,
@@ -243,6 +247,26 @@ export const feesService = {
     this.syncFeeStatusInBackground();
 
     return updatedFee;
+  },
+
+  /**
+   * Tick / untick "invoice sent" on a fee. Admins use it to keep track of which
+   * students have been sent their invoice but have not paid yet.
+   */
+  async setInvoiceSent(feeId: string, sent: boolean, userId: string) {
+    const [updated] = await db
+      .update(fees)
+      .set({
+        invoiceSentAt: sent ? new Date() : null,
+        invoiceSentBy: sent ? userId : null,
+      })
+      .where(eq(fees.id, feeId))
+      .returning({ id: fees.id, invoiceSentAt: fees.invoiceSentAt, invoiceSentBy: fees.invoiceSentBy });
+
+    if (!updated) {
+      throw new AppError(404, 'Fee not found');
+    }
+    return updated;
   },
 
   async markAsReceived(feeId: string, receivedBy: string, input: MarkAsReceivedInput) {

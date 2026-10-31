@@ -18,6 +18,7 @@ router.post('/', requireAdmin, logActivity('create', 'fee'), enrollmentsControll
 router.post('/generate/manual', requireAdmin, logActivity('generate-fees-manual', 'fee'), enrollmentsController.generateFeesManually);
 router.patch('/:id/status', requireAdmin, logActivity('update-fee-status', 'fee'), enrollmentsController.updateFeeStatus);
 router.patch('/:id/sessions', requireAdmin, logActivity('update-fee-sessions', 'fee'), enrollmentsController.updateFeeSessions);
+router.patch('/:id/invoice-sent', requireAdmin, logActivity('invoice-sent', 'fee'), enrollmentsController.setFeeInvoiceSent);
 router.patch('/:id/received', requireAdmin, logActivity('mark-received', 'fee'), enrollmentsController.markFeeAsReceived);
 
 // Payments (students can create, admins/teachers can view)

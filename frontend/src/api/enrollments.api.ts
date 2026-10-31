@@ -58,6 +58,7 @@ export interface Fee {
   status: 'pending' | 'overdue' | 'received';
   receivedAt?: string;
   serialNumber?: string;
+  invoiceSentAt?: string | null;
   billingType?: 'monthly' | 'usage' | 'catch-up';
   isCatchUp?: boolean;
   feeNotes?: string;
@@ -284,6 +285,11 @@ export const feesApi = {
 
   updateFeeStatus: async (id: string, data: UpdateFeeStatusInput): Promise<Fee> => {
     const response = await apiClient.patch<{ fee: Fee }>(`/fees/${id}/status`, data);
+    return response.data.fee;
+  },
+
+  setInvoiceSent: async (id: string, sent: boolean): Promise<{ id: string; invoiceSentAt: string | null }> => {
+    const response = await apiClient.patch<{ fee: { id: string; invoiceSentAt: string | null } }>(`/fees/${id}/invoice-sent`, { sent });
     return response.data.fee;
   },
 

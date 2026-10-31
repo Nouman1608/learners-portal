@@ -49,6 +49,8 @@ export const fees = pgTable('fees', {
   receivedAt: timestamp('received_at'),
   receivedBy: uuid('received_by').references(() => users.id, { onDelete: 'set null' }),
   serialNumber: varchar('serial_number', { length: 255 }), // Serial number for cash payments
+  invoiceSentAt: timestamp('invoice_sent_at'), // Set when an admin ticks "invoice sent" for this fee
+  invoiceSentBy: uuid('invoice_sent_by').references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({

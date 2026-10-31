@@ -282,6 +282,18 @@ export const updateFeeSessions = async (req: Request, res: Response, next: NextF
   }
 };
 
+const setInvoiceSentSchema = z.object({ sent: z.boolean() });
+
+export const setFeeInvoiceSent = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { sent } = setInvoiceSentSchema.parse(req.body);
+    const fee = await feesService.setInvoiceSent(req.params.id, sent, req.user!.id);
+    res.json({ fee });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const markFeeAsReceived = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const validated = markAsReceivedSchema.parse(req.body);
