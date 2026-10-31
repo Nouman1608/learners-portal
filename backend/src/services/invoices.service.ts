@@ -82,7 +82,7 @@ export const invoicesService = {
    */
   async getNextSequence(type: 'student' | 'teacher', month: number, year: number): Promise<number> {
     const existingInvoices = await db
-      .select()
+      .select({ invoiceNumber: invoices.invoiceNumber })
       .from(invoices)
       .where(
         and(
@@ -92,7 +92,15 @@ export const invoicesService = {
         )
       );
 
-    return existingInvoices.length + 1;
+    // Next number after the highest one used. Counting rows would reuse a number
+    // once old invoice versions are deleted on regeneration, and the unique
+    // invoice_number constraint then rejects the new invoice.
+    let highest = 0;
+    for (const { invoiceNumber } of existingInvoices) {
+      const match = /-(?:STU|TCH)-(\d+)/.exec(invoiceNumber);
+      if (match) highest = Math.max(highest, parseInt(match[1], 10));
+    }
+    return Math.max(highest, existingInvoices.length) + 1;
   },
 
   /**
