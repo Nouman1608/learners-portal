@@ -11,6 +11,7 @@ const generateStudentInvoiceSchema = z.object({
   studentId: z.string().uuid(),
   month: z.number().int().min(1).max(12),
   year: z.number().int().min(2020),
+  currency: z.enum(['PKR', 'USD', 'GBP', 'SAR']).optional(),
   sessionOverrides: z.array(z.object({
     enrollmentId: z.string().uuid(),
     sessionCount: z.number().int().min(0),

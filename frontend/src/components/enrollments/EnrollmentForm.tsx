@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { enrollmentsApi, CreateEnrollmentInput, CurrencyCode } from '../../api/enrollments.api';
+import { invoicesApi } from '../../api/invoices.api';
 import { usersApi, User } from '../../api/users.api';
 import { coursesApi, Course } from '../../api/courses.api';
 import SearchableSelect from '../common/SearchableSelect';
@@ -20,6 +21,7 @@ const enrollmentSchema = z.object({
   currency: z.enum(['PKR', 'USD', 'GBP', 'SAR']).optional(),
   feeType: z.enum(['custom', 'scholarship']).optional(),
   prorateFirstMonth: z.boolean().optional(),
+  generateInvoice: z.boolean().optional(),
   customFeePerMonth: z.string().optional(),
   perSessionFee: z.string().optional(),
   expectedClassesPerMonth: z.string().optional(),
@@ -68,6 +70,7 @@ export default function EnrollmentForm({ onClose, onSuccess }: EnrollmentFormPro
       currency: 'PKR',
       feeType: 'custom',
       prorateFirstMonth: false,
+      generateInvoice: false,
       customFeePerMonth: '',
       perSessionFee: '',
       expectedClassesPerMonth: '',
@@ -145,6 +148,23 @@ export default function EnrollmentForm({ onClose, onSuccess }: EnrollmentFormPro
       };
       await enrollmentsApi.createEnrollment(input);
       toast.success('Student enrolled successfully');
+
+      // Optionally create the invoice for the enrollment's first month right away
+      // (e.g. to send it after the demo class, before the official start date).
+      if (data.generateInvoice && data.classType !== '1-to-1') {
+        const [year, month] = (data.enrolledAt || new Date().toISOString().split('T')[0]).split('-').map(Number);
+        try {
+          await invoicesApi.generateStudentInvoice({
+            studentId: data.studentId,
+            month,
+            year,
+            currency: input.currency,
+          });
+          toast.success('Invoice generated');
+        } catch (invoiceError: any) {
+          toast.error(`Student enrolled, but the invoice could not be generated: ${invoiceError.response?.data?.error || 'unknown error'}`);
+        }
+      }
       onSuccess();
       onClose();
     } catch (error: any) {
@@ -229,6 +249,22 @@ export default function EnrollmentForm({ onClose, onSuccess }: EnrollmentFormPro
                 <p className="mt-1 text-sm text-gray-500">
                   The day of enrollment determines the billing cycle (e.g. 5th of each month)
                 </p>
+                {/* Not for 1-to-1: those are billed by sessions taken, so there is nothing to invoice yet */}
+                {!isOneToOne && (
+                  <label className="mt-2 flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      {...register('generateInvoice')}
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm text-gray-700">
+                      Generate invoice now
+                      <span className="block text-xs text-gray-500">
+                        Creates this student's invoice for the enrollment month straight away, so it can be sent before the official start date.
+                      </span>
+                    </span>
+                  </label>
+                )}
               </div>
 
               {/* Attendance Mode — determines teacher payment rate (local % vs online fixed) */}

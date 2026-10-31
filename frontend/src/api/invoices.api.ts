@@ -61,6 +61,7 @@ export interface GenerateStudentInvoiceInput {
   studentId: string;
   month: number;
   year: number;
+  currency?: 'PKR' | 'USD' | 'GBP' | 'SAR';
   sessionOverrides?: SessionOverride[];
 }
 
