@@ -562,6 +562,10 @@ export const enrollmentsService = {
           // Regenerate teacher invoices
           for (const teacher of affectedTeachers) {
             try {
+              // Read the admin's class counts before the old versions are deleted
+              const savedSessionCounts = await invoicesService.getSavedTeacherSessionCounts(
+                teacher.teacherId, month, year);
+
               // Delete ALL versions of this teacher's invoice for the period
               await db
                 .delete(invoices)
@@ -579,6 +583,7 @@ export const enrollmentsService = {
                 month,
                 year,
                 generatedBy: updatedBy || 'system',
+                savedSessionCounts,
               });
               logger.info(`[STATUS CHANGE] Regenerated teacher invoice for ${teacher.teacherId} - ${month}/${year}`);
             } catch (invoiceError: any) {
@@ -941,6 +946,7 @@ export const enrollmentsService = {
     // STEP 1: Delete all invoices and their line items for affected periods
     // This must happen BEFORE deleting fees, as invoice_line_items reference fees with RESTRICT
     logger.info(`[HARD DELETE] Deleting invoices for affected periods`);
+    const savedTeacherCounts = new Map<string, Map<string, number>>();
 
     for (const period of affectedPeriods) {
       const [month, year] = period.split('-').map(Number);
@@ -965,8 +971,10 @@ export const enrollmentsService = {
         }
       }
 
-      // Delete teacher invoices
+      // Delete teacher invoices, keeping the admin's class counts for the rebuild
       for (const teacher of affectedTeachers) {
+        savedTeacherCounts.set(`${teacher.teacherId}-${period}`,
+          await invoicesService.getSavedTeacherSessionCounts(teacher.teacherId, month, year));
         const teacherInvoices = await db
           .select({ id: invoices.id })
           .from(invoices)
@@ -1059,6 +1067,7 @@ export const enrollmentsService = {
               month,
               year,
               generatedBy: deletedBy,
+              savedSessionCounts: savedTeacherCounts.get(`${teacher.teacherId}-${period}`),
             });
             regenerationResults.teacherInvoicesRegenerated++;
             logger.info(`[HARD DELETE] Regenerated teacher invoice for ${teacher.teacherId} - ${month}/${year}`);

@@ -22,6 +22,22 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
+const pakistanDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' });
+
+/**
+ * Date that decides a teacher's first credited month: the later of the enrollment
+ * date and the class start date, read as a Pakistan calendar day (local midnight).
+ */
+function teacherCreditDate(enrolledAt: Date | string | null, startDate: string | null): Date | null {
+  const days = [
+    enrolledAt ? pakistanDay.format(new Date(enrolledAt)) : null,
+    startDate ? String(startDate).slice(0, 10) : null,
+  ].filter((d): d is string => !!d).sort();
+  if (!days.length) return null;
+  const [y, m, d] = days[days.length - 1].split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 export interface SessionOverride {
   enrollmentId: string;
   sessionCount: number;
@@ -38,6 +54,9 @@ export interface GenerateStudentInvoiceInput {
 
 export interface GenerateTeacherInvoiceInput {
   sessionOverrides?: SessionOverride[];
+  // Counts saved on a previous version, read by a caller that deletes old versions first.
+  // When neither this nor sessionOverrides is given, they are read from the latest invoice.
+  savedSessionCounts?: Map<string, number>;
   teacherId: string;
   month: number;
   year: number;
@@ -958,6 +977,12 @@ export const invoicesService = {
         }
         manualSessions.set(override.enrollmentId, override.sessionCount);
       }
+    } else {
+      // Automatic regenerations (fee edits, status changes, bulk/cron runs) keep the
+      // class counts an admin entered earlier instead of reverting to the fee records.
+      const saved = input.savedSessionCounts
+        ?? await this.getSavedTeacherSessionCounts(input.teacherId, input.month, input.year);
+      for (const [enrollmentId, count] of saved) manualSessions.set(enrollmentId, count);
     }
     // Check if latest invoice already exists
     const [existing] = await db
@@ -1142,8 +1167,8 @@ export const invoicesService = {
           // from the child's own fee (which is now billed immediately from day one):
           // joined before the 20th → teacher credited this month; on/after the 20th
           // → teacher credit starts the following month instead.
-          const enrolledAtDate = enrollment.enrolledAt ? new Date(enrollment.enrolledAt) : null;
-          if (!feesService.shouldGenerateFeeForMonth(enrolledAtDate, input.month, input.year)) {
+          const creditDate = teacherCreditDate(enrollment.enrolledAt, enrollment.startDate);
+          if (!feesService.shouldGenerateFeeForMonth(creditDate, input.month, input.year)) {
             logger.info(`[INVOICE]   Skipping local student ${enrollment.student.firstName} ${enrollment.student.lastName}: joined on/after the 20th, teacher credit starts next month`);
             continue;
           }
@@ -1166,10 +1191,9 @@ export const invoicesService = {
             logger.info(`[INVOICE]   Skipping local student ${enrollment.student.firstName} ${enrollment.student.lastName}: no fee record for ${input.month}/${input.year}`);
             continue;
           }
+          // A 0 fee stays on the invoice as a 0 line, so the teacher sees the child
           studentFee = parseFloat(regularFee.amount);
         }
-
-        if (studentFee === 0) continue;
 
         const isOneToOne = enrollment.classType === '1-to-1';
         const quantity = isOneToOne ? (sessionCount ?? 0) : 1;
@@ -1244,8 +1268,8 @@ export const invoicesService = {
           // from the child's own fee (which is now billed immediately from day one):
           // joined before the 20th → teacher credited this month; on/after the 20th
           // → teacher credit starts the following month instead.
-          const enrolledAtDate = enrollment.enrolledAt ? new Date(enrollment.enrolledAt) : null;
-          if (!feesService.shouldGenerateFeeForMonth(enrolledAtDate, input.month, input.year)) {
+          const creditDate = teacherCreditDate(enrollment.enrolledAt, enrollment.startDate);
+          if (!feesService.shouldGenerateFeeForMonth(creditDate, input.month, input.year)) {
             logger.info(`[INVOICE]   Skipping online student ${enrollment.student.firstName} ${enrollment.student.lastName}: joined on/after the 20th, teacher credit starts next month`);
             continue;
           }
@@ -1286,7 +1310,10 @@ export const invoicesService = {
         const onlineAmount = isOneToOne ? oneToOneClassRate! : groupAmount;
         let onlineEarning = Math.round(onlineAmount * quantity * 100) / 100;
         let isProrated = false;
-        if (
+        if (!isOneToOne && regularFeeAmount !== null && parseFloat(regularFeeAmount) === 0) {
+          // Child pays nothing this month → teacher's fixed amount is 0 too
+          onlineEarning = 0;
+        } else if (
           enrollment.classType !== '1-to-1' &&
           regularFeeAmount !== null &&
           enrollment.customFeePerMonth
@@ -1331,9 +1358,10 @@ export const invoicesService = {
       throw new AppError(404, 'No earnings to invoice for this teacher');
     }
 
-    if (input.sessionOverrides?.length) {
+    if (manualSessions.size) {
       // Keep zero counts too, even though excluded students have no line item.
-      lineItemsData[0].metadata.sessionOverrides = input.sessionOverrides;
+      lineItemsData[0].metadata.sessionOverrides = [...manualSessions]
+        .map(([enrollmentId, sessionCount]) => ({ enrollmentId, sessionCount }));
     }
 
     // Keep the previous invoice current when validation produces no earnings.
@@ -1671,6 +1699,22 @@ export const invoicesService = {
       .innerJoin(users, eq(users.id, enrollments.studentId))
       .where(and(eq(courseTeachers.teacherId, teacherId), eq(enrollments.status, 'active'),
         eq(enrollments.classType, '1-to-1')));
+    const savedCounts = await this.getSavedTeacherSessionCounts(teacherId, month, year);
+    const result = [];
+    for (const enrollment of assigned) {
+      const date = new Date(enrollment.enrolledAt);
+      if (date.getUTCFullYear() * 12 + date.getUTCMonth() > year * 12 + month - 1) continue;
+      const sessions = await this.get1to1Sessions(enrollment.studentId, month, year);
+      const session = sessions.find(s => s.enrollmentId === enrollment.enrollmentId);
+      if (session) result.push({ ...session, existingSessionCount: savedCounts.get(enrollment.enrollmentId) ?? session.existingSessionCount, studentName: `${enrollment.firstName} ${enrollment.lastName}` });
+    }
+    return result;
+  },
+
+  /**
+   * Class counts an admin entered on the teacher's latest invoice for the period
+   */
+  async getSavedTeacherSessionCounts(teacherId: string, month: number, year: number) {
     const previousCounts = await db.select({ metadata: invoiceLineItems.metadata })
       .from(invoiceLineItems).innerJoin(invoices, eq(invoices.id, invoiceLineItems.invoiceId))
       .where(and(eq(invoices.recipientId, teacherId), eq(invoices.type, 'teacher'),
@@ -1688,15 +1732,7 @@ export const invoicesService = {
         if (Number.isSafeInteger(count) && count >= 0) savedCounts.set(metadata.enrollmentId, count);
       }
     }
-    const result = [];
-    for (const enrollment of assigned) {
-      const date = new Date(enrollment.enrolledAt);
-      if (date.getUTCFullYear() * 12 + date.getUTCMonth() > year * 12 + month - 1) continue;
-      const sessions = await this.get1to1Sessions(enrollment.studentId, month, year);
-      const session = sessions.find(s => s.enrollmentId === enrollment.enrollmentId);
-      if (session) result.push({ ...session, existingSessionCount: savedCounts.get(enrollment.enrollmentId) ?? session.existingSessionCount, studentName: `${enrollment.firstName} ${enrollment.lastName}` });
-    }
-    return result;
+    return savedCounts;
   },
 
   async get1to1Sessions(studentId: string, month: number, year: number) {
