@@ -9,12 +9,15 @@ import EmptyState from '../components/common/EmptyState';
 import { useSortableData } from '../hooks/useSortableData';
 import SearchableSelect from '../components/common/SearchableSelect';
 import { terms, JUNIOR_CATEGORIES, isJuniorPortal } from '../brand';
+import ConfirmDialog from '../components/common/ConfirmDialog';
+import { useConfirmDialog } from '../hooks/useConfirmDialog';
 
 export default function Fees() {
   const { user } = useAuth();
   const [fees, setFees] = useState<Fee[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'overdue' | 'received'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'overdue' | 'received' | 'dropped'>('all');
+  const { confirm: confirmDialog, dialogProps } = useConfirmDialog();
   const [filterPeriod, setFilterPeriod] = useState<string>('all');
   const [filterCourse, setFilterCourse] = useState<string>('all');
   const [filterStudent, setFilterStudent] = useState<string>('all');
@@ -31,6 +34,7 @@ export default function Fees() {
   const [regenerateYear, setRegenerateYear] = useState(new Date().getFullYear());
   const [regenerating, setRegenerating] = useState(false);
   const [sessionEditFee, setSessionEditFee] = useState<Fee | null>(null);
+  const [droppingId, setDroppingId] = useState<string | null>(null);
   const [sessionInput, setSessionInput] = useState('');
   const [savingSessions, setSavingSessions] = useState(false);
 
@@ -70,6 +74,35 @@ export default function Fees() {
     } catch (error: any) {
       setFees((all) => all.map((f) => (f.id === fee.id ? { ...f, invoiceSentAt: previous } : f)));
       toast.error(error.response?.data?.error || 'Failed to update invoice sent');
+    }
+  };
+
+  // Tick / untick "dropped – not paying". Ticking also drops the enrollment, so confirm first.
+  const handleToggleDropped = async (fee: Fee) => {
+    const dropped = fee.status !== 'dropped';
+    const name = `${fee.student.firstName} ${fee.student.lastName}`;
+    const confirmed = await confirmDialog(dropped ? {
+      title: 'Mark as dropped – not paying',
+      message: `${name} has dropped ${fee.course.title}?\n\nThe ${getMonthName(fee.month)} ${fee.year} fee will no longer be owed and is taken off the student and teacher invoices. The enrollment is marked as dropped, and unpaid fees for later months are removed.`,
+      confirmLabel: 'Mark dropped',
+      variant: 'warning',
+    } : {
+      title: 'Undo dropped',
+      message: `Make the ${getMonthName(fee.month)} ${fee.year} ${fee.course.title} fee for ${name} owed again?\n\nThe enrollment stays dropped — reactivate it on the Enrollments page if the student is back.`,
+      confirmLabel: 'Undo',
+      variant: 'info',
+    });
+    if (!confirmed) return;
+    setDroppingId(fee.id);
+    try {
+      const result = await feesApi.setFeeDropped(fee.id, dropped);
+      setFees((all) => all.map((f) => (f.id === fee.id ? { ...f, status: result.status } : f)));
+      toast.success(dropped ? 'Marked as dropped – not paying' : 'Fee is owed again');
+      if (dropped) loadFees(); // later months' unpaid fees may have been removed
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || error.response?.data?.message || 'Failed to update fee');
+    } finally {
+      setDroppingId(null);
     }
   };
 
@@ -124,7 +157,7 @@ export default function Fees() {
 
     // Only allow marking as received for pending/overdue fees (not already received)
     const selectedFees = fees.filter(f => selectedIds.has(f.id));
-    const unpaidFees = selectedFees.filter(f => f.status !== 'received');
+    const unpaidFees = selectedFees.filter(f => f.status !== 'received' && f.status !== 'dropped');
 
     if (unpaidFees.length === 0) {
       toast.error('No unpaid fees selected. Selected fees are already marked as received.');
@@ -199,6 +232,7 @@ export default function Fees() {
       pending: 'bg-yellow-100 text-yellow-800',
       overdue: 'bg-red-100 text-red-800',
       received: 'bg-green-100 text-green-800',
+      dropped: 'bg-gray-200 text-gray-700',
     };
     return classes[status as keyof typeof classes] || 'bg-gray-100 text-gray-800';
   };
@@ -320,6 +354,7 @@ export default function Fees() {
           <option value="pending">Pending</option>
           <option value="overdue">Overdue</option>
           <option value="received">Received</option>
+          <option value="dropped">Dropped – not paying</option>
         </select>
 
         <select
@@ -480,6 +515,9 @@ export default function Fees() {
                   <th onClick={() => requestSort('invoiceSentAt')} className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
                     Invoice Sent {getSortIndicator('invoiceSentAt')}
                   </th>
+                  <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" title="Not paying because the student dropped this subject">
+                    Dropped
+                  </th>
                   <th onClick={() => requestSort('receivedAt')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
                     Received At {getSortIndicator('receivedAt')}
                   </th>
@@ -543,6 +581,16 @@ export default function Fees() {
                         className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:cursor-default"
                       />
                     </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-center">
+                      <input
+                        type="checkbox"
+                        checked={fee.status === 'dropped'}
+                        disabled={!isAdmin || fee.status === 'received' || droppingId === fee.id}
+                        onChange={() => handleToggleDropped(fee)}
+                        title={fee.status === 'received' ? 'Already paid' : 'Tick if not paying because the student dropped this subject'}
+                        className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500 cursor-pointer disabled:cursor-default disabled:opacity-40"
+                      />
+                    </td>
                     <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
                       {fee.receivedAt ? new Date(fee.receivedAt).toLocaleDateString() : '-'}
                     </td>
@@ -560,7 +608,7 @@ export default function Fees() {
                             <PencilSquareIcon className="h-4 w-4" />
                           </button>
                         )}
-                        {fee.status !== 'received' && (
+                        {fee.status !== 'received' && fee.status !== 'dropped' && (
                           <button
                             onClick={() => handleMarkAsReceived(fee)}
                             className="p-1.5 text-green-600 hover:text-green-900 hover:bg-green-50 rounded-lg transition-colors"
@@ -636,6 +684,18 @@ export default function Fees() {
                       <span className="text-gray-900">{new Date(fee.invoiceSentAt).toLocaleDateString()}</span>
                     )}
                   </label>
+                  {fee.status !== 'received' && (
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={fee.status === 'dropped'}
+                        disabled={!isAdmin || droppingId === fee.id}
+                        onChange={() => handleToggleDropped(fee)}
+                        className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500"
+                      />
+                      <span className="text-gray-500">Dropped – not paying</span>
+                    </label>
+                  )}
                   {fee.receivedAt && (
                     <div>
                       <span className="text-gray-500">Received At:</span>
@@ -653,7 +713,7 @@ export default function Fees() {
                     </div>
                   )}
                 </div>
-                {isAdmin && fee.status !== 'received' && (
+                {isAdmin && fee.status !== 'received' && fee.status !== 'dropped' && (
                   <div className="mt-4">
                     <button
                       onClick={() => handleMarkAsReceived(fee)}
@@ -830,6 +890,7 @@ export default function Fees() {
           isBulk={isBulkOperation}
         />
       )}
+      <ConfirmDialog {...dialogProps} />
     </div>
   );
 }

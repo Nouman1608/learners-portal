@@ -55,7 +55,7 @@ export interface Fee {
   amount: string;
   currency: CurrencyCode;
   dueDate: string;
-  status: 'pending' | 'overdue' | 'received';
+  status: 'pending' | 'overdue' | 'received' | 'dropped';
   receivedAt?: string;
   serialNumber?: string;
   invoiceSentAt?: string | null;
@@ -155,7 +155,7 @@ export interface CreateFeeInput {
 }
 
 export interface UpdateFeeStatusInput {
-  status: 'pending' | 'overdue' | 'received';
+  status: 'pending' | 'overdue' | 'received' | 'dropped';
   receivedBy?: string;
 }
 
@@ -290,6 +290,11 @@ export const feesApi = {
 
   setInvoiceSent: async (id: string, sent: boolean): Promise<{ id: string; invoiceSentAt: string | null }> => {
     const response = await apiClient.patch<{ fee: { id: string; invoiceSentAt: string | null } }>(`/fees/${id}/invoice-sent`, { sent });
+    return response.data.fee;
+  },
+
+  setFeeDropped: async (id: string, dropped: boolean): Promise<{ id: string; status: Fee['status'] }> => {
+    const response = await apiClient.patch<{ fee: { id: string; status: Fee['status'] } }>(`/fees/${id}/dropped`, { dropped });
     return response.data.fee;
   },
 

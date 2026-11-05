@@ -22,6 +22,9 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
+// Fees ticked "dropped" on the Fees page are not owed, so no invoice includes them
+const notDropped = sql`${fees.status} <> 'dropped'`;
+
 const pakistanDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' });
 
 /**
@@ -821,11 +824,13 @@ export const invoicesService = {
 
     // Build where conditions for fetching fees.
     // Zero-amount fees are 1-to-1 placeholders (0 sessions) — never invoiced.
+    // Dropped fees (subject dropped, not owed) are left off too.
     const feeWhereConditions = [
       eq(fees.studentId, input.studentId),
       eq(fees.month, input.month),
       eq(fees.year, input.year),
-      sql`${fees.amount}::numeric > 0`
+      sql`${fees.amount}::numeric > 0`,
+      notDropped,
     ];
 
     // If currency is specified, only get fees in that currency
@@ -1141,7 +1146,8 @@ export const invoicesService = {
               and(
                 eq(fees.enrollmentId, enrollment.id),
                 eq(fees.month, input.month),
-                eq(fees.year, input.year)
+                eq(fees.year, input.year),
+                notDropped
               )
             )
             .limit(1);
@@ -1182,6 +1188,7 @@ export const invoicesService = {
                 eq(fees.enrollmentId, enrollment.id),
                 eq(fees.month, input.month),
                 eq(fees.year, input.year),
+                notDropped,
                 eq(fees.isCatchUp, false)
               )
             )
@@ -1243,7 +1250,8 @@ export const invoicesService = {
               and(
                 eq(fees.enrollmentId, enrollment.id),
                 eq(fees.month, input.month),
-                eq(fees.year, input.year)
+                eq(fees.year, input.year),
+                notDropped
               )
             )
             .limit(1);
@@ -1283,6 +1291,7 @@ export const invoicesService = {
                 eq(fees.enrollmentId, enrollment.id),
                 eq(fees.month, input.month),
                 eq(fees.year, input.year),
+                notDropped,
                 eq(fees.isCatchUp, false)
               )
             )

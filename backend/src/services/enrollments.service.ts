@@ -1102,6 +1102,80 @@ export const enrollmentsService = {
     };
   },
 
+  /**
+   * "Dropped – not paying" tick on the Fees page. Ticking marks the fee 'dropped'
+   * (not owed, left off student and teacher invoices) and drops the enrollment
+   * from that month, so later unpaid months are removed. Unticking puts the fee
+   * back to pending; the enrollment stays dropped until reactivated.
+   */
+  async setFeeDropped(feeId: string, dropped: boolean, userId: string) {
+    const [fee] = await db.select().from(fees).where(eq(fees.id, feeId)).limit(1);
+    if (!fee) throw new AppError(404, 'Fee not found');
+    if (fee.status === 'received') {
+      throw new AppError(400, 'This fee has already been paid, so it cannot be marked as dropped');
+    }
+    if (dropped === (fee.status === 'dropped')) return { id: feeId, status: fee.status };
+
+    const status = dropped ? 'dropped' : 'pending';
+    await db.update(fees).set({ status, updatedAt: new Date() }).where(eq(fees.id, feeId));
+    logger.info(`[FEE DROPPED] Fee ${feeId} (${fee.month}/${fee.year}) set to ${status} by ${userId}`);
+
+    const [enrollment] = await db.select({ status: enrollments.status })
+      .from(enrollments).where(eq(enrollments.id, fee.enrollmentId)).limit(1);
+
+    if (dropped && enrollment?.status === 'active') {
+      // Dropped on the 20th keeps this month's fee (on/after-20th rule) but
+      // removes unpaid fees for later months; this also rebuilds the invoices
+      await this.updateEnrollment(fee.enrollmentId, {
+        status: 'dropped',
+        droppedAt: new Date(fee.year, fee.month - 1, 20, 12),
+      }, userId);
+    } else {
+      await this.rebuildInvoicesForFee(fee.studentId, fee.courseId, fee.month, fee.year, userId);
+    }
+    if (!dropped) feesService.syncFeeStatusInBackground(); // overdue again if past its due date
+
+    return { id: feeId, status };
+  },
+
+  /** Rebuild a student's and the course teachers' invoices for one month, if they exist */
+  async rebuildInvoicesForFee(studentId: string, courseId: string, month: number, year: number, userId: string) {
+    const period = (type: 'student' | 'teacher', recipientId: string) => and(
+      eq(invoices.type, type), eq(invoices.recipientId, recipientId),
+      eq(invoices.month, month), eq(invoices.year, year));
+
+    const [studentInvoice] = await db.select({ id: invoices.id }).from(invoices)
+      .where(period('student', studentId)).limit(1);
+    if (studentInvoice) {
+      await db.delete(invoices).where(period('student', studentId));
+      const currencies = await db
+        .selectDistinct({ currency: sql<string>`COALESCE(${fees.currency}, 'PKR')` })
+        .from(fees)
+        .where(and(eq(fees.studentId, studentId), eq(fees.month, month), eq(fees.year, year),
+          sql`${fees.status} <> 'dropped'`, sql`${fees.amount}::numeric > 0`));
+      for (const { currency } of currencies) {
+        try {
+          await invoicesService.generateStudentInvoice({ studentId, month, year, currency, generatedBy: userId });
+        } catch (error: any) {
+          logger.error(`[FEE DROPPED] Failed to rebuild ${currency} student invoice for ${studentId} - ${month}/${year}`, { error: error.message });
+        }
+      }
+    }
+
+    const teachers = await db.select({ teacherId: courseTeachers.teacherId })
+      .from(courseTeachers).where(eq(courseTeachers.courseId, courseId));
+    for (const { teacherId } of teachers) {
+      const [teacherInvoice] = await db.select({ id: invoices.id }).from(invoices)
+        .where(and(period('teacher', teacherId), eq(invoices.isLatest, true))).limit(1);
+      if (!teacherInvoice) continue;
+      try {
+        await invoicesService.generateTeacherInvoice({ teacherId, month, year, generatedBy: userId });
+      } catch (error: any) {
+        logger.error(`[FEE DROPPED] Failed to rebuild teacher invoice for ${teacherId} - ${month}/${year}`, { error: error.message });
+      }
+    }
+  },
+
   async getStudentEnrollments(studentId: string) {
     return this.getEnrollments({ studentId, status: 'active' });
   },

@@ -1,6 +1,6 @@
 import { db } from '../config/database';
 import { fees, enrollments, users, courses, payments, courseEvents, courseTeachers, invoices, feeInvoiceSent } from '../db/schema';
-import { eq, and, desc, sql, lte, gte, ne, inArray } from 'drizzle-orm';
+import { eq, and, desc, sql, lte, gte, ne, inArray, notInArray } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
 
@@ -479,10 +479,11 @@ export const feesService = {
       )
       .limit(1);
 
-    // Never touch received fees, and never clobber an admin-set session count —
-    // the daily cron otherwise keeps the fee in sync with completed sessions
+    // Never touch received or dropped fees, and never clobber an admin-set session
+    // count — the daily cron otherwise keeps the fee in sync with completed sessions
     const existingFee = existing[0];
-    if (existingFee && (existingFee.status === 'received' || existingFee.feeNotes?.includes('admin override'))) {
+    if (existingFee && (existingFee.status === 'received' || existingFee.status === 'dropped' ||
+        existingFee.feeNotes?.includes('admin override'))) {
       return { created: false, count: 0 };
     }
 
@@ -790,7 +791,7 @@ export const feesService = {
                 eq(fees.enrollmentId, enrollment.id),
                 eq(fees.month, billingMonth),
                 eq(fees.year, billingYear),
-                ne(fees.status, 'received')
+                notInArray(fees.status, ['received', 'dropped'])
               )
             );
         }
@@ -826,7 +827,7 @@ export const feesService = {
               eq(fees.enrollmentId, enrollment.id),
               eq(fees.month, billingMonth),
               eq(fees.year, billingYear),
-              ne(fees.status, 'received')
+              notInArray(fees.status, ['received', 'dropped'])
             )
           );
         return {
@@ -873,7 +874,7 @@ export const feesService = {
             eq(fees.month, billingMonth),
             eq(fees.year, billingYear),
             eq(fees.isCatchUp, true),
-            ne(fees.status, 'received')
+            notInArray(fees.status, ['received', 'dropped'])
           )
         );
     }

@@ -134,7 +134,7 @@ export const studentPortalService = {
         })
         .from(fees)
         .leftJoin(payments, eq(fees.id, payments.feeId))
-        .where(eq(fees.studentId, studentId));
+        .where(and(eq(fees.studentId, studentId), sql`${fees.status} <> 'dropped'`));
 
       const totalOutstanding = feesSummary[0].totalFees - feesSummary[0].totalPaid;
 

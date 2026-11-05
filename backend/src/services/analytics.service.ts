@@ -319,7 +319,8 @@ export const analyticsService = {
         .where(
           and(
             gte(fees.dueDate, startDate.toISOString().split('T')[0]),
-            lte(fees.dueDate, endDate.toISOString().split('T')[0])
+            lte(fees.dueDate, endDate.toISOString().split('T')[0]),
+            sql`${fees.status} <> 'dropped'` // subject dropped: never owed, so not billed
           )
         )
         .groupBy(fees.currency);

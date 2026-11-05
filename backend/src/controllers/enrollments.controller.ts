@@ -294,6 +294,18 @@ export const setFeeInvoiceSent = async (req: Request, res: Response, next: NextF
   }
 };
 
+const setFeeDroppedSchema = z.object({ dropped: z.boolean() });
+
+export const setFeeDropped = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { dropped } = setFeeDroppedSchema.parse(req.body);
+    const fee = await enrollmentsService.setFeeDropped(req.params.id, dropped, req.user!.id);
+    res.json({ fee });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const markFeeAsReceived = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const validated = markAsReceivedSchema.parse(req.body);
