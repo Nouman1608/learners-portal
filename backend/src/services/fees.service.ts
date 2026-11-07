@@ -5,6 +5,18 @@ import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
 import { feeInBooks } from '../utils/booksStart';
 
+const pakistanDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' });
+
+/**
+ * Fees fall due on the enrollment's day of the month (Pakistan time); a 29th-31st
+ * enrollment falls due on the last day of shorter months. No enrollment date → the 10th.
+ */
+export function feeDueDate(enrolledAt: Date | string | null | undefined, month: number, year: number): string {
+  const day = enrolledAt ? Number(pakistanDay.format(new Date(enrolledAt)).slice(8, 10)) : 10;
+  const lastDay = new Date(year, month, 0).getDate();
+  return `${year}-${String(month).padStart(2, '0')}-${String(Math.min(day, lastDay)).padStart(2, '0')}`;
+}
+
 export interface CreateFeeInput {
   enrollmentId: string;
   month: number; // 1-12
@@ -412,10 +424,9 @@ export const feesService = {
     let usageFeesCreated = 0;
     const skippedEnrollments: string[] = [];
 
-    const dueDate = new Date(year, month - 1, 10).toISOString().split('T')[0];
-
     for (const enrollment of activeEnrollments) {
       try {
+        const dueDate = feeDueDate(enrollment.enrolledAt, month, year);
         const is1to1 = enrollment.classType === '1-to-1';
 
         if (is1to1) {
@@ -569,6 +580,7 @@ export const feesService = {
           billingPeriodStart: periodStart,
           billingPeriodEnd: periodEnd,
           feeNotes: `1-to-1 class: ${sessionCount} session(s) × ${currency} ${perSessionFee.toFixed(2)}`,
+          dueDate,
           updatedAt: new Date(),
         })
         .where(eq(fees.id, existingFee.id));
@@ -903,6 +915,7 @@ export const feesService = {
               currency: currency,
               billingType: 'monthly',
               feeNotes: feeNotes,
+              dueDate,
               updatedAt: new Date(),
             })
             .where(eq(fees.id, existing[0].id));

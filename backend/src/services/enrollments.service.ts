@@ -4,7 +4,7 @@ import { eq, and, desc, inArray, sql } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
 import leadsService from './leads.service';
-import { feesService } from './fees.service';
+import { feesService, feeDueDate } from './fees.service';
 import { invoicesService } from './invoices.service';
 
 export type CurrencyCode = 'PKR' | 'USD' | 'GBP' | 'SAR';
@@ -158,7 +158,7 @@ export const enrollmentsService = {
       // catch-up — those are still used to gate the *teacher's* payout, one
       // month later than the child's bill when they joined on/after the
       // 20th; see feesService.shouldGenerateFeeForMonth).
-      const dueDate = new Date(feeYear, feeMonth - 1, 10);
+      const dueDate = feeDueDate(effectiveEnrolledAt, feeMonth, feeYear);
 
       await db.insert(fees).values({
         enrollmentId: newEnrollment.id,
@@ -168,7 +168,7 @@ export const enrollmentsService = {
         year: feeYear,
         amount: feeAmount,
         currency, // Use the same currency as enrollment
-        dueDate: dueDate.toISOString().split('T')[0],
+        dueDate,
         status: 'pending',
         feeNotes,
       });
@@ -191,7 +191,7 @@ export const enrollmentsService = {
         year: feeYear,
         amount: '0.00',
         currency,
-        dueDate: new Date(feeYear, feeMonth - 1, 10).toISOString().split('T')[0],
+        dueDate: feeDueDate(effectiveEnrolledAt, feeMonth, feeYear),
         status: 'pending',
         billingType: 'usage',
         sessionCount: 0,
@@ -775,7 +775,7 @@ export const enrollmentsService = {
             year: firstYear,
             amount: firstMonthAmount,
             currency: currency || updatedEnrollment.currency || 'PKR',
-            dueDate: new Date(firstYear, firstMonth - 1, 10).toISOString().split('T')[0],
+            dueDate: feeDueDate(updatedEnrollment.enrolledAt, firstMonth, firstYear),
             status: 'pending',
             billingType: 'monthly',
             isCatchUp: false,
