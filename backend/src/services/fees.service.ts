@@ -514,6 +514,19 @@ export const feesService = {
       }
     }
 
+    // Dropped: no fee for any month after the drop month (the drop month itself is
+    // still billed by sessions taken). Unpaid fees left there are removed.
+    if (enrollment.status === 'dropped' && enrollment.droppedAt) {
+      const droppedAt = new Date(enrollment.droppedAt);
+      if (year * 12 + month > droppedAt.getFullYear() * 12 + droppedAt.getMonth() + 1) {
+        if (existingFee) {
+          await db.delete(fees).where(eq(fees.id, existingFee.id));
+          logger.info(`[FEES] Removed 1-to-1 fee for dropped enrollment ${enrollment.id} (${month}/${year})`);
+        }
+        return { created: false, count: 0 };
+      }
+    }
+
     // Calculate billing period (1st to last day of month)
     const periodStart = new Date(year, month - 1, 1).toISOString().split('T')[0];
     const periodEnd = new Date(year, month, 0).toISOString().split('T')[0];
