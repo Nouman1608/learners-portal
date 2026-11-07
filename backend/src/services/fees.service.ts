@@ -3,6 +3,7 @@ import { fees, enrollments, users, courses, payments, courseEvents, courseTeache
 import { eq, and, desc, sql, lte, gte, ne, inArray, notInArray } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
+import { feeInBooks } from '../utils/booksStart';
 
 export interface CreateFeeInput {
   enrollmentId: string;
@@ -129,7 +130,8 @@ export const feesService = {
       .innerJoin(courses, eq(fees.courseId, courses.id))
       .leftJoin(feeInvoiceSent, eq(feeInvoiceSent.feeId, fees.id));
 
-    const conditions = [];
+    // Fees for months before the books start (BOOKS_START) are not listed
+    const conditions = [feeInBooks()];
     if (filters?.studentId) {
       conditions.push(eq(fees.studentId, filters.studentId));
     }
@@ -146,9 +148,7 @@ export const feesService = {
       conditions.push(eq(fees.year, filters.year));
     }
 
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions)) as any;
-    }
+    query = query.where(and(...conditions)) as any;
 
     const allFees = await query.orderBy(desc(fees.year), desc(fees.month));
     return allFees;

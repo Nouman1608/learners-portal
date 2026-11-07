@@ -28,6 +28,9 @@ const envSchema = z.object({
   HANDOFF_TARGET_URL: z.string().url().optional().or(z.literal('')),
   // Name shown in emails; the Junior Campus instance sets "Learners Preschool".
   SCHOOL_NAME: z.string().default('Learners Academy'),
+  // First month the portal's books cover (YYYY-MM). Money pages ignore fees for earlier
+  // months and the payments made against them. Unset = no cut-off.
+  BOOKS_START: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional().or(z.literal('')),
   UPLOAD_DIR: z.string().default('./uploads'),
   MAX_FILE_SIZE: z.string().default('5242880'),
   RATE_LIMIT_WINDOW_MS: z.string().default('60000'),

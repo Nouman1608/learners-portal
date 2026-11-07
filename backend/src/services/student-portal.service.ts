@@ -7,6 +7,7 @@ import { attendanceRecords } from '../db/schema/attendance';
 import { eq, and, sql, desc } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
+import { feeInBooks } from '../utils/booksStart';
 
 /**
  * Student Portal Service
@@ -134,7 +135,7 @@ export const studentPortalService = {
         })
         .from(fees)
         .leftJoin(payments, eq(fees.id, payments.feeId))
-        .where(and(eq(fees.studentId, studentId), sql`${fees.status} <> 'dropped'`));
+        .where(and(eq(fees.studentId, studentId), sql`${fees.status} <> 'dropped'`, feeInBooks()));
 
       const totalOutstanding = feesSummary[0].totalFees - feesSummary[0].totalPaid;
 
@@ -281,7 +282,7 @@ export const studentPortalService = {
         .from(fees)
         .innerJoin(courses, eq(fees.courseId, courses.id))
         
-        .where(eq(fees.studentId, studentId))
+        .where(and(eq(fees.studentId, studentId), feeInBooks()))
         .groupBy(fees.id, courses.title, courses.subject)
         .orderBy(desc(fees.year), desc(fees.month));
 

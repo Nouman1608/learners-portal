@@ -11,6 +11,7 @@ import { eq, and, gte, lte, sql, desc, SQL } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler';
 import { currencyService, CurrencyCode } from './currency.service';
 import logger from '../utils/logger';
+import { feeInBooks } from '../utils/booksStart';
 
 /**
  * Analytics Service
@@ -88,7 +89,8 @@ export const analyticsService = {
         .where(
           and(
             gte(payments.paymentDate, startDate),
-            lte(payments.paymentDate, endDate)
+            lte(payments.paymentDate, endDate),
+            feeInBooks(this.db)
           )
         )
         .groupBy(periodExpr, fees.currency)
@@ -145,7 +147,8 @@ export const analyticsService = {
         .where(
           and(
             gte(payments.paymentDate, startDate),
-            lte(payments.paymentDate, endDate)
+            lte(payments.paymentDate, endDate),
+            feeInBooks(this.db)
           )
         )
         .groupBy(payments.paymentMethod, fees.currency);
@@ -206,7 +209,7 @@ export const analyticsService = {
           amountPKR: sumInPkr(fees.amount, fees.currency),
         })
         .from(fees)
-        .where(sql`${fees.status} IN ('pending', 'overdue')`)
+        .where(and(sql`${fees.status} IN ('pending', 'overdue')`, feeInBooks(this.db)))
         .groupBy(bucket, fees.currency);
 
       const buckets = new Map<string, {
@@ -261,7 +264,8 @@ export const analyticsService = {
         .where(
           and(
             gte(payments.paymentDate, startDate),
-            lte(payments.paymentDate, endDate)
+            lte(payments.paymentDate, endDate),
+            feeInBooks(this.db)
           )
         )
         .groupBy(fees.courseId, courses.title, fees.currency);
@@ -320,7 +324,8 @@ export const analyticsService = {
           and(
             gte(fees.dueDate, startDate.toISOString().split('T')[0]),
             lte(fees.dueDate, endDate.toISOString().split('T')[0]),
-            sql`${fees.status} <> 'dropped'` // subject dropped: never owed, so not billed
+            sql`${fees.status} <> 'dropped'`, // subject dropped: never owed, so not billed
+            feeInBooks(this.db)
           )
         )
         .groupBy(fees.currency);
@@ -375,7 +380,8 @@ export const analyticsService = {
         .where(
           and(
             gte(payments.paymentDate, startDate),
-            lte(payments.paymentDate, endDate)
+            lte(payments.paymentDate, endDate),
+            feeInBooks(this.db)
           )
         )
         .groupBy(fees.courseId, courses.title);
@@ -633,7 +639,7 @@ export const analyticsService = {
             overduePKR: sumInPkr(fees.amount, fees.currency),
           })
           .from(fees)
-          .where(sql`${fees.status} IN ('pending', 'overdue') AND ${fees.dueDate} < CURRENT_DATE`)
+          .where(and(sql`${fees.status} IN ('pending', 'overdue') AND ${fees.dueDate} < CURRENT_DATE`, feeInBooks(this.db)))
           .groupBy(fees.studentId),
 
         this.db

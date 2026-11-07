@@ -3,6 +3,7 @@ import { payments, fees, users } from '../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler';
 import { feesService } from './fees.service';
+import { feeInBooks } from '../utils/booksStart';
 
 export interface CreatePaymentInput {
   feeId: string;
@@ -82,7 +83,8 @@ export const paymentsService = {
       .innerJoin(users, eq(payments.studentId, users.id))
       .innerJoin(fees, eq(payments.feeId, fees.id));
 
-    const conditions = [];
+    // Payments against fees before the books start (BOOKS_START) are not listed
+    const conditions = [feeInBooks()];
     if (filters?.studentId) {
       conditions.push(eq(payments.studentId, filters.studentId));
     }
@@ -90,9 +92,7 @@ export const paymentsService = {
       conditions.push(eq(payments.feeId, filters.feeId));
     }
 
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions)) as any;
-    }
+    query = query.where(and(...conditions)) as any;
 
     const allPayments = await query.orderBy(desc(payments.createdAt));
     return allPayments;

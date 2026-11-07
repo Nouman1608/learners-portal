@@ -4,6 +4,7 @@ import { courses, courseEvents } from '../db/schema/courses';
 import { enrollments, fees } from '../db/schema/enrollments';
 import { eq, and, gte, sql } from 'drizzle-orm';
 import { format } from 'date-fns';
+import { feeInBooks } from '../utils/booksStart';
 
 const formatDate = (date: Date): string => format(date, 'yyyy-MM-dd');
 
@@ -95,7 +96,7 @@ export const dashboardService = {
     const [pendingFeesResult] = await database
       .select({ count: sql<number>`count(*)::int` })
       .from(fees)
-      .where(eq(fees.status, 'pending'));
+      .where(and(eq(fees.status, 'pending'), feeInBooks(database)));
 
     const pendingFees = pendingFeesResult?.count || 0;
 
@@ -103,7 +104,7 @@ export const dashboardService = {
     const [totalFeeAmountResult] = await database
       .select({ sum: sql<string>`COALESCE(SUM(amount::numeric), 0)` })
       .from(fees)
-      .where(sql`${fees.status} IN ('pending', 'overdue')`);
+      .where(and(sql`${fees.status} IN ('pending', 'overdue')`, feeInBooks(database)));
 
     const totalFeeAmount = totalFeeAmountResult?.sum || '0';
 
@@ -114,7 +115,7 @@ export const dashboardService = {
         amount: sql<string>`COALESCE(SUM(amount::numeric), 0)`,
       })
       .from(fees)
-      .where(sql`${fees.status} IN ('pending', 'overdue')`)
+      .where(and(sql`${fees.status} IN ('pending', 'overdue')`, feeInBooks(database)))
       .groupBy(sql`COALESCE(${fees.currency}, 'PKR')`);
 
     const totalFeesByCurrency: CurrencyAmount[] = totalFeesByCurrencyResult.map(row => ({
@@ -263,7 +264,7 @@ export const dashboardService = {
     const [myPendingFeesResult] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(fees)
-      .where(and(eq(fees.studentId, studentId), sql`${fees.status} IN ('pending', 'overdue')`));
+      .where(and(eq(fees.studentId, studentId), sql`${fees.status} IN ('pending', 'overdue')`, feeInBooks()));
 
     const myPendingFees = myPendingFeesResult?.count || 0;
 
@@ -271,7 +272,7 @@ export const dashboardService = {
     const [myTotalDueResult] = await db
       .select({ sum: sql<string>`COALESCE(SUM(amount::numeric), 0)` })
       .from(fees)
-      .where(and(eq(fees.studentId, studentId), sql`${fees.status} IN ('pending', 'overdue')`));
+      .where(and(eq(fees.studentId, studentId), sql`${fees.status} IN ('pending', 'overdue')`, feeInBooks()));
 
     const myTotalDue = myTotalDueResult?.sum || '0';
 
@@ -282,7 +283,7 @@ export const dashboardService = {
         amount: sql<string>`COALESCE(SUM(amount::numeric), 0)`,
       })
       .from(fees)
-      .where(and(eq(fees.studentId, studentId), sql`${fees.status} IN ('pending', 'overdue')`))
+      .where(and(eq(fees.studentId, studentId), sql`${fees.status} IN ('pending', 'overdue')`, feeInBooks()))
       .groupBy(sql`COALESCE(${fees.currency}, 'PKR')`);
 
     const myTotalDueByCurrency: CurrencyAmount[] = myTotalDueByCurrencyResult.map(row => ({

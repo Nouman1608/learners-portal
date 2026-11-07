@@ -4,6 +4,7 @@ import { users } from '../db/schema/users';
 import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler';
 import { pkrRateExpr } from './analytics.service';
+import { feeInBooks } from '../utils/booksStart';
 
 export type Campus = 'senior' | 'junior' | 'both';
 
@@ -46,7 +47,7 @@ async function summaryFor(database: Database, year: number): Promise<MonthSummar
     select f.month as month,
            coalesce(sum(p.amount::numeric * ${pkrRateExpr(sql`f.currency`)}), 0)::float as pkr
     from payments p join fees f on f.id = p.fee_id
-    where f.year = ${year}
+    where f.year = ${year} and ${feeInBooks(database, sql`f.year`, sql`f.month`)}
     group by 1`);
   for (const r of income.rows as any[]) months[r.month - 1].incomePKR = r.pkr;
 
