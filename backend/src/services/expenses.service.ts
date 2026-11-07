@@ -4,7 +4,7 @@ import { users } from '../db/schema/users';
 import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler';
 import { pkrRateExpr } from './analytics.service';
-import { feeInBooks } from '../utils/booksStart';
+import { feeInBooks, booksStartDate } from '../utils/booksStart';
 
 export type Campus = 'senior' | 'junior' | 'both';
 
@@ -54,6 +54,7 @@ async function summaryFor(database: Database, year: number): Promise<MonthSummar
   const teacherPay = await database.execute(sql`
     select month, coalesce(sum(total_amount::numeric * ${pkrRateExpr(sql`currency`)}), 0)::float as pkr
     from invoices where type = 'teacher' and is_latest and year = ${year}
+      and ${feeInBooks(database, sql`year`, sql`month`)}
     group by 1`);
   for (const r of teacherPay.rows as any[]) months[r.month - 1].teacherPayPKR = r.pkr;
 
@@ -61,6 +62,7 @@ async function summaryFor(database: Database, year: number): Promise<MonthSummar
     select extract(month from expense_date)::int as month, category,
            coalesce(sum(amount::numeric * ${pkrRateExpr(sql`currency`)}), 0)::float as pkr
     from expenses where extract(year from expense_date) = ${year}
+      and ${feeInBooks(database, sql`extract(year from expense_date)`, sql`extract(month from expense_date)`)}
     group by 1, 2`);
   for (const r of spent.rows as any[]) {
     const m = months[r.month - 1];
@@ -91,6 +93,8 @@ export const expensesService = {
         .leftJoin(users, eq(users.id, expenses.createdBy))
         .where(and(
           gte(expenses.expenseDate, startDate),
+          // Expenses before the books start (BOOKS_START) are not shown
+          gte(expenses.expenseDate, booksStartDate(database) ?? startDate),
           lte(expenses.expenseDate, endDate),
           category ? eq(expenses.category, category) : undefined,
         ))
