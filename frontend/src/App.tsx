@@ -99,7 +99,7 @@ function App() {
           <Route
             path="/expenses"
             element={
-              <ProtectedRoute allowedRoles={['sudo']}>
+              <ProtectedRoute allowedRoles={['sudo', 'admin']}>
                 <Layout>
                   <Expenses />
                 </Layout>

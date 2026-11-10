@@ -33,11 +33,12 @@ const summarySchema = z.object({
   campus: campusSchema,
 });
 
-/** GET /api/expenses?startDate&endDate&category&campus - sudo */
+/** GET /api/expenses?startDate&endDate&category&campus - admins see their own campus only */
 export const listExpenses = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const q = listSchema.parse(req.query);
-    const expenses = await expensesService.list((q.campus || 'senior') as Campus, q.startDate, q.endDate, q.category);
+    const campus = req.user!.role === 'sudo' ? (q.campus || 'senior') : 'senior'; // 'senior' = this portal's own database
+    const expenses = await expensesService.list(campus as Campus, q.startDate, q.endDate, q.category);
     res.json({ expenses });
   } catch (error) {
     next(error);
@@ -55,7 +56,7 @@ export const getSummary = async (req: Request, res: Response, next: NextFunction
   }
 };
 
-/** POST /api/expenses - sudo */
+/** POST /api/expenses - admin or sudo */
 export const createExpense = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = expenseSchema.parse(req.body);
@@ -66,21 +67,21 @@ export const createExpense = async (req: Request, res: Response, next: NextFunct
   }
 };
 
-/** PUT /api/expenses/:id - sudo */
+/** PUT /api/expenses/:id - sudo, or the admin who entered it */
 export const updateExpense = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = expenseSchema.partial().parse(req.body);
-    const expense = await expensesService.update(req.params.id, input);
+    const expense = await expensesService.update(req.params.id, input, req.user!);
     res.json({ expense });
   } catch (error) {
     next(error);
   }
 };
 
-/** DELETE /api/expenses/:id - sudo */
+/** DELETE /api/expenses/:id - sudo, or the admin who entered it */
 export const deleteExpense = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await expensesService.remove(req.params.id);
+    await expensesService.remove(req.params.id, req.user!);
     res.json({ message: 'Expense deleted' });
   } catch (error) {
     next(error);

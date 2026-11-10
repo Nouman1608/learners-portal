@@ -27,6 +27,7 @@ export interface Expense {
   paymentMethod: string | null;
   notes: string | null;
   createdAt: string;
+  createdBy: string | null;
   createdByName: string | null;
   campus: 'senior' | 'junior';
 }

@@ -8,6 +8,20 @@ import { feeInBooks, booksStartDate } from '../utils/booksStart';
 
 export type Campus = 'senior' | 'junior' | 'both';
 
+/** Who is changing an expense: admins may only change the ones they entered */
+export interface ExpenseActor {
+  id: string;
+  role: string;
+}
+
+async function assertCanChange(id: string, actor: ExpenseActor) {
+  const [row] = await db.select({ createdBy: expenses.createdBy }).from(expenses).where(eq(expenses.id, id)).limit(1);
+  if (!row) throw new AppError(404, 'Expense not found');
+  if (actor.role !== 'sudo' && row.createdBy !== actor.id) {
+    throw new AppError(403, 'You can only change expenses you entered');
+  }
+}
+
 export interface ExpenseInput {
   expenseDate: string; // YYYY-MM-DD
   category: ExpenseCategory;
@@ -87,6 +101,7 @@ export const expensesService = {
           paymentMethod: expenses.paymentMethod,
           notes: expenses.notes,
           createdAt: expenses.createdAt,
+          createdBy: expenses.createdBy,
           createdByName: sql<string | null>`trim(${users.firstName} || ' ' || ${users.lastName})`,
         })
         .from(expenses)
@@ -136,7 +151,8 @@ export const expensesService = {
     return row;
   },
 
-  async update(id: string, input: Partial<ExpenseInput>) {
+  async update(id: string, input: Partial<ExpenseInput>, actor: ExpenseActor) {
+    await assertCanChange(id, actor);
     const [row] = await db.update(expenses).set({
       ...(input.expenseDate !== undefined && { expenseDate: input.expenseDate }),
       ...(input.category !== undefined && { category: input.category }),
@@ -152,7 +168,8 @@ export const expensesService = {
     return row;
   },
 
-  async remove(id: string) {
+  async remove(id: string, actor: ExpenseActor) {
+    await assertCanChange(id, actor);
     const [row] = await db.delete(expenses).where(eq(expenses.id, id)).returning({ id: expenses.id });
     if (!row) throw new AppError(404, 'Expense not found');
   },

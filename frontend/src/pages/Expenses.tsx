@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { PlusIcon, PencilIcon, TrashIcon, BanknotesIcon } from '@heroicons/react/24/outline';
 import { expensesApi, Expense, ExpenseInput, ExpenseCampus, MonthSummary, EXPENSE_CATEGORIES } from '../api/expenses.api';
 import { brand } from '../brand';
+import { useAuth } from '../context/AuthContext';
 import EmptyState from '../components/common/EmptyState';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
@@ -43,9 +44,13 @@ const Expenses: React.FC = () => {
   const [form, setForm] = useState<ExpenseInput>(emptyForm());
   const [saving, setSaving] = useState(false);
   const { confirm: confirmDialog, dialogProps } = useConfirmDialog();
+  const { user } = useAuth();
+  // Admins enter expenses and see the list; the income vs expenses summary is sudo only
+  const isSudo = user?.role === 'sudo';
+  const canChange = (e: Expense) => isSudo || e.createdBy === user?.id;
 
   // Sudo on the Senior portal can also read the Junior Campus; entries are added on each campus's own portal.
-  const canSwitchCampus = brand.campus === 'senior';
+  const canSwitchCampus = isSudo && brand.campus === 'senior';
   const readOnly = campus !== 'senior';
 
   const load = useCallback(async () => {
@@ -55,7 +60,7 @@ const Expenses: React.FC = () => {
       const end = month ? `${year}-${pad(month)}-${lastDay(year, month)}` : `${year}-12-31`;
       const [list, months] = await Promise.all([
         expensesApi.list(start, end, campus, category || undefined),
-        expensesApi.summary(year, campus),
+        isSudo ? expensesApi.summary(year, campus) : Promise.resolve([] as MonthSummary[]),
       ]);
       setExpenses(list);
       setSummary(months);
@@ -64,7 +69,7 @@ const Expenses: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [year, month, category, campus]);
+  }, [year, month, category, campus, isSudo]);
 
   useEffect(() => {
     load();
@@ -155,7 +160,11 @@ const Expenses: React.FC = () => {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Expenses</h1>
-          <p className="text-sm text-gray-500">Rent, utilities, salaries and other costs – against the fees received. Only you (sudo) can see this.</p>
+          <p className="text-sm text-gray-500">
+            {isSudo
+              ? 'Rent, utilities, salaries and other costs – against the fees received. Admins can add expenses; only you (sudo) see the totals.'
+              : 'Enter rent, utilities, salaries and other costs here. You can edit or delete the expenses you entered.'}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canSwitchCampus && (
@@ -202,7 +211,8 @@ const Expenses: React.FC = () => {
         </select>
       </div>
 
-      {/* Totals for the period (PKR) */}
+      {/* Totals for the period (PKR) - sudo only */}
+      {isSudo && (<>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
           ['Fees received', period.incomePKR, 'text-green-700'],
@@ -225,6 +235,8 @@ const Expenses: React.FC = () => {
         </div>
       )}
 
+      </>)}
+
       {/* Expenses list */}
       <div className="overflow-x-auto rounded-lg bg-white shadow">
         {loading ? (
@@ -242,6 +254,7 @@ const Expenses: React.FC = () => {
                 <th className="px-4 py-3">Paid to</th>
                 <th className="px-4 py-3 text-right">Amount</th>
                 <th className="px-4 py-3">Paid by</th>
+                <th className="px-4 py-3">Entered by</th>
                 {!readOnly && <th className="px-4 py-3" />}
               </tr>
             </thead>
@@ -258,10 +271,13 @@ const Expenses: React.FC = () => {
                   <td className="px-4 py-3">{e.paidTo || '–'}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-right font-medium">{e.currency} {Number(e.amount).toLocaleString()}</td>
                   <td className="px-4 py-3">{methodLabel(e.paymentMethod)}</td>
+                  <td className="px-4 py-3 text-gray-600">{e.createdByName || '–'}</td>
                   {!readOnly && (
                     <td className="whitespace-nowrap px-4 py-3 text-right">
+                      {canChange(e) && (<>
                       <button onClick={() => openEdit(e)} className="p-1 text-gray-500 hover:text-indigo-600" title="Edit"><PencilIcon className="h-4 w-4" /></button>
                       <button onClick={() => remove(e)} className="p-1 text-gray-500 hover:text-red-600" title="Delete"><TrashIcon className="h-4 w-4" /></button>
+                      </>)}
                     </td>
                   )}
                 </tr>
@@ -271,7 +287,8 @@ const Expenses: React.FC = () => {
         )}
       </div>
 
-      {/* Month by month for the year */}
+      {/* Month by month for the year - sudo only */}
+      {isSudo && (
       <div className="overflow-x-auto rounded-lg bg-white shadow">
         <h2 className="px-4 pt-4 text-base font-semibold text-gray-900">{year} month by month (PKR)</h2>
         <table className="mt-2 min-w-full divide-y divide-gray-200 text-sm">
@@ -301,6 +318,7 @@ const Expenses: React.FC = () => {
           Other currencies are converted to PKR at the portal's rates.
         </p>
       </div>
+      )}
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
