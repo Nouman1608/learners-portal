@@ -624,17 +624,19 @@ export default function Fees() {
                     </td>
                     {isAdmin && (
                       <td className="px-3 py-2 text-sm">
-                        <button
-                          onClick={() => handleEditNote(fee)}
-                          title={fee.adminNote || 'Add a note'}
-                          className="flex items-center gap-1 max-w-[12rem] text-left text-gray-700 hover:text-indigo-700"
-                        >
-                          {fee.adminNote ? (
-                            <span className="truncate">{fee.adminNote}</span>
-                          ) : (
-                            <span className="text-gray-400">+ Add</span>
-                          )}
-                        </button>
+                        <div className="flex items-center gap-2 max-w-[14rem]">
+                          <span className={`truncate ${fee.adminNote ? 'text-gray-700' : 'text-gray-400'}`} title={fee.adminNote || undefined}>
+                            {fee.adminNote || '—'}
+                          </span>
+                          <button
+                            onClick={() => handleEditNote(fee)}
+                            title={fee.adminNote ? 'Edit note' : 'Add a note'}
+                            aria-label={fee.adminNote ? 'Edit note' : 'Add a note'}
+                            className="shrink-0 p-1 text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 rounded-lg transition-colors"
+                          >
+                            <PencilSquareIcon className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     )}
                     <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
@@ -743,12 +745,21 @@ export default function Fees() {
                     </label>
                   )}
                   {isAdmin && (
-                    <button onClick={() => handleEditNote(fee)} className="block w-full text-left">
-                      <span className="text-gray-500">Notes:</span>
-                      <span className={`ml-1 whitespace-pre-wrap ${fee.adminNote ? 'text-gray-900' : 'text-gray-400'}`}>
-                        {fee.adminNote || '+ Add'}
-                      </span>
-                    </button>
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1">
+                        <span className="text-gray-500">Notes:</span>
+                        <span className={`ml-1 whitespace-pre-wrap ${fee.adminNote ? 'text-gray-900' : 'text-gray-400'}`}>
+                          {fee.adminNote || '—'}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleEditNote(fee)}
+                        aria-label={fee.adminNote ? 'Edit note' : 'Add a note'}
+                        className="shrink-0 p-1 text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 rounded-lg"
+                      >
+                        <PencilSquareIcon className="h-4 w-4" />
+                      </button>
+                    </div>
                   )}
                   {fee.receivedAt && (
                     <div>
