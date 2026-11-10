@@ -19,6 +19,7 @@ router.post('/generate/manual', requireAdmin, logActivity('generate-fees-manual'
 router.patch('/:id/status', requireAdmin, logActivity('update-fee-status', 'fee'), enrollmentsController.updateFeeStatus);
 router.patch('/:id/sessions', requireAdmin, logActivity('update-fee-sessions', 'fee'), enrollmentsController.updateFeeSessions);
 router.patch('/:id/invoice-sent', requireAdmin, logActivity('invoice-sent', 'fee'), enrollmentsController.setFeeInvoiceSent);
+router.patch('/:id/note', requireAdmin, logActivity('fee-note', 'fee'), enrollmentsController.setFeeNote);
 router.patch('/:id/dropped', requireAdmin, logActivity('fee-dropped', 'fee'), enrollmentsController.setFeeDropped);
 router.patch('/:id/received', requireAdmin, logActivity('mark-received', 'fee'), enrollmentsController.markFeeAsReceived);
 

@@ -1,5 +1,5 @@
 import { db } from '../config/database';
-import { fees, enrollments, users, courses, payments, courseEvents, courseTeachers, invoices, feeInvoiceSent } from '../db/schema';
+import { fees, enrollments, users, courses, payments, courseEvents, courseTeachers, invoices, feeInvoiceSent, feeAdminNotes } from '../db/schema';
 import { eq, and, desc, sql, lte, gte, ne, inArray, notInArray } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
@@ -118,6 +118,7 @@ export const feesService = {
         receivedAt: fees.receivedAt,
         serialNumber: fees.serialNumber,
         invoiceSentAt: feeInvoiceSent.sentAt,
+        adminNote: feeAdminNotes.note,
         billingType: fees.billingType,
         isCatchUp: fees.isCatchUp,
         feeNotes: fees.feeNotes,
@@ -140,7 +141,8 @@ export const feesService = {
       .from(fees)
       .innerJoin(users, eq(fees.studentId, users.id))
       .innerJoin(courses, eq(fees.courseId, courses.id))
-      .leftJoin(feeInvoiceSent, eq(feeInvoiceSent.feeId, fees.id));
+      .leftJoin(feeInvoiceSent, eq(feeInvoiceSent.feeId, fees.id))
+      .leftJoin(feeAdminNotes, eq(feeAdminNotes.feeId, fees.id));
 
     // Fees for months before the books start (BOOKS_START) are not listed
     const conditions = [feeInBooks()];
@@ -182,6 +184,7 @@ export const feesService = {
         receivedAt: fees.receivedAt,
         serialNumber: fees.serialNumber,
         invoiceSentAt: feeInvoiceSent.sentAt,
+        adminNote: feeAdminNotes.note,
         billingType: fees.billingType,
         isCatchUp: fees.isCatchUp,
         feeNotes: fees.feeNotes,
@@ -205,6 +208,7 @@ export const feesService = {
       .innerJoin(users, eq(fees.studentId, users.id))
       .innerJoin(courses, eq(fees.courseId, courses.id))
       .leftJoin(feeInvoiceSent, eq(feeInvoiceSent.feeId, fees.id))
+      .leftJoin(feeAdminNotes, eq(feeAdminNotes.feeId, fees.id))
       .where(eq(fees.id, feeId))
       .limit(1);
 
@@ -282,6 +286,26 @@ export const feesService = {
       .values({ feeId, sentAt, sentBy: userId })
       .onConflictDoUpdate({ target: feeInvoiceSent.feeId, set: { sentAt, sentBy: userId } });
     return { id: feeId, invoiceSentAt: sentAt };
+  },
+
+  /** Admin note on a fee (Notes on the Fees page). An empty note removes it. */
+  async setAdminNote(feeId: string, note: string, userId: string) {
+    const [fee] = await db.select({ id: fees.id }).from(fees).where(eq(fees.id, feeId)).limit(1);
+    if (!fee) {
+      throw new AppError(404, 'Fee not found');
+    }
+
+    const text = note.trim();
+    if (!text) {
+      await db.delete(feeAdminNotes).where(eq(feeAdminNotes.feeId, feeId));
+      return { id: feeId, adminNote: null };
+    }
+
+    await db
+      .insert(feeAdminNotes)
+      .values({ feeId, note: text, updatedBy: userId })
+      .onConflictDoUpdate({ target: feeAdminNotes.feeId, set: { note: text, updatedAt: new Date(), updatedBy: userId } });
+    return { id: feeId, adminNote: text };
   },
 
   async markAsReceived(feeId: string, receivedBy: string, input: MarkAsReceivedInput) {

@@ -59,6 +59,7 @@ export interface Fee {
   receivedAt?: string;
   serialNumber?: string;
   invoiceSentAt?: string | null;
+  adminNote?: string | null; // admins only
   billingType?: 'monthly' | 'usage' | 'catch-up';
   isCatchUp?: boolean;
   feeNotes?: string;
@@ -290,6 +291,11 @@ export const feesApi = {
 
   setInvoiceSent: async (id: string, sent: boolean): Promise<{ id: string; invoiceSentAt: string | null }> => {
     const response = await apiClient.patch<{ fee: { id: string; invoiceSentAt: string | null } }>(`/fees/${id}/invoice-sent`, { sent });
+    return response.data.fee;
+  },
+
+  setFeeNote: async (id: string, note: string): Promise<{ id: string; adminNote: string | null }> => {
+    const response = await apiClient.patch<{ fee: { id: string; adminNote: string | null } }>(`/fees/${id}/note`, { note });
     return response.data.fee;
   },
 

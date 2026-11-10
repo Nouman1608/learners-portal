@@ -233,6 +233,11 @@ export const createFee = async (req: Request, res: Response, next: NextFunction)
   }
 };
 
+// Admin notes on fees are for admins only; teachers can read fee lists too
+const isAdminUser = (req: Request) => req.user?.role === 'admin' || req.user?.role === 'sudo';
+const hideNote = <T extends { adminNote?: string | null }>(req: Request, fee: T) =>
+  (isAdminUser(req) ? fee : { ...fee, adminNote: undefined });
+
 export const getFees = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { studentId, courseId, status, month, year } = req.query;
@@ -243,7 +248,7 @@ export const getFees = async (req: Request, res: Response, next: NextFunction) =
       month: month ? parseInt(month as string) : undefined,
       year: year ? parseInt(year as string) : undefined,
     });
-    res.json({ fees });
+    res.json({ fees: fees.map((fee) => hideNote(req, fee)) });
   } catch (error) {
     next(error);
   }
@@ -252,7 +257,7 @@ export const getFees = async (req: Request, res: Response, next: NextFunction) =
 export const getFeeById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const fee = await feesService.getFeeById(req.params.id);
-    res.json({ fee });
+    res.json({ fee: fee && hideNote(req, fee) });
   } catch (error) {
     next(error);
   }
@@ -294,6 +299,18 @@ export const setFeeInvoiceSent = async (req: Request, res: Response, next: NextF
   }
 };
 
+const setFeeNoteSchema = z.object({ note: z.string().max(1000) });
+
+export const setFeeNote = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { note } = setFeeNoteSchema.parse(req.body);
+    const fee = await feesService.setAdminNote(req.params.id, note, req.user!.id);
+    res.json({ fee });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const setFeeDroppedSchema = z.object({ dropped: z.boolean() });
 
 export const setFeeDropped = async (req: Request, res: Response, next: NextFunction) => {
@@ -322,7 +339,7 @@ export const markFeeAsReceived = async (req: Request, res: Response, next: NextF
 export const getStudentFees = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const fees = await feesService.getStudentFees(req.params.studentId);
-    res.json({ fees });
+    res.json({ fees: fees.map((fee) => hideNote(req, fee)) });
   } catch (error) {
     next(error);
   }

@@ -35,6 +35,9 @@ export default function Fees() {
   const [regenerating, setRegenerating] = useState(false);
   const [sessionEditFee, setSessionEditFee] = useState<Fee | null>(null);
   const [droppingId, setDroppingId] = useState<string | null>(null);
+  const [noteFee, setNoteFee] = useState<Fee | null>(null);
+  const [noteInput, setNoteInput] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
   const [sessionInput, setSessionInput] = useState('');
   const [savingSessions, setSavingSessions] = useState(false);
 
@@ -74,6 +77,27 @@ export default function Fees() {
     } catch (error: any) {
       setFees((all) => all.map((f) => (f.id === fee.id ? { ...f, invoiceSentAt: previous } : f)));
       toast.error(error.response?.data?.error || 'Failed to update invoice sent');
+    }
+  };
+
+  const handleEditNote = (fee: Fee) => {
+    setNoteInput(fee.adminNote ?? '');
+    setNoteFee(fee);
+  };
+
+  // Save the admin note; an empty note removes it
+  const handleSaveNote = async () => {
+    if (!noteFee) return;
+    setSavingNote(true);
+    try {
+      const result = await feesApi.setFeeNote(noteFee.id, noteInput);
+      setFees((all) => all.map((f) => (f.id === noteFee.id ? { ...f, adminNote: result.adminNote } : f)));
+      toast.success(result.adminNote ? 'Note saved' : 'Note removed');
+      setNoteFee(null);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || error.response?.data?.message || 'Failed to save note');
+    } finally {
+      setSavingNote(false);
     }
   };
 
@@ -221,7 +245,9 @@ export default function Fees() {
       const studentEmail = fee.student.email.toLowerCase();
       const courseName = fee.course.title.toLowerCase();
 
-      return studentName.includes(query) || studentEmail.includes(query) || courseName.includes(query);
+      const note = (fee.adminNote || '').toLowerCase();
+
+      return studentName.includes(query) || studentEmail.includes(query) || courseName.includes(query) || note.includes(query);
     }
 
     return true;
@@ -518,6 +544,11 @@ export default function Fees() {
                   <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" title="Not paying because the student dropped this subject">
                     Dropped
                   </th>
+                  {isAdmin && (
+                    <th onClick={() => requestSort('adminNote')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                      Notes {getSortIndicator('adminNote')}
+                    </th>
+                  )}
                   <th onClick={() => requestSort('receivedAt')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
                     Received At {getSortIndicator('receivedAt')}
                   </th>
@@ -591,6 +622,21 @@ export default function Fees() {
                         className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500 cursor-pointer disabled:cursor-default disabled:opacity-40"
                       />
                     </td>
+                    {isAdmin && (
+                      <td className="px-3 py-2 text-sm">
+                        <button
+                          onClick={() => handleEditNote(fee)}
+                          title={fee.adminNote || 'Add a note'}
+                          className="flex items-center gap-1 max-w-[12rem] text-left text-gray-700 hover:text-indigo-700"
+                        >
+                          {fee.adminNote ? (
+                            <span className="truncate">{fee.adminNote}</span>
+                          ) : (
+                            <span className="text-gray-400">+ Add</span>
+                          )}
+                        </button>
+                      </td>
+                    )}
                     <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
                       {fee.receivedAt ? new Date(fee.receivedAt).toLocaleDateString() : '-'}
                     </td>
@@ -696,6 +742,14 @@ export default function Fees() {
                       <span className="text-gray-500">Dropped – not paying</span>
                     </label>
                   )}
+                  {isAdmin && (
+                    <button onClick={() => handleEditNote(fee)} className="block w-full text-left">
+                      <span className="text-gray-500">Notes:</span>
+                      <span className={`ml-1 whitespace-pre-wrap ${fee.adminNote ? 'text-gray-900' : 'text-gray-400'}`}>
+                        {fee.adminNote || '+ Add'}
+                      </span>
+                    </button>
+                  )}
                   {fee.receivedAt && (
                     <div>
                       <span className="text-gray-500">Received At:</span>
@@ -729,6 +783,58 @@ export default function Fees() {
           </div>
           <div className="px-4 py-2 text-xs text-gray-500 bg-gray-50/50 border-t border-gray-100">
             Showing {sortedFees.length} result{sortedFees.length !== 1 ? 's' : ''}
+          </div>
+        </div>
+      )}
+
+      {/* Fee Note Modal */}
+      {noteFee && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full animate-scale-in">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Fee Note</h2>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  {noteFee.student.firstName} {noteFee.student.lastName} — {noteFee.course.title}, {getMonthName(noteFee.month)} {noteFee.year}
+                </p>
+              </div>
+              <button onClick={() => setNoteFee(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label htmlFor="feeNote" className="block text-sm font-medium text-gray-700 mb-1">
+                  Note (seen by admins only)
+                </label>
+                <textarea
+                  id="feeNote"
+                  rows={4}
+                  maxLength={1000}
+                  value={noteInput}
+                  onChange={(e) => setNoteInput(e.target.value)}
+                  autoFocus
+                  placeholder="e.g. Paid half on 5 Nov, permission to pay the rest by 10 Dec"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+                <p className="mt-1 text-xs text-gray-500">Leave empty and save to remove the note.</p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setNoteFee(null)}
+                  className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveNote}
+                  disabled={savingNote}
+                  className="px-4 py-2 text-sm text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {savingNote ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

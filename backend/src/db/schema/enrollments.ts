@@ -63,6 +63,15 @@ export const feeInvoiceSent = pgTable('fee_invoice_sent', {
   sentBy: uuid('sent_by').references(() => users.id, { onDelete: 'set null' }),
 });
 
+// Admin's free-text note on a fee (Notes on the Fees page), e.g. agreed late payment.
+// Its own table like fee_invoice_sent; fees.fee_notes is system text that regeneration rewrites.
+export const feeAdminNotes = pgTable('fee_admin_notes', {
+  feeId: uuid('fee_id').primaryKey().references(() => fees.id, { onDelete: 'cascade' }),
+  note: text('note').notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+});
+
 export const payments = pgTable('payments', {
   id: uuid('id').primaryKey().defaultRandom(),
   feeId: uuid('fee_id').references(() => fees.id, { onDelete: 'cascade' }).notNull(),
