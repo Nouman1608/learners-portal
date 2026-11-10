@@ -1,4 +1,5 @@
 import apiClient from './client';
+import type { InvoiceAdvance } from './salaryAdvances.api';
 
 /**
  * Invoice TypeScript Interfaces
@@ -28,6 +29,7 @@ export interface Invoice {
     studentSubcategory?: string;
   };
   lineItems: InvoiceLineItem[];
+  advance?: InvoiceAdvance | null; // teacher invoices: salary advances taken off
 }
 
 export interface InvoiceLineItem {

@@ -59,6 +59,7 @@ const navigationItems: NavItem[] = [
   { name: 'My Invoices', path: '/my-invoices', icon: ReceiptPercentIcon, roles: ['student'] },
   { name: 'Analytics', path: '/analytics', icon: ChartBarIcon, roles: ['sudo', 'admin'] },
   { name: 'Expenses', path: '/expenses', icon: WalletIcon, roles: ['sudo', 'admin'] },
+  { name: 'Salary Advances', path: '/salary-advances', icon: BanknotesIcon, roles: ['sudo', 'admin', 'teacher'] },
   { name: 'Logs', path: '/logs', icon: ClockIcon, roles: ['sudo', 'admin'] },
   { name: 'Account Settings', path: '/account-settings', icon: UserCircleIcon, roles: ['student', 'teacher'] },
   { name: 'Teams Settings', path: '/settings/teams', icon: Cog6ToothIcon, roles: ['sudo', 'admin', 'teacher'] },

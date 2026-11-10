@@ -569,6 +569,14 @@ export default function Invoices() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {formatAmount(invoice.totalAmount, invoice.currency)}
+                    {invoice.advance && invoice.advance.deducted > 0 && (
+                      <div className="text-xs font-normal text-gray-500">
+                        Advance −{formatAmount(String(invoice.advance.deducted), invoice.currency)}
+                        <br />
+                        <span className="font-medium text-gray-900">Balance {formatAmount(String(invoice.advance.balance), invoice.currency)}</span>
+                        {invoice.advance.carryForward > 0 && <><br />{formatAmount(String(invoice.advance.carryForward), invoice.currency)} more next month</>}
+                      </div>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {formatDate(invoice.emailedAt)}

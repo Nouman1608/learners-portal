@@ -17,6 +17,7 @@ import analyticsRoutes from './analytics.routes';
 import studentPortalRoutes from './student-portal.routes';
 import leadsRoutes from './leads.routes';
 import expensesRoutes from './expenses.routes';
+import teacherAdvancesRoutes from './teacherAdvances.routes';
 import messagesRoutes from './messages.routes';
 import whatsappWebhookRoutes from './whatsapp-webhook.routes';
 import currencyRoutes from './currency.routes';
@@ -43,6 +44,7 @@ router.use('/logs', logsRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/leads', leadsRoutes);
 router.use('/expenses', expensesRoutes);
+router.use('/salary-advances', teacherAdvancesRoutes);
 router.use('/messages', messagesRoutes);
 router.use('/webhooks/whatsapp', whatsappWebhookRoutes);
 

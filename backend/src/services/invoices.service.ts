@@ -5,6 +5,7 @@ import { fees, enrollments, users, courses, courseTeachers, courseEvents } from 
 import { eq, and, or, desc, sql, gte, lte, ilike } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler';
 import { feesService } from './fees.service';
+import { teacherAdvancesService, AdvanceSummary } from './teacherAdvances.service';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
@@ -257,7 +258,8 @@ export const invoicesService = {
     invoice: any,
     lineItems: any[],
     teacher: any,
-    periodStr?: string
+    periodStr?: string,
+    advance?: AdvanceSummary | null
   ): Promise<string> {
     return new Promise((resolve, reject) => {
       try {
@@ -437,8 +439,11 @@ export const invoicesService = {
         doc
           .fontSize(12)
           .font('Helvetica-Bold')
-          .text('Total Payment:', 350, currentY, { width: 90, align: 'right' })
+          .text(advance ? 'Total Earned:' : 'Total Payment:', 350, currentY, { width: 90, align: 'right' })
           .text(`PKR ${parseFloat(invoice.totalAmount).toFixed(2)}`, 450, currentY, { width: 90, align: 'right' });
+
+        // Salary advances taken off this invoice, and the balance still to pay
+        this.drawAdvanceSection(doc, currentY, advance);
 
         // Footer
         doc
@@ -474,7 +479,8 @@ export const invoicesService = {
     invoice: any,
     lineItems: any[],
     teacher: any,
-    periodStr?: string
+    periodStr?: string,
+    advance?: AdvanceSummary | null
   ): Promise<string> {
     return new Promise((resolve, reject) => {
       try {
@@ -642,8 +648,11 @@ export const invoicesService = {
         doc
           .fontSize(12)
           .font('Helvetica-Bold')
-          .text('Total Payment:', 350, currentY, { width: 90, align: 'right' })
+          .text(advance ? 'Total Earned:' : 'Total Payment:', 350, currentY, { width: 90, align: 'right' })
           .text(`PKR ${parseFloat(invoice.totalAmount).toFixed(2)}`, 450, currentY, { width: 90, align: 'right' });
+
+        // Salary advances taken off this invoice, and the balance still to pay
+        this.drawAdvanceSection(doc, currentY, advance);
 
         // Footer
         doc
@@ -669,6 +678,43 @@ export const invoicesService = {
         reject(error);
       }
     });
+  },
+
+  /**
+   * Salary advances under a teacher invoice's total: each advance (and any brought
+   * forward from earlier months), then the balance to pay and anything still to recover.
+   */
+  drawAdvanceSection(doc: any, startY: number, advance?: AdvanceSummary | null) {
+    if (!advance) return;
+    const pkr = (n: number) => `PKR ${n.toFixed(2)}`;
+    const lines: [string, string][] = [];
+    if (advance.broughtForward > 0) lines.push(['Less: advance from earlier months', '- ' + pkr(advance.broughtForward)]);
+    for (const a of advance.advances) {
+      const day = new Date(a.paidOn + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const how = a.paymentMethod === 'cash' ? ' (cash)' : a.paymentMethod === 'bank_transfer' ? ' (bank)' : '';
+      lines.push([`Less: salary advance paid ${day}${how}`, '- ' + pkr(a.amount)]);
+    }
+
+    let y = startY + 22;
+    if (y + 40 + lines.length * 16 > 720) {
+      doc.addPage();
+      y = 50;
+    }
+    doc.fontSize(10).font('Helvetica');
+    for (const [label, value] of lines) {
+      doc.text(label, 150, y, { width: 290, align: 'right' }).text(value, 450, y, { width: 90, align: 'right' });
+      y += 16;
+    }
+    doc.moveTo(450, y).lineTo(550, y).stroke();
+    y += 10;
+    doc.fontSize(12).font('Helvetica-Bold')
+      .text('Balance to Pay:', 300, y, { width: 140, align: 'right' })
+      .text(pkr(advance.balance), 450, y, { width: 90, align: 'right' });
+    if (advance.carryForward > 0) {
+      y += 20;
+      doc.fontSize(9).font('Helvetica')
+        .text(`Advance still to recover from next month: ${pkr(advance.carryForward)}`, 150, y, { width: 390, align: 'right' });
+    }
   },
 
   /**
@@ -1413,9 +1459,10 @@ export const invoicesService = {
       .values(lineItemsWithInvoiceId)
       .returning();
 
-    // Generate both detailed and simplified PDFs
-    const pdfUrl = await this.generateTeacherInvoicePDF(newInvoice, createdLineItems, teacher);
-    const simplifiedPdfUrl = await this.generateSimplifiedTeacherInvoicePDF(newInvoice, createdLineItems, teacher);
+    // Generate both detailed and simplified PDFs (with any salary advances)
+    const advance = await teacherAdvancesService.summaryFor(teacher.id, input.month, input.year, totalAmount);
+    const pdfUrl = await this.generateTeacherInvoicePDF(newInvoice, createdLineItems, teacher, undefined, advance);
+    const simplifiedPdfUrl = await this.generateSimplifiedTeacherInvoicePDF(newInvoice, createdLineItems, teacher, undefined, advance);
 
     // Update invoice with both PDF URLs
     const [updatedInvoice] = await db
@@ -1430,6 +1477,31 @@ export const invoicesService = {
       invoice: updatedInvoice,
       lineItems: createdLineItems,
     };
+  },
+
+  /**
+   * Re-draw the PDFs of a teacher's existing invoices from month/year onward, so a salary
+   * advance recorded (or deleted) after an invoice was made shows on it. Totals and line
+   * items are unchanged; the PDF files are overwritten in place.
+   */
+  async refreshTeacherInvoicePdfs(teacherId: string, month: number, year: number) {
+    const [teacher] = await db
+      .select({ id: users.id, firstName: users.firstName, lastName: users.lastName, email: users.email, username: users.username })
+      .from(users).where(eq(users.id, teacherId)).limit(1);
+    if (!teacher) return 0;
+    const list = await db.select().from(invoices)
+      .where(and(eq(invoices.type, 'teacher'), eq(invoices.recipientId, teacherId), eq(invoices.isLatest, true),
+        sql`${invoices.year} * 12 + ${invoices.month} >= ${year * 12 + month}`))
+      .orderBy(invoices.year, invoices.month);
+    for (const invoice of list) {
+      const items = await db.select().from(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoice.id));
+      const advance = await teacherAdvancesService.summaryFor(teacherId, invoice.month, invoice.year, Number(invoice.totalAmount));
+      const pdfUrl = await this.generateTeacherInvoicePDF(invoice, items, teacher, undefined, advance);
+      const simplifiedPdfUrl = await this.generateSimplifiedTeacherInvoicePDF(invoice, items, teacher, undefined, advance);
+      await db.update(invoices).set({ pdfUrl, simplifiedPdfUrl }).where(eq(invoices.id, invoice.id));
+    }
+    if (list.length) logger.info(`[ADVANCES] Refreshed ${list.length} invoice PDF(s) for teacher ${teacher.username} from ${month}/${year}`);
+    return list.length;
   },
 
   /**
@@ -1521,9 +1593,15 @@ export const invoicesService = {
           .from(invoiceLineItems)
           .where(eq(invoiceLineItems.invoiceId, invoice.id));
 
+        // Teacher invoices: salary advances taken off and the balance still to pay
+        const advance = invoice.type === 'teacher'
+          ? await teacherAdvancesService.summaryFor(invoice.recipientId, invoice.month, invoice.year, Number(invoice.totalAmount))
+          : null;
+
         return {
           ...invoice,
           lineItems: items,
+          advance,
         };
       })
     );
