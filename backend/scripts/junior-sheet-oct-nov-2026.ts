@@ -110,7 +110,7 @@ async function main() {
         join users u on u.id = e.student_id join courses c on c.id = e.course_id
         where u.username = $1 and trim(c.title) = $2 and e.status = 'active'`, [username, course]);
       if (!e) { problem(`${username} ${course}: no active enrolment`); continue; }
-      if (apply) await q(`update enrollments set custom_fee_per_month = $1, updated_at = now() where id = $2`, [amount, e.id]);
+      if (apply) await q(`update enrollments set custom_fee_per_month = $1 where id = $2`, [amount, e.id]);
       say(`${username} ${course}: monthly fee ${Number(e.fee)} -> ${amount}`);
       for (const month of [10, 11]) {
         const f = await fee(username, course, month);
