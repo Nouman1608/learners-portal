@@ -33,7 +33,7 @@ const username = (first: string, last: string) =>
   [first, last].filter(Boolean).join('.').toLowerCase().replace(/[^a-z0-9.]/g, '');
 
 async function main() {
-  const { usersService } = await import('../src/services/users.service');
+  const { usersService, noEmailAddress } = await import('../src/services/users.service');
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   const q = async (text: string, params: unknown[] = []) => (await client.query(text, params)).rows;
@@ -54,8 +54,10 @@ async function main() {
                                 or (lower(first_name) = lower($2) and lower(last_name) = lower($3))`, [name, s.firstName, s.lastName]);
       if (exists) { problem(`${s.firstName} ${s.lastName}: already in the portal (${exists.role})`); continue; }
       if (apply) {
+        // No email on the sheet: the portal's "No email" placeholder (an email can be added later)
         const user = await usersService.createUser({
           username: name, password: 'Teacher@123', role: 'teacher', firstName: s.firstName, lastName: s.lastName,
+          email: noEmailAddress(name),
           teacherPaymentType: s.pay.type, monthlySalary: s.pay.amount, createdBy: admin.id,
         });
         await q(`update users set must_change_password = false where id = $1`, [user.id]);
