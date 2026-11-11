@@ -7,7 +7,7 @@ import { coursesApi, roomsApi, Course, CreateCourseInput, UpdateCourseInput, Cre
 import { usersApi } from '../../api/users.api';
 import SearchableSelect from '../common/SearchableSelect';
 import toast from 'react-hot-toast';
-import { brand, terms, JUNIOR_CATEGORIES, isJuniorPortal } from '../../brand';
+import { brand, terms, JUNIOR_COURSE_CATEGORIES, isJuniorPortal } from '../../brand';
 
 /** Junior Campus grades ("Grade 7", "Nursery", "KG", "Quran", ...): titled by the grade alone, several teachers. Mirrors the backend. */
 const JUNIOR_GRADE_NAME = /^\s*(grade\s*\d+|nursery|pg|prep|pre-school|kg|quran)\s*$/i;
@@ -391,7 +391,7 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 >
                   {isJuniorPortal ? (
-                    <>{JUNIOR_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</>
+                    <>{JUNIOR_COURSE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</>
                   ) : (
                     <>
                       <option value="">None</option>

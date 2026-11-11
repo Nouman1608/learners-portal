@@ -99,10 +99,21 @@ export const terms = brand.campus === 'junior'
   : { course: 'Course', courses: 'Courses', courseLc: 'course', coursesLc: 'courses' };
 
 /**
- * The Junior Campus's only categories. Students keep them in student_subcategory; grades and
- * classes keep them in course_level (the senior IG / A Level column, unused for junior).
+ * Junior portal STUDENT categories (users.student_subcategory). Local students go by
+ * grade: Junior = Grade 1-5, Prep = Grade 6-8, Matric = Grade 9-10. Academy is kept
+ * for students who fit none of these (e.g. online one-to-one).
  */
 export const JUNIOR_CATEGORIES = [
+  { value: 'preschool', label: 'Preschool' },
+  { value: 'junior', label: 'Junior (Grade 1–5)' },
+  { value: 'prep', label: 'Prep (Grade 6–8)' },
+  { value: 'matric', label: 'Matric (Grade 9–10)' },
+  { value: 'aitchison', label: 'ATP' },
+  { value: 'academy', label: 'Academy (other)' },
+];
+
+/** Junior portal GRADE / CLASS types (courses.course_level) - unchanged by the student categories */
+export const JUNIOR_COURSE_CATEGORIES = [
   { value: 'preschool', label: 'Preschool' },
   { value: 'academy', label: 'Academy' },
   { value: 'aitchison', label: 'ATP' },
