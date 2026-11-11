@@ -20,7 +20,7 @@ export interface CreateUserInput {
   studentSubcategory?: string; // 'aitchison', 'preschool', 'summer_camp', 'academy', 'local', 'online'
   whatsappGroupLink?: string;
   teamsUsername?: string;
-  teacherPaymentType?: 'percentage_based' | 'salaried';
+  teacherPaymentType?: 'percentage_based' | 'salaried' | 'per_child';
   localStudentFeePercentage?: number;
   onlineStudentFixedAmountIg?: number;
   onlineStudentFixedAmountAlevel?: number;
@@ -40,7 +40,7 @@ export interface UpdateUserInput {
   teamsUsername?: string;
   isActive?: boolean;
   role?: 'admin' | 'teacher' | 'student';
-  teacherPaymentType?: 'percentage_based' | 'salaried';
+  teacherPaymentType?: 'percentage_based' | 'salaried' | 'per_child';
   // null clears the field (e.g. when switching payment type)
   localStudentFeePercentage?: number | null;
   onlineStudentFixedAmountIg?: number | null;

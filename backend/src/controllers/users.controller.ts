@@ -32,7 +32,7 @@ const createUserSchema = z.object({
   onlineStudentFixedAmountAlevel: z.number()
     .min(0, 'Fixed amount must be non-negative')
     .optional(),
-  teacherPaymentType: z.enum(['percentage_based', 'salaried']).optional(),
+  teacherPaymentType: z.enum(['percentage_based', 'salaried', 'per_child']).optional(),
   monthlySalary: z.number()
     .min(0, 'Monthly salary must be non-negative')
     .optional(),
@@ -42,7 +42,8 @@ const createUserSchema = z.object({
 
     const paymentType = data.teacherPaymentType || 'percentage_based';
 
-    if (paymentType === 'salaried') {
+    // Salaried: monthlySalary is the salary; per child: monthlySalary is the amount per child
+    if (paymentType === 'salaried' || paymentType === 'per_child') {
       return data.monthlySalary != null && data.monthlySalary > 0;
     }
 
@@ -52,7 +53,7 @@ const createUserSchema = z.object({
            data.onlineStudentFixedAmountAlevel !== undefined;
   },
   {
-    message: 'Salaried teachers require monthlySalary. Percentage-based teachers require localStudentFeePercentage, onlineStudentFixedAmountIg, and onlineStudentFixedAmountAlevel',
+    message: 'Salaried and per-child teachers require monthlySalary (the salary, or the amount per child). Percentage-based teachers require localStudentFeePercentage, onlineStudentFixedAmountIg, and onlineStudentFixedAmountAlevel',
     path: ['role'],
   }
 );
@@ -84,7 +85,7 @@ const updateUserSchema = z.object({
     .min(0, 'Fixed amount must be non-negative')
     .nullable()
     .optional(),
-  teacherPaymentType: z.enum(['percentage_based', 'salaried']).optional(),
+  teacherPaymentType: z.enum(['percentage_based', 'salaried', 'per_child']).optional(),
   monthlySalary: z.number()
     .min(0, 'Monthly salary must be non-negative')
     .nullable()
@@ -93,13 +94,13 @@ const updateUserSchema = z.object({
   (data) => {
     // Switching to salaried requires a positive salary in the same request,
     // otherwise invoicing rejects the teacher with "fee configuration not set"
-    if (data.teacherPaymentType === 'salaried') {
+    if (data.teacherPaymentType === 'salaried' || data.teacherPaymentType === 'per_child') {
       return data.monthlySalary != null && data.monthlySalary > 0;
     }
     return true;
   },
   {
-    message: 'monthlySalary (> 0) is required when setting teacherPaymentType to salaried',
+    message: 'monthlySalary (> 0) is required for a salaried or per-child teacher',
     path: ['monthlySalary'],
   }
 );

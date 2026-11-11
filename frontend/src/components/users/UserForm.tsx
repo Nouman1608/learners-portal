@@ -76,8 +76,8 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit }) => {
         // would be dropped from the JSON body and leave stale values behind).
         if (formData.role === 'teacher') {
           updateData.teamsUsername = formData.teamsUsername ?? '';
-          updateData.teacherPaymentType = formData.teacherPaymentType as 'percentage_based' | 'salaried';
-          if (formData.teacherPaymentType === 'salaried') {
+          updateData.teacherPaymentType = formData.teacherPaymentType as 'percentage_based' | 'salaried' | 'per_child';
+          if (formData.teacherPaymentType === 'salaried' || formData.teacherPaymentType === 'per_child') {
             updateData.monthlySalary = formData.monthlySalary
               ? parseFloat(formData.monthlySalary as any)
               : undefined;
@@ -120,8 +120,8 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit }) => {
         // Include teacher fee fields if role is teacher
         if (formData.role === 'teacher') {
           createData.teamsUsername = formData.teamsUsername || undefined;
-          createData.teacherPaymentType = formData.teacherPaymentType as 'percentage_based' | 'salaried';
-          if (formData.teacherPaymentType === 'salaried') {
+          createData.teacherPaymentType = formData.teacherPaymentType as 'percentage_based' | 'salaried' | 'per_child';
+          if (formData.teacherPaymentType === 'salaried' || formData.teacherPaymentType === 'per_child') {
             createData.monthlySalary = formData.monthlySalary
               ? parseFloat(formData.monthlySalary as any)
               : undefined;
@@ -503,6 +503,22 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit }) => {
                       />
                       <span className="text-sm font-medium">Fixed Salary</span>
                     </label>
+                    <label className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 cursor-pointer transition-colors ${
+                      formData.teacherPaymentType === 'per_child'
+                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="teacherPaymentType"
+                        value="per_child"
+                        checked={formData.teacherPaymentType === 'per_child'}
+                        onChange={(e) => setFormData({ ...formData, teacherPaymentType: e.target.value })}
+                        className="text-indigo-600 focus:ring-indigo-500"
+                        disabled={loading}
+                      />
+                      <span className="text-sm font-medium">Per Child</span>
+                    </label>
                   </div>
                 </div>
 
@@ -591,6 +607,29 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit }) => {
                     />
                     <p className="text-xs text-gray-500 mt-1">
                       Fixed monthly salary regardless of student count
+                    </p>
+                  </div>
+                )}
+
+                {/* Amount per child (only when per_child) */}
+                {formData.teacherPaymentType === 'per_child' && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Amount per Child (PKR) *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      value={formData.monthlySalary}
+                      onChange={(e) => setFormData({ ...formData, monthlySalary: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="e.g., 2100"
+                      min="0"
+                      step="0.01"
+                      disabled={loading}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Paid for each child in the teacher's classes that month (a child with a 0 fee counts 0)
                     </p>
                   </div>
                 )}

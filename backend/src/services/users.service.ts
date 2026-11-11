@@ -28,7 +28,7 @@ export interface CreateUserInput {
   localStudentFeePercentage?: number;
   onlineStudentFixedAmountIg?: number;
   onlineStudentFixedAmountAlevel?: number;
-  teacherPaymentType?: 'percentage_based' | 'salaried';
+  teacherPaymentType?: 'percentage_based' | 'salaried' | 'per_child';
   monthlySalary?: number;
   createdBy: string;
 }
@@ -50,7 +50,7 @@ export interface UpdateUserInput {
   localStudentFeePercentage?: number | null;
   onlineStudentFixedAmountIg?: number | null;
   onlineStudentFixedAmountAlevel?: number | null;
-  teacherPaymentType?: 'percentage_based' | 'salaried';
+  teacherPaymentType?: 'percentage_based' | 'salaried' | 'per_child';
   monthlySalary?: number | null;
 }
 

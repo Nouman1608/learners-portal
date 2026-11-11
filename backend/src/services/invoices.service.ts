@@ -347,15 +347,20 @@ export const invoicesService = {
               checkPageBreak(20);
 
               const studentFee = student.metadata?.studentFee ? parseFloat(student.metadata.studentFee) : 0;
-              const rateText = student.metadata?.classType === '1-to-1'
-                ? `${student.quantity} x ${parseFloat(student.unitPrice).toFixed(2)}`
-                : `${parseFloat(student.unitPrice).toFixed(1)}%`;
+              const isSalary = student.metadata?.paymentType === 'salary';
+              const rateText = isSalary
+                ? ''
+                : student.metadata?.classType === '1-to-1'
+                  ? `${student.quantity} x ${parseFloat(student.unitPrice).toFixed(2)}`
+                  : student.metadata?.payBasis === 'per_child'
+                    ? `PKR ${parseFloat(student.unitPrice).toFixed(0)}/child`
+                    : `${parseFloat(student.unitPrice).toFixed(1)}%`;
 
               doc
                 .fontSize(9)
                 .font('Helvetica')
                 .text(`${student.metadata.studentName}`, 90, currentY, { width: 180 })
-                .text(`PKR ${studentFee.toFixed(2)}`, 280, currentY, { width: 80, align: 'right' })
+                .text(isSalary ? '' : `PKR ${studentFee.toFixed(2)}`, 280, currentY, { width: 80, align: 'right' })
                 .text(rateText, 370, currentY, { width: 70, align: 'right' })
                 .text(`PKR ${parseFloat(student.amount).toFixed(2)}`, 450, currentY, { width: 90, align: 'right' });
 
@@ -1116,12 +1121,14 @@ export const invoicesService = {
 
     const isSalaried = teacher.teacherPaymentType === 'salaried';
     const monthlySalary = teacher.monthlySalary ? parseFloat(teacher.monthlySalary) : 0;
+    // Per child (Junior): a fixed amount for each local child taught, kept in monthly_salary
+    const perChildRate = teacher.teacherPaymentType === 'per_child' ? monthlySalary : 0;
     const localFeePercentage = teacher.localStudentFeePercentage ? parseFloat(teacher.localStudentFeePercentage) : 0;
     const onlineFixedAmountIg = teacher.onlineStudentFixedAmountIg ? parseFloat(teacher.onlineStudentFixedAmountIg) : 0;
     const onlineFixedAmountAlevel = teacher.onlineStudentFixedAmountAlevel ? parseFloat(teacher.onlineStudentFixedAmountAlevel) : 0;
 
     const oneToOneClassRate = (teacherOneToOneRates as Record<string, number>)[input.teacherId] ?? teacherOneToOneRates.default;
-    const hasLocalConfig = localFeePercentage > 0;
+    const hasLocalConfig = localFeePercentage > 0 || perChildRate > 0;
     const hasOnlineConfig = onlineFixedAmountIg > 0 || onlineFixedAmountAlevel > 0 || oneToOneClassRate !== null;
     const hasSalaryConfig = isSalaried && monthlySalary > 0;
 
@@ -1144,7 +1151,7 @@ export const invoicesService = {
       .innerJoin(courses, eq(courseTeachers.courseId, courses.id))
       .where(eq(courseTeachers.teacherId, input.teacherId));
 
-    if (teacherCourses.length === 0) {
+    if (teacherCourses.length === 0 && !isSalaried) {
       logger.warn(`[INVOICE] Skipping teacher ${teacher.firstName} ${teacher.lastName}: no courses assigned`);
       throw new AppError(404, 'No courses assigned to this teacher');
     }
@@ -1166,6 +1173,9 @@ export const invoicesService = {
         amount: monthlySalary.toString(),
         metadata: {
           paymentType: 'salary',
+          attendanceMode: 'local',
+          courseName: 'Monthly Salary',
+          studentName: 'Fixed monthly salary',
         },
       });
       totalAmount = monthlySalary;
@@ -1292,9 +1302,12 @@ export const invoicesService = {
 
         const isOneToOne = enrollment.classType === '1-to-1';
         const quantity = isOneToOne ? (sessionCount ?? 0) : 1;
+        // Per-child teachers get a fixed amount per child; a child with a 0 fee earns 0 (owner rule)
         const earning = isOneToOne
           ? Math.round(oneToOneClassRate * quantity * 100) / 100
-          : (studentFee * localFeePercentage) / 100;
+          : perChildRate > 0
+            ? (studentFee > 0 ? perChildRate : 0)
+            : (studentFee * localFeePercentage) / 100;
 
         const description = enrollment.classType === '1-to-1' && sessionCount
           ? `1-to-1 Local - ${teacherCourse.course.title} - ${enrollment.student.firstName} ${enrollment.student.lastName} (${sessionCount} sessions)`
@@ -1305,7 +1318,7 @@ export const invoicesService = {
           courseId: teacherCourse.courseId,
           feeId,
           quantity: quantity.toString(),
-          unitPrice: (isOneToOne ? oneToOneClassRate : localFeePercentage).toString(),
+          unitPrice: (isOneToOne ? oneToOneClassRate : perChildRate > 0 ? perChildRate : localFeePercentage).toString(),
           amount: earning.toString(),
           metadata: {
             attendanceMode: 'local',
@@ -1313,6 +1326,7 @@ export const invoicesService = {
             courseName: teacherCourse.course.title,
             studentName: `${enrollment.student.firstName} ${enrollment.student.lastName}`,
             studentFee: studentFee.toString(),
+            ...(!isOneToOne && perChildRate > 0 && { payBasis: 'per_child' }),
             ...(sessionCount && { sessionCount: sessionCount.toString() }),
             ...(manualSessions.has(enrollment.id) && { sessionSource: 'admin override', enrollmentId: enrollment.id }),
             ...(enrollment.perSessionFee && { perSessionFee: enrollment.perSessionFee }),
@@ -1780,9 +1794,15 @@ export const invoicesService = {
     }
 
     // Get all teachers
-    const allTeachers = await db
+    const withClasses = await db
       .selectDistinct({ teacherId: courseTeachers.teacherId })
       .from(courseTeachers);
+    // Salaried staff are paid even without a class (e.g. non-teaching staff)
+    const salaried = await db
+      .select({ teacherId: users.id })
+      .from(users)
+      .where(and(eq(users.role, 'teacher'), eq(users.isActive, true), eq(users.teacherPaymentType, 'salaried')));
+    const allTeachers = [...new Map([...withClasses, ...salaried].map((t) => [t.teacherId, t])).values()];
 
     // Generate teacher invoices
     for (const { teacherId } of allTeachers) {
@@ -1807,9 +1827,15 @@ export const invoicesService = {
   async generateMonthlyTeacherInvoices(month: number, year: number) {
     let teacherCount = 0;
 
-    const allTeachers = await db
+    const withClasses = await db
       .selectDistinct({ teacherId: courseTeachers.teacherId })
       .from(courseTeachers);
+    // Salaried staff are paid even without a class (e.g. non-teaching staff)
+    const salaried = await db
+      .select({ teacherId: users.id })
+      .from(users)
+      .where(and(eq(users.role, 'teacher'), eq(users.isActive, true), eq(users.teacherPaymentType, 'salaried')));
+    const allTeachers = [...new Map([...withClasses, ...salaried].map((t) => [t.teacherId, t])).values()];
 
     logger.info(`[INVOICE] Generating teacher invoices for ${month}/${year}: ${allTeachers.length} teachers found`);
 
