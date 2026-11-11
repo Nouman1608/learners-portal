@@ -536,7 +536,7 @@ export const feesService = {
     // Never touch received or dropped fees, and never clobber an admin-set session
     // count — the daily cron otherwise keeps the fee in sync with completed sessions
     const existingFee = existing[0];
-    if (existingFee && (existingFee.status === 'received' || existingFee.status === 'dropped' ||
+    if (existingFee && (existingFee.status === 'received' || existingFee.status === 'dropped' || existingFee.status === 'leave' ||
         existingFee.feeNotes?.includes('admin override'))) {
       return { created: false, count: 0 };
     }
@@ -859,7 +859,7 @@ export const feesService = {
                 eq(fees.enrollmentId, enrollment.id),
                 eq(fees.month, billingMonth),
                 eq(fees.year, billingYear),
-                notInArray(fees.status, ['received', 'dropped'])
+                notInArray(fees.status, ['received', 'dropped', 'leave'])
               )
             );
         }
@@ -895,7 +895,7 @@ export const feesService = {
               eq(fees.enrollmentId, enrollment.id),
               eq(fees.month, billingMonth),
               eq(fees.year, billingYear),
-              notInArray(fees.status, ['received', 'dropped'])
+              notInArray(fees.status, ['received', 'dropped', 'leave'])
             )
           );
         return {
@@ -942,7 +942,7 @@ export const feesService = {
             eq(fees.month, billingMonth),
             eq(fees.year, billingYear),
             eq(fees.isCatchUp, true),
-            notInArray(fees.status, ['received', 'dropped'])
+            notInArray(fees.status, ['received', 'dropped', 'leave'])
           )
         );
     }

@@ -24,7 +24,8 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 }
 
 // Fees ticked "dropped" on the Fees page are not owed, so no invoice includes them
-const notDropped = sql`${fees.status} <> 'dropped'`;
+// Dropped (left) and on-leave fees are not billed and earn the teacher nothing
+const notDropped = sql`${fees.status} NOT IN ('dropped', 'leave')`;
 
 const pakistanDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' });
 

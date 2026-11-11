@@ -55,7 +55,7 @@ export interface Fee {
   amount: string;
   currency: CurrencyCode;
   dueDate: string;
-  status: 'pending' | 'overdue' | 'received' | 'dropped';
+  status: 'pending' | 'overdue' | 'received' | 'dropped' | 'leave';
   receivedAt?: string;
   serialNumber?: string;
   invoiceSentAt?: string | null;
@@ -301,6 +301,11 @@ export const feesApi = {
 
   setReceivedDate: async (id: string, date: string): Promise<{ id: string; receivedAt: string }> => {
     const response = await apiClient.patch<{ fee: { id: string; receivedAt: string } }>(`/fees/${id}/received-date`, { date });
+    return response.data.fee;
+  },
+
+  setFeeOnLeave: async (id: string, onLeave: boolean): Promise<{ id: string; status: Fee['status'] }> => {
+    const response = await apiClient.patch<{ fee: { id: string; status: Fee['status'] } }>(`/fees/${id}/leave`, { onLeave });
     return response.data.fee;
   },
 

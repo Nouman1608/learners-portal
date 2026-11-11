@@ -16,7 +16,7 @@ export default function Fees() {
   const { user } = useAuth();
   const [fees, setFees] = useState<Fee[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'overdue' | 'received' | 'dropped'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'overdue' | 'received' | 'dropped' | 'leave'>('all');
   const { confirm: confirmDialog, dialogProps } = useConfirmDialog();
   const [filterPeriod, setFilterPeriod] = useState<string>('all');
   const [filterCourse, setFilterCourse] = useState<string>('all');
@@ -128,6 +128,35 @@ export default function Fees() {
     }
   };
 
+  // Tick / untick "On leave" (Junior portal): the month's fee is not owed, the enrollment stays active.
+  const handleToggleLeave = async (fee: Fee) => {
+    const onLeave = fee.status !== 'leave';
+    const name = `${fee.student.firstName} ${fee.student.lastName}`;
+    const period = `${getMonthName(fee.month)} ${fee.year}`;
+    const confirmed = await confirmDialog(onLeave ? {
+      title: 'Mark as on leave',
+      message: `${name} is on leave for ${period}?\n\nThe ${fee.course.title} fee for ${period} will not be owed and is taken off the student and teacher invoices. ${name} stays enrolled, so next month is billed as normal.`,
+      confirmLabel: 'On leave',
+      variant: 'info',
+    } : {
+      title: 'Undo on leave',
+      message: `Make the ${period} ${fee.course.title} fee for ${name} owed again?`,
+      confirmLabel: 'Undo',
+      variant: 'info',
+    });
+    if (!confirmed) return;
+    setDroppingId(fee.id);
+    try {
+      const result = await feesApi.setFeeOnLeave(fee.id, onLeave);
+      setFees((all) => all.map((f) => (f.id === fee.id ? { ...f, status: result.status } : f)));
+      toast.success(onLeave ? 'Marked as on leave' : 'Fee is owed again');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || error.response?.data?.message || 'Failed to update fee');
+    } finally {
+      setDroppingId(null);
+    }
+  };
+
   // Tick / untick "dropped – not paying". Ticking also drops the enrollment, so confirm first.
   const handleToggleDropped = async (fee: Fee) => {
     const dropped = fee.status !== 'dropped';
@@ -208,7 +237,7 @@ export default function Fees() {
 
     // Only allow marking as received for pending/overdue fees (not already received)
     const selectedFees = fees.filter(f => selectedIds.has(f.id));
-    const unpaidFees = selectedFees.filter(f => f.status !== 'received' && f.status !== 'dropped');
+    const unpaidFees = selectedFees.filter(f => f.status !== 'received' && f.status !== 'dropped' && f.status !== 'leave');
 
     if (unpaidFees.length === 0) {
       toast.error('No unpaid fees selected. Selected fees are already marked as received.');
@@ -286,6 +315,7 @@ export default function Fees() {
       overdue: 'bg-red-100 text-red-800',
       received: 'bg-green-100 text-green-800',
       dropped: 'bg-gray-200 text-gray-700',
+      leave: 'bg-sky-100 text-sky-800',
     };
     return classes[status as keyof typeof classes] || 'bg-gray-100 text-gray-800';
   };
@@ -408,6 +438,7 @@ export default function Fees() {
           <option value="overdue">Overdue</option>
           <option value="received">Received</option>
           <option value="dropped">Dropped – not paying</option>
+          {isJuniorPortal && <option value="leave">On leave</option>}
         </select>
 
         <select
@@ -571,6 +602,11 @@ export default function Fees() {
                   <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" title="Not paying because the student dropped this subject">
                     Dropped
                   </th>
+                  {isJuniorPortal && (
+                    <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" title="On leave this month: fee not owed, student stays enrolled">
+                      On leave
+                    </th>
+                  )}
                   {isAdmin && (
                     <th onClick={() => requestSort('adminNote')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
                       Notes {getSortIndicator('adminNote')}
@@ -625,7 +661,7 @@ export default function Fees() {
                     <td className="px-3 py-2 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusBadge(fee.status)}`}>
-                          {fee.status}
+                          {fee.status === 'leave' ? 'on leave' : fee.status}
                         </span>
                       </div>
                     </td>
@@ -643,12 +679,25 @@ export default function Fees() {
                       <input
                         type="checkbox"
                         checked={fee.status === 'dropped'}
-                        disabled={!isAdmin || fee.status === 'received' || droppingId === fee.id}
+                        disabled={!isAdmin || fee.status === 'received' || fee.status === 'leave' || droppingId === fee.id}
                         onChange={() => handleToggleDropped(fee)}
-                        title={fee.status === 'received' ? 'Already paid' : 'Tick if not paying because the student dropped this subject'}
+                        title={fee.status === 'received' ? 'Already paid' : fee.status === 'leave' ? 'On leave – untick On leave first' : 'Tick if not paying because the student dropped this subject'}
                         className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500 cursor-pointer disabled:cursor-default disabled:opacity-40"
                       />
                     </td>
+                    {isJuniorPortal && (
+                      <td className="px-3 py-2 whitespace-nowrap text-center">
+                        <input
+                          type="checkbox"
+                          checked={fee.status === 'leave'}
+                          disabled={!isAdmin || fee.status === 'received' || fee.status === 'dropped' || droppingId === fee.id}
+                          onChange={() => handleToggleLeave(fee)}
+                          aria-label="On leave"
+                          title={fee.status === 'received' ? 'Already paid' : fee.status === 'dropped' ? 'Dropped – untick Dropped first' : 'Tick if the student is on leave this month (stays enrolled)'}
+                          className="h-4 w-4 rounded border-gray-300 text-sky-600 focus:ring-sky-500 cursor-pointer disabled:cursor-default disabled:opacity-40"
+                        />
+                      </td>
+                    )}
                     {isAdmin && (
                       <td className="px-3 py-2 text-sm">
                         <div className="flex items-center gap-2 max-w-[14rem]">
@@ -697,7 +746,7 @@ export default function Fees() {
                             <PencilSquareIcon className="h-4 w-4" />
                           </button>
                         )}
-                        {fee.status !== 'received' && fee.status !== 'dropped' && (
+                        {fee.status !== 'received' && fee.status !== 'dropped' && fee.status !== 'leave' && (
                           <button
                             onClick={() => handleMarkAsReceived(fee)}
                             className="p-1.5 text-green-600 hover:text-green-900 hover:bg-green-50 rounded-lg transition-colors"
@@ -736,7 +785,7 @@ export default function Fees() {
                         <p className="text-sm text-gray-500">{fee.course.title}</p>
                       </div>
                       <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${getStatusBadge(fee.status)}`}>
-                        {fee.status}
+                        {fee.status === 'leave' ? 'on leave' : fee.status}
                       </span>
                     </div>
                   </div>
@@ -778,11 +827,23 @@ export default function Fees() {
                       <input
                         type="checkbox"
                         checked={fee.status === 'dropped'}
-                        disabled={!isAdmin || droppingId === fee.id}
+                        disabled={!isAdmin || fee.status === 'leave' || droppingId === fee.id}
                         onChange={() => handleToggleDropped(fee)}
                         className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500"
                       />
                       <span className="text-gray-500">Dropped – not paying</span>
+                    </label>
+                  )}
+                  {isJuniorPortal && fee.status !== 'received' && (
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={fee.status === 'leave'}
+                        disabled={!isAdmin || fee.status === 'dropped' || droppingId === fee.id}
+                        onChange={() => handleToggleLeave(fee)}
+                        className="h-4 w-4 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
+                      />
+                      <span className="text-gray-500">On leave this month</span>
                     </label>
                   )}
                   {isAdmin && (
@@ -828,7 +889,7 @@ export default function Fees() {
                     </div>
                   )}
                 </div>
-                {isAdmin && fee.status !== 'received' && fee.status !== 'dropped' && (
+                {isAdmin && fee.status !== 'received' && fee.status !== 'dropped' && fee.status !== 'leave' && (
                   <div className="mt-4">
                     <button
                       onClick={() => handleMarkAsReceived(fee)}

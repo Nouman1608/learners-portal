@@ -324,6 +324,19 @@ export const setFeeReceivedDate = async (req: Request, res: Response, next: Next
   }
 };
 
+const setFeeOnLeaveSchema = z.object({ onLeave: z.boolean() });
+
+/** PATCH /api/fees/:id/leave - "On leave" tick: fee not owed this month, enrollment stays active (admin) */
+export const setFeeOnLeave = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { onLeave } = setFeeOnLeaveSchema.parse(req.body);
+    const fee = await enrollmentsService.setFeeOnLeave(req.params.id, onLeave, req.user!.id);
+    res.json({ fee });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const setFeeDroppedSchema = z.object({ dropped: z.boolean() });
 
 export const setFeeDropped = async (req: Request, res: Response, next: NextFunction) => {

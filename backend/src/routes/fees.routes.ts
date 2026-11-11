@@ -21,6 +21,7 @@ router.patch('/:id/sessions', requireAdmin, logActivity('update-fee-sessions', '
 router.patch('/:id/invoice-sent', requireAdmin, logActivity('invoice-sent', 'fee'), enrollmentsController.setFeeInvoiceSent);
 router.patch('/:id/note', requireAdmin, logActivity('fee-note', 'fee'), enrollmentsController.setFeeNote);
 router.patch('/:id/received-date', requireAdmin, logActivity('fee-received-date', 'fee'), enrollmentsController.setFeeReceivedDate);
+router.patch('/:id/leave', requireAdmin, logActivity('fee-leave', 'fee'), enrollmentsController.setFeeOnLeave);
 router.patch('/:id/dropped', requireAdmin, logActivity('fee-dropped', 'fee'), enrollmentsController.setFeeDropped);
 router.patch('/:id/received', requireAdmin, logActivity('mark-received', 'fee'), enrollmentsController.markFeeAsReceived);
 

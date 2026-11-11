@@ -1138,6 +1138,33 @@ export const enrollmentsService = {
     return { id: feeId, status };
   },
 
+  /**
+   * "On leave" tick on the Fees page (Junior portal). Ticking marks the month's fee
+   * 'leave': not owed, left off the student and teacher invoices, but the enrollment
+   * stays active so the next month is billed as normal. Unticking puts it back to
+   * pending (overdue again if its due date has passed).
+   */
+  async setFeeOnLeave(feeId: string, onLeave: boolean, userId: string) {
+    const [fee] = await db.select().from(fees).where(eq(fees.id, feeId)).limit(1);
+    if (!fee) throw new AppError(404, 'Fee not found');
+    if (fee.status === 'received') {
+      throw new AppError(400, 'This fee has already been paid, so it cannot be marked as on leave');
+    }
+    if (onLeave && fee.status === 'dropped') {
+      throw new AppError(400, 'This fee is marked as dropped; untick Dropped first');
+    }
+    if (onLeave === (fee.status === 'leave')) return { id: feeId, status: fee.status };
+
+    const status = onLeave ? 'leave' : 'pending';
+    await db.update(fees).set({ status, updatedAt: new Date() }).where(eq(fees.id, feeId));
+    logger.info(`[FEE LEAVE] Fee ${feeId} (${fee.month}/${fee.year}) set to ${status} by ${userId}`);
+
+    await this.rebuildInvoicesForFee(fee.studentId, fee.courseId, fee.month, fee.year, userId);
+    if (!onLeave) feesService.syncFeeStatusInBackground(); // overdue again if past its due date
+
+    return { id: feeId, status };
+  },
+
   /** Rebuild a student's and the course teachers' invoices for one month, if they exist */
   async rebuildInvoicesForFee(studentId: string, courseId: string, month: number, year: number, userId: string) {
     const period = (type: 'student' | 'teacher', recipientId: string) => and(
@@ -1152,7 +1179,7 @@ export const enrollmentsService = {
         .selectDistinct({ currency: sql<string>`COALESCE(${fees.currency}, 'PKR')` })
         .from(fees)
         .where(and(eq(fees.studentId, studentId), eq(fees.month, month), eq(fees.year, year),
-          sql`${fees.status} <> 'dropped'`, sql`${fees.amount}::numeric > 0`));
+          sql`${fees.status} NOT IN ('dropped', 'leave')`, sql`${fees.amount}::numeric > 0`));
       for (const { currency } of currencies) {
         try {
           await invoicesService.generateStudentInvoice({ studentId, month, year, currency, generatedBy: userId });

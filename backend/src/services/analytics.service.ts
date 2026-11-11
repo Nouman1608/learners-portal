@@ -324,7 +324,7 @@ export const analyticsService = {
           and(
             gte(fees.dueDate, startDate.toISOString().split('T')[0]),
             lte(fees.dueDate, endDate.toISOString().split('T')[0]),
-            sql`${fees.status} <> 'dropped'`, // subject dropped: never owed, so not billed
+            sql`${fees.status} NOT IN ('dropped', 'leave')`, // dropped or on leave: never owed, so not billed
             feeInBooks(this.db)
           )
         )
