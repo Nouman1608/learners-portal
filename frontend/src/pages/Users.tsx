@@ -21,11 +21,15 @@ const Users: React.FC = () => {
   const [isActiveFilter, setIsActiveFilter] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [subcategoryFilter, setSubcategoryFilter] = useState<string>('');
+  // Sudo on the Senior portal can also view Junior Campus users (read only): '' = this portal, 'junior', 'both'
+  const [campusFilter, setCampusFilter] = useState<'' | 'junior' | 'both'>('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
 
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'sudo';
+  const canPickCampus = currentUser?.role === 'sudo' && !isJuniorPortal;
+  const isJuniorRow = (u: User) => (u as User & { campus?: string }).campus === 'junior';
   const { confirm, dialogProps } = useConfirmDialog();
 
   // Sorting
@@ -50,6 +54,7 @@ const Users: React.FC = () => {
         isActive: isActiveFilter ? isActiveFilter === 'true' : undefined,
         studentCategory: categoryFilter || undefined,
         studentSubcategory: subcategoryFilter || undefined,
+        campus: campusFilter || undefined,
         limit: 10000, // Fetch all users
       });
       if (seq !== requestSeq.current) return; // stale response — a newer request is in flight
@@ -73,7 +78,7 @@ const Users: React.FC = () => {
       fetchUsers();
     }, delay);
     return () => clearTimeout(handle);
-  }, [search, roleFilter, isActiveFilter, categoryFilter, subcategoryFilter]);
+  }, [search, roleFilter, isActiveFilter, categoryFilter, subcategoryFilter, campusFilter]);
 
   const handleCreateUser = async (data: CreateUserInput) => {
     try {
@@ -276,6 +281,22 @@ const Users: React.FC = () => {
 
       {/* Filters */}
       <div className="mb-4 flex gap-2 overflow-x-auto">
+        {canPickCampus && (
+          <select
+            value={campusFilter}
+            onChange={(e) => {
+              setCampusFilter(e.target.value as '' | 'junior' | 'both');
+              setCategoryFilter('');
+              setSubcategoryFilter('');
+            }}
+            aria-label="Portal"
+            className="px-3 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"
+          >
+            <option value="">Senior Portal</option>
+            <option value="junior">Junior Portal</option>
+            <option value="both">Both Portals</option>
+          </select>
+        )}
         <select
           value={roleFilter}
           onChange={(e) => setRoleFilter(e.target.value)}
@@ -296,7 +317,7 @@ const Users: React.FC = () => {
           <option value="true">Active</option>
           <option value="false">Inactive</option>
         </select>
-        {isJuniorPortal ? (
+        {isJuniorPortal || campusFilter === 'junior' ? (
           <select
             value={subcategoryFilter}
             onChange={(e) => setSubcategoryFilter(e.target.value)}
@@ -319,7 +340,7 @@ const Users: React.FC = () => {
           <option value="senior">Senior</option>
         </select>
         )}
-        {!isJuniorPortal && categoryFilter && (
+        {!isJuniorPortal && campusFilter !== 'junior' && categoryFilter && (
           <select
             value={subcategoryFilter}
             onChange={(e) => setSubcategoryFilter(e.target.value)}
@@ -342,9 +363,10 @@ const Users: React.FC = () => {
             )}
           </select>
         )}
-        {(search || roleFilter || isActiveFilter || categoryFilter || subcategoryFilter) && (
+        {(search || roleFilter || isActiveFilter || categoryFilter || subcategoryFilter || campusFilter) && (
           <button
             onClick={() => {
+              setCampusFilter('');
               setSearch('');
               setRoleFilter('');
               setIsActiveFilter('');
@@ -357,6 +379,12 @@ const Users: React.FC = () => {
           </button>
         )}
       </div>
+
+      {campusFilter && (
+        <p className="mb-4 rounded-md bg-blue-50 px-4 py-2 text-sm text-blue-800">
+          Junior Campus users are view only here. To edit, reset a password or delete one, use the Junior portal.
+        </p>
+      )}
 
       {/* Users Table */}
       {loading ? (
@@ -374,12 +402,14 @@ const Users: React.FC = () => {
               <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr>
                   <th className="px-3 py-2 w-12">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.size === users.length && users.length > 0}
-                      onChange={handleSelectAll}
-                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                    />
+                    {!campusFilter && (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.size === users.length && users.length > 0}
+                        onChange={handleSelectAll}
+                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                    )}
                   </th>
                   <th
                     onClick={() => requestSort('firstName')}
@@ -412,18 +442,25 @@ const Users: React.FC = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200 animate-fade-in">
                 {sortedUsers.map((user) => (
-                  <tr key={user.id} className={`hover:bg-indigo-50/30 transition-colors ${selectedIds.has(user.id) ? 'bg-indigo-50/50' : ''}`}>
+                  <tr key={`${(user as User & { campus?: string }).campus || 'own'}-${user.id}`} className={`hover:bg-indigo-50/30 transition-colors ${selectedIds.has(user.id) ? 'bg-indigo-50/50' : ''}`}>
                     <td className="px-3 py-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(user.id)}
-                        onChange={() => handleSelectOne(user.id)}
-                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                      />
+                      {!isJuniorRow(user) && (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(user.id)}
+                          onChange={() => handleSelectOne(user.id)}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                      )}
                     </td>
                     <td className="px-3 py-2">
                       <div className="text-sm font-medium text-gray-900">
                         {user.firstName} {user.lastName}
+                        {campusFilter && (
+                          <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${isJuniorRow(user) ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-700'}`}>
+                            {isJuniorRow(user) ? 'Junior' : 'Senior'}
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-gray-500">@{user.username}</div>
                     </td>
@@ -489,6 +526,9 @@ const Users: React.FC = () => {
                       )}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap text-right">
+                      {isJuniorRow(user) ? (
+                        <span className="text-xs text-gray-400">View only</span>
+                      ) : (
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => {
@@ -537,6 +577,7 @@ const Users: React.FC = () => {
                           <TrashIcon className="h-4 w-4" />
                         </button>
                       </div>
+                      )}
                     </td>
                   </tr>
                 ))}

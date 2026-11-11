@@ -1,4 +1,4 @@
-import { db } from '../config/database';
+import { db, Database } from '../config/database';
 import { users } from '../db/schema';
 import { eq, ilike, or, and, desc, sql } from 'drizzle-orm';
 import { hashPassword } from '../utils/bcrypt';
@@ -128,8 +128,9 @@ export const usersService = {
     return userWithoutPassword;
   },
 
-  async getUsers(filter: UsersFilter = {}) {
-    let query = db.select().from(users).$dynamic();
+  /** `database` lets the Senior portal's sudo read the Junior Campus users (read-only connection) */
+  async getUsers(filter: UsersFilter = {}, database: Database = db) {
+    let query = database.select().from(users).$dynamic();
 
     // Apply filters
     const conditions = [];

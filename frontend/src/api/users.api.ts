@@ -56,6 +56,7 @@ export interface UsersFilter {
   studentSubcategory?: string;
   limit?: number;
   offset?: number;
+  campus?: 'junior' | 'both'; // sudo on the Senior portal: Junior Campus users (read only)
 }
 
 export const usersApi = {
@@ -68,6 +69,7 @@ export const usersApi = {
     if (filter?.studentSubcategory) params.append('studentSubcategory', filter.studentSubcategory);
     if (filter?.limit) params.append('limit', String(filter.limit));
     if (filter?.offset) params.append('offset', String(filter.offset));
+    if (filter?.campus) params.append('campus', filter.campus);
 
     const response = await apiClient.get<{ users: User[] }>(`/users?${params.toString()}`);
     return response.data.users;

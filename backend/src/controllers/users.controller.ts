@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import usersService from '../services/users.service';
+import { juniorDb } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
 
@@ -149,15 +150,24 @@ export const getUsers = async (req: Request, res: Response) => {
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : 0;
 
-    let users = await usersService.getUsers({
-      role: role as any,
-      search,
-      isActive,
-      studentCategory,
-      studentSubcategory,
-      limit,
-      offset,
-    });
+    const filter = { role: role as any, search, isActive, studentCategory, studentSubcategory, limit, offset };
+
+    // Sudo on the Senior portal can also list Junior Campus users (read-only), or both campuses
+    const campus = req.user?.role === 'sudo' ? (req.query.campus as string | undefined) : undefined;
+    if (campus === 'junior' || campus === 'both') {
+      if (!juniorDb) throw new AppError(400, 'Junior Campus is not connected to this portal');
+      const [senior, junior] = await Promise.all([
+        campus === 'both' ? usersService.getUsers(filter) : Promise.resolve([]),
+        usersService.getUsers(filter, juniorDb),
+      ]);
+      const tagged = [
+        ...senior.map((u) => ({ ...u, campus: 'senior' as const })),
+        ...junior.map((u) => ({ ...u, campus: 'junior' as const })),
+      ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return res.json({ users: tagged, count: tagged.length });
+    }
+
+    let users = await usersService.getUsers(filter);
 
     // If the requester is a teacher and requesting teachers, only return themselves
     if (req.user?.role === 'teacher' && role === 'teacher') {
