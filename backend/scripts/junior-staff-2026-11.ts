@@ -1,7 +1,7 @@
 /**
  * One-off (Junior Campus, 2026-11-12): the owner's staff salary list.
  *  - New salaried teachers (password Teacher@123, sign-in allowed, username first.last)
- *  - Faiza: paid per child (Rs 2,100 for each child in her classes)
+ *  - Faiza: paid per child (Rs 2,100 for each child in her classes); she teaches the Quran class
  *  - Existing Maida Jawed and Muhammad Hassan switch to a fixed monthly salary
  *
  * Preview (changes nothing):  npx tsx scripts/junior-staff-2026-11.ts .env.junior
@@ -17,12 +17,12 @@ dotenv.config({ path: envFile, override: true });
 type Pay = { type: 'salaried' | 'per_child'; amount: number };
 const NEW_STAFF: { firstName: string; lastName: string; pay: Pay }[] = [
   { firstName: 'Amma', lastName: 'Najma', pay: { type: 'salaried', amount: 19000 } },
-  { firstName: 'Urooj', lastName: '', pay: { type: 'salaried', amount: 12000 } },
-  { firstName: 'Faiza', lastName: '', pay: { type: 'per_child', amount: 2100 } },
+  { firstName: 'Urooj', lastName: 'Maid', pay: { type: 'salaried', amount: 12000 } },
+  { firstName: 'Faiza', lastName: 'Quran', pay: { type: 'per_child', amount: 2100 } },
   { firstName: 'Anum', lastName: 'Aslam', pay: { type: 'salaried', amount: 15000 } },
-  { firstName: 'Khushi', lastName: '', pay: { type: 'salaried', amount: 15000 } },
-  { firstName: 'Atiya', lastName: '', pay: { type: 'salaried', amount: 15000 } },
-  { firstName: 'Maryam', lastName: '', pay: { type: 'salaried', amount: 17000 } },
+  { firstName: 'Khush', lastName: 'Bakth', pay: { type: 'salaried', amount: 15000 } },
+  { firstName: 'Attia', lastName: 'Ashiq', pay: { type: 'salaried', amount: 15000 } },
+  { firstName: 'Maryam', lastName: 'Nawaz', pay: { type: 'salaried', amount: 17000 } },
 ];
 const EXISTING: { username: string; pay: Pay }[] = [
   { username: 'maida.jawed', pay: { type: 'salaried', amount: 15000 } },
@@ -61,6 +61,21 @@ async function main() {
         await q(`update users set must_change_password = false where id = $1`, [user.id]);
       }
       say(`new teacher ${s.firstName} ${s.lastName} (username ${name}, password Teacher@123): ${payText(s.pay)}`);
+    }
+
+    // Faiza teaches the Quran class (her per-child pay counts its children)
+    const [quran] = await q(`select id from courses where trim(title) = 'Quran'`);
+    if (!quran) problem('Quran class not found');
+    else {
+      const others = await q(`select concat(u.first_name, ' ', u.last_name) as name from course_teachers ct
+        join users u on u.id = ct.teacher_id where ct.course_id = $1`, [quran.id]);
+      console.log(`INFO  Quran class teachers now: ${others.map((o) => o.name).join(', ') || 'none'}`);
+      const [faiza] = await q(`select id from users where username = 'faiza.quran'`);
+      if (faiza || !apply) {
+        if (apply) await q(`insert into course_teachers (course_id, teacher_id, percentage_cut) values ($1, $2, 0)
+                           on conflict (course_id, teacher_id) do nothing`, [quran.id, faiza.id]);
+        say('Faiza Quran: teacher of the Quran class');
+      } else problem('faiza.quran not found, so not added to the Quran class');
     }
 
     for (const e of EXISTING) {
