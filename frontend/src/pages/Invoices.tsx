@@ -569,6 +569,11 @@ export default function Invoices() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {formatAmount(invoice.totalAmount, invoice.currency)}
+                    {invoice.deduction && invoice.deduction.total > 0 && (
+                      <div className="text-xs font-normal text-gray-500">
+                        Absences/lates −{formatAmount(String(invoice.deduction.total), invoice.currency)} ({invoice.deduction.days} day{invoice.deduction.days === 1 ? '' : 's'})
+                      </div>
+                    )}
                     {invoice.advance && invoice.advance.deducted > 0 && (
                       <div className="text-xs font-normal text-gray-500">
                         Advance −{formatAmount(String(invoice.advance.deducted), invoice.currency)}

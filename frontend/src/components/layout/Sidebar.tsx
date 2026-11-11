@@ -33,6 +33,7 @@ interface NavItem {
   path: string;
   icon: React.ComponentType<{ className?: string }>;
   roles?: string[];
+  juniorOnly?: boolean; // shown only on the Junior Campus portal
 }
 
 interface SidebarProps {
@@ -60,6 +61,7 @@ const navigationItems: NavItem[] = [
   { name: 'Analytics', path: '/analytics', icon: ChartBarIcon, roles: ['sudo', 'admin'] },
   { name: 'Expenses', path: '/expenses', icon: WalletIcon, roles: ['sudo', 'admin'] },
   { name: 'Salary Advances', path: '/salary-advances', icon: BanknotesIcon, roles: ['sudo', 'admin', 'teacher'] },
+  { name: 'Absences & Lates', path: '/teacher-attendance', icon: ClockIcon, roles: ['sudo', 'admin', 'teacher'], juniorOnly: true },
   { name: 'Logs', path: '/logs', icon: ClockIcon, roles: ['sudo', 'admin'] },
   { name: 'Account Settings', path: '/account-settings', icon: UserCircleIcon, roles: ['student', 'teacher'] },
   { name: 'Teams Settings', path: '/settings/teams', icon: Cog6ToothIcon, roles: ['sudo', 'admin', 'teacher'] },
@@ -198,6 +200,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="space-y-1 px-3">
           {navigationItems.map((item) => {
             if (!canAccessRoute(item.roles)) return null;
+            if (item.juniorOnly && brand.campus !== 'junior') return null;
 
             return (
               <NavLink

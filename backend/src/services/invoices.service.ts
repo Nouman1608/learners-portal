@@ -6,6 +6,7 @@ import { eq, and, or, desc, sql, gte, lte, ilike } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler';
 import { feesService } from './fees.service';
 import { teacherAdvancesService, AdvanceSummary } from './teacherAdvances.service';
+import { teacherDeductionsService, DeductionSummary } from './teacherDeductions.service';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
@@ -260,7 +261,8 @@ export const invoicesService = {
     lineItems: any[],
     teacher: any,
     periodStr?: string,
-    advance?: AdvanceSummary | null
+    advance?: AdvanceSummary | null,
+    deduction?: DeductionSummary | null
   ): Promise<string> {
     return new Promise((resolve, reject) => {
       try {
@@ -429,6 +431,9 @@ export const invoicesService = {
           currentY += 25;
         }
 
+        // Absent / late deductions (Junior campus) come off the earnings
+        currentY = this.drawDeductionSection(doc, currentY, deduction);
+
         // Draw line before total
         doc
           .moveTo(450, currentY)
@@ -481,7 +486,8 @@ export const invoicesService = {
     lineItems: any[],
     teacher: any,
     periodStr?: string,
-    advance?: AdvanceSummary | null
+    advance?: AdvanceSummary | null,
+    deduction?: DeductionSummary | null
   ): Promise<string> {
     return new Promise((resolve, reject) => {
       try {
@@ -638,6 +644,9 @@ export const invoicesService = {
           currentY += 25;
         }
 
+        // Absent / late deductions (Junior campus) come off the earnings
+        currentY = this.drawDeductionSection(doc, currentY, deduction);
+
         // Draw line before total
         doc
           .moveTo(450, currentY)
@@ -679,6 +688,38 @@ export const invoicesService = {
         reject(error);
       }
     });
+  },
+
+  /**
+   * Absent / late deductions above a teacher invoice's total: every mark in the month
+   * (allowed ones show 0) and the total taken off the earnings. Returns the new y.
+   */
+  drawDeductionSection(doc: any, startY: number, deduction?: DeductionSummary | null): number {
+    if (!deduction || !deduction.items.length) return startY;
+    const pkr = (n: number) => `PKR ${n.toFixed(2)}`;
+    let y = startY + 5;
+    if (y + 50 + deduction.items.length * 15 > 720) {
+      doc.addPage();
+      y = 50;
+    }
+    doc.fontSize(11).font('Helvetica-Bold').text('ATTENDANCE DEDUCTIONS', 50, y);
+    y += 16;
+    doc.fontSize(8).font('Helvetica')
+      .text(`Day's pay ${pkr(deduction.dayPay)} = earnings ${pkr(deduction.gross)} / ${deduction.workingDays} working days. 2 lates and 2 absences a month are allowed.`, 70, y, { width: 470 });
+    y += 16;
+    for (const item of deduction.items) {
+      const day = new Date(item.date + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+      const what = item.kind === 'absent' ? 'Absent' : 'Late';
+      const days = item.days ? ` – ${item.days} day${item.days === 1 ? '' : 's'}` : '';
+      doc.fontSize(9).font('Helvetica')
+        .text(`${day}: ${what} (${item.reason})${days}`, 90, y, { width: 350 })
+        .text(item.amount ? `- ${pkr(item.amount)}` : pkr(0), 450, y, { width: 90, align: 'right' });
+      y += 15;
+    }
+    doc.fontSize(10).font('Helvetica-Bold')
+      .text('Total Deductions:', 300, y, { width: 140, align: 'right' })
+      .text(`- ${pkr(deduction.total)}`, 450, y, { width: 90, align: 'right' });
+    return y + 25;
   },
 
   /**
@@ -1432,6 +1473,10 @@ export const invoicesService = {
       invoiceNumber = `${invoiceNumber}-v${newVersion}`;
     }
 
+    // Junior campus absent/late deductions come off the month's earnings (none without marks)
+    const deduction = await teacherDeductionsService.summaryFor(input.teacherId, input.month, input.year, totalAmount);
+    const netTotal = Math.round((totalAmount - (deduction?.total || 0)) * 100) / 100;
+
     // Create invoice (teacher invoices are always in PKR)
     const [newInvoice] = await db
       .insert(invoices)
@@ -1444,7 +1489,7 @@ export const invoicesService = {
         version: newVersion,
         isLatest: true,
         currency: 'PKR',
-        totalAmount: totalAmount.toString(),
+        totalAmount: netTotal.toString(),
         generatedBy: input.generatedBy || null,
       })
       .returning();
@@ -1460,10 +1505,10 @@ export const invoicesService = {
       .values(lineItemsWithInvoiceId)
       .returning();
 
-    // Generate both detailed and simplified PDFs (with any salary advances)
-    const advance = await teacherAdvancesService.summaryFor(teacher.id, input.month, input.year, totalAmount);
-    const pdfUrl = await this.generateTeacherInvoicePDF(newInvoice, createdLineItems, teacher, undefined, advance);
-    const simplifiedPdfUrl = await this.generateSimplifiedTeacherInvoicePDF(newInvoice, createdLineItems, teacher, undefined, advance);
+    // Generate both detailed and simplified PDFs (with any deductions and salary advances)
+    const advance = await teacherAdvancesService.summaryFor(teacher.id, input.month, input.year, netTotal);
+    const pdfUrl = await this.generateTeacherInvoicePDF(newInvoice, createdLineItems, teacher, undefined, advance, deduction);
+    const simplifiedPdfUrl = await this.generateSimplifiedTeacherInvoicePDF(newInvoice, createdLineItems, teacher, undefined, advance, deduction);
 
     // Update invoice with both PDF URLs
     const [updatedInvoice] = await db
@@ -1481,9 +1526,9 @@ export const invoicesService = {
   },
 
   /**
-   * Re-draw the PDFs of a teacher's existing invoices from month/year onward, so a salary
-   * advance recorded (or deleted) after an invoice was made shows on it. Totals and line
-   * items are unchanged; the PDF files are overwritten in place.
+   * Bring a teacher's existing invoices from month/year onward up to date after a salary
+   * advance or an absent/late mark is added or deleted: the total is re-worked as earnings
+   * (its line items) minus deductions, and both PDFs are redrawn in place.
    */
   async refreshTeacherInvoicePdfs(teacherId: string, month: number, year: number) {
     const [teacher] = await db
@@ -1496,12 +1541,16 @@ export const invoicesService = {
       .orderBy(invoices.year, invoices.month);
     for (const invoice of list) {
       const items = await db.select().from(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoice.id));
-      const advance = await teacherAdvancesService.summaryFor(teacherId, invoice.month, invoice.year, Number(invoice.totalAmount));
-      const pdfUrl = await this.generateTeacherInvoicePDF(invoice, items, teacher, undefined, advance);
-      const simplifiedPdfUrl = await this.generateSimplifiedTeacherInvoicePDF(invoice, items, teacher, undefined, advance);
-      await db.update(invoices).set({ pdfUrl, simplifiedPdfUrl }).where(eq(invoices.id, invoice.id));
+      const gross = items.reduce((sum, item) => sum + Number(item.amount), 0);
+      const deduction = await teacherDeductionsService.summaryFor(teacherId, invoice.month, invoice.year, gross);
+      const totalAmount = (Math.round((gross - (deduction?.total || 0)) * 100) / 100).toFixed(2);
+      const current = { ...invoice, totalAmount };
+      const advance = await teacherAdvancesService.summaryFor(teacherId, invoice.month, invoice.year, Number(totalAmount));
+      const pdfUrl = await this.generateTeacherInvoicePDF(current, items, teacher, undefined, advance, deduction);
+      const simplifiedPdfUrl = await this.generateSimplifiedTeacherInvoicePDF(current, items, teacher, undefined, advance, deduction);
+      await db.update(invoices).set({ totalAmount, pdfUrl, simplifiedPdfUrl }).where(eq(invoices.id, invoice.id));
     }
-    if (list.length) logger.info(`[ADVANCES] Refreshed ${list.length} invoice PDF(s) for teacher ${teacher.username} from ${month}/${year}`);
+    if (list.length) logger.info(`[TEACHER PAY] Refreshed ${list.length} invoice(s) for teacher ${teacher.username} from ${month}/${year}`);
     return list.length;
   },
 
@@ -1599,10 +1648,17 @@ export const invoicesService = {
           ? await teacherAdvancesService.summaryFor(invoice.recipientId, invoice.month, invoice.year, Number(invoice.totalAmount))
           : null;
 
+        // Teacher invoices: absent/late deductions (Junior campus)
+        const deduction = invoice.type === 'teacher'
+          ? await teacherDeductionsService.summaryFor(invoice.recipientId, invoice.month, invoice.year,
+              items.reduce((sum, item) => sum + Number(item.amount), 0))
+          : null;
+
         return {
           ...invoice,
           lineItems: items,
           advance,
+          deduction,
         };
       })
     );

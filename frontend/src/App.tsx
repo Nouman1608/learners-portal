@@ -12,6 +12,7 @@ import Leads from './pages/Leads';
 import MessageTemplates from './pages/MessageTemplates';
 import Expenses from './pages/Expenses';
 import SalaryAdvances from './pages/SalaryAdvances';
+import TeacherAttendance from './pages/TeacherAttendance';
 import Fees from './pages/Fees';
 import Calendar from './pages/Calendar';
 import Assessments from './pages/Assessments';
@@ -92,6 +93,17 @@ function App() {
               <ProtectedRoute allowedRoles={['sudo', 'admin']}>
                 <Layout>
                   <Leads />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/teacher-attendance"
+            element={
+              <ProtectedRoute allowedRoles={['sudo', 'admin', 'teacher']}>
+                <Layout>
+                  <TeacherAttendance />
                 </Layout>
               </ProtectedRoute>
             }

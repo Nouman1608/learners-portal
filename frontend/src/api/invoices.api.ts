@@ -1,5 +1,6 @@
 import apiClient from './client';
 import type { InvoiceAdvance } from './salaryAdvances.api';
+import type { InvoiceDeduction } from './teacherAttendance.api';
 
 /**
  * Invoice TypeScript Interfaces
@@ -30,6 +31,7 @@ export interface Invoice {
   };
   lineItems: InvoiceLineItem[];
   advance?: InvoiceAdvance | null; // teacher invoices: salary advances taken off
+  deduction?: InvoiceDeduction | null; // teacher invoices: absent/late deductions (Junior)
 }
 
 export interface InvoiceLineItem {
