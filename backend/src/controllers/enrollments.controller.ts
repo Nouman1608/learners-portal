@@ -311,6 +311,19 @@ export const setFeeNote = async (req: Request, res: Response, next: NextFunction
   }
 };
 
+const setReceivedDateSchema = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD') });
+
+/** PATCH /api/fees/:id/received-date - correct the day a received fee was paid (admin) */
+export const setFeeReceivedDate = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { date } = setReceivedDateSchema.parse(req.body);
+    const fee = await feesService.setReceivedDate(req.params.id, date);
+    res.json({ fee });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const setFeeDroppedSchema = z.object({ dropped: z.boolean() });
 
 export const setFeeDropped = async (req: Request, res: Response, next: NextFunction) => {

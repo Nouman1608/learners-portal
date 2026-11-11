@@ -308,6 +308,25 @@ export const feesService = {
     return { id: feeId, adminNote: text };
   },
 
+  /**
+   * Correct the day a received fee was paid (Received At on the Fees page). The fee's
+   * payment record(s) move to the same day. Stored at noon Pakistan time so the date
+   * shows the same everywhere.
+   */
+  async setReceivedDate(feeId: string, date: string) {
+    const [fee] = await db.select({ id: fees.id, status: fees.status }).from(fees).where(eq(fees.id, feeId)).limit(1);
+    if (!fee) throw new AppError(404, 'Fee not found');
+    if (fee.status !== 'received') throw new AppError(400, 'Only a received fee has a received date');
+
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(new Date());
+    if (date > today) throw new AppError(400, 'The received date cannot be in the future');
+
+    const at = new Date(`${date}T12:00:00+05:00`);
+    await db.update(fees).set({ receivedAt: at, updatedAt: new Date() }).where(eq(fees.id, feeId));
+    await db.update(payments).set({ paymentDate: at }).where(eq(payments.feeId, feeId));
+    return { id: feeId, receivedAt: at.toISOString() };
+  },
+
   async markAsReceived(feeId: string, receivedBy: string, input: MarkAsReceivedInput) {
     try {
       // 1. Validate: cash requires serial number

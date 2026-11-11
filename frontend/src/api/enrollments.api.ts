@@ -299,6 +299,11 @@ export const feesApi = {
     return response.data.fee;
   },
 
+  setReceivedDate: async (id: string, date: string): Promise<{ id: string; receivedAt: string }> => {
+    const response = await apiClient.patch<{ fee: { id: string; receivedAt: string } }>(`/fees/${id}/received-date`, { date });
+    return response.data.fee;
+  },
+
   setFeeDropped: async (id: string, dropped: boolean): Promise<{ id: string; status: Fee['status'] }> => {
     const response = await apiClient.patch<{ fee: { id: string; status: Fee['status'] } }>(`/fees/${id}/dropped`, { dropped });
     return response.data.fee;
