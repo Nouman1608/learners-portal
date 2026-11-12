@@ -43,6 +43,13 @@
       "when": 1794466194490,
       "tag": "0005_whole_bloodstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1794499825843,
+      "tag": "0006_last_bruce_banner",
+      "breakpoints": true
     }
   ]
 }

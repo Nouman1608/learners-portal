@@ -17,9 +17,10 @@ const expenseSchema = z.object({
   currency: z.enum(['PKR', 'USD', 'GBP', 'SAR']).optional(),
   paymentMethod: z.enum(['cash', 'bank_transfer', 'card', 'cheque', 'other']).optional().or(z.literal('')),
   notes: z.string().max(2000).optional(),
+  segment: z.enum(['local', 'online']).optional(), // Senior portal: Local (default) or Online
 });
 
-const campusSchema = z.enum(['senior', 'junior', 'both']).optional();
+const campusSchema = z.enum(['senior', 'senior_local', 'senior_online', 'junior', 'both']).optional();
 
 const listSchema = z.object({
   startDate: DATE,

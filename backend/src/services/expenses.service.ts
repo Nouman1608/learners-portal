@@ -1,12 +1,21 @@
 import { db, Database, juniorDb } from '../config/database';
-import { expenses, ExpenseCategory } from '../db/schema/expenses';
+import { expenses, expenseSegments, ExpenseCategory } from '../db/schema/expenses';
 import { users } from '../db/schema/users';
-import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, lte, sql, SQL } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler';
 import { pkrRateExpr } from './analytics.service';
 import { feeInBooks, booksStartDate } from '../utils/booksStart';
 
-export type Campus = 'senior' | 'junior' | 'both';
+/**
+ * Expenses views. On the Senior portal sudo sees four tabs:
+ *   senior_local  - Senior portal, local side (fees of local class enrolments, local teacher pay, Local expenses)
+ *   senior_online - Senior portal, online side
+ *   junior        - the Junior Campus (read-only connection)
+ *   both          - everything together
+ * 'senior' = this portal's own database, both sides (admins, and the Junior portal itself).
+ */
+export type Campus = 'senior' | 'senior_local' | 'senior_online' | 'junior' | 'both';
+export type Segment = 'local' | 'online';
 
 /** Who is changing an expense: admins may only change the ones they entered */
 export interface ExpenseActor {
@@ -31,6 +40,7 @@ export interface ExpenseInput {
   currency?: string;
   paymentMethod?: string;
   notes?: string;
+  segment?: Segment; // Senior portal: Local (default) or Online
 }
 
 export interface MonthSummary {
@@ -42,34 +52,53 @@ export interface MonthSummary {
   netPKR: number; // income - teacher pay - expenses
 }
 
-/** Databases for a campus view. Other campuses are only readable from the Senior portal (read-only connection). */
-function databases(campus: Campus): Database[] {
-  if (campus === 'senior') return [db];
+interface View { database: Database; campus: 'senior' | 'junior'; segment?: Segment }
+
+/** Databases (and senior side) for a view. The Junior Campus is only readable from the Senior portal. */
+function views(campus: Campus): View[] {
+  if (campus === 'senior') return [{ database: db, campus: 'senior' }];
+  if (campus === 'senior_local') return [{ database: db, campus: 'senior', segment: 'local' }];
+  if (campus === 'senior_online') return [{ database: db, campus: 'senior', segment: 'online' }];
   if (!juniorDb) throw new AppError(400, 'Junior Campus is not connected to this portal');
-  return campus === 'junior' ? [juniorDb] : [db, juniorDb];
+  const junior: View = { database: juniorDb, campus: 'junior' };
+  return campus === 'junior' ? [junior] : [{ database: db, campus: 'senior' }, junior];
 }
 
 const blank = (v?: string) => (v && v.trim() ? v.trim() : null);
+const segmentOf = sql<Segment>`coalesce((select s.segment from expense_segments s where s.expense_id = ${expenses.id}), 'local')`;
 
-async function summaryFor(database: Database, year: number): Promise<MonthSummary[]> {
+async function summaryFor({ database, segment }: View, year: number): Promise<MonthSummary[]> {
   const months: MonthSummary[] = Array.from({ length: 12 }, (_, i) => ({
     month: i + 1, incomePKR: 0, teacherPayPKR: 0, expensesPKR: 0, byCategory: {}, netPKR: 0,
   }));
+  const side = (expr: SQL) => (segment ? sql`and ${expr} = ${segment}` : sql``);
 
-  // By the month the fee is for (like teacher invoices), not the day it was paid
+  // By the month the fee is for (like teacher invoices), not the day it was paid;
+  // local / online by the class enrolment the fee belongs to
   const income = await database.execute(sql`
     select f.month as month,
            coalesce(sum(p.amount::numeric * ${pkrRateExpr(sql`f.currency`)}), 0)::float as pkr
-    from payments p join fees f on f.id = p.fee_id
+    from payments p join fees f on f.id = p.fee_id join enrollments e on e.id = f.enrollment_id
     where f.year = ${year} and ${feeInBooks(database, sql`f.year`, sql`f.month`)}
+      ${side(sql`e.attendance_mode`)}
     group by 1`);
   for (const r of income.rows as any[]) months[r.month - 1].incomePKR = r.pkr;
 
-  const teacherPay = await database.execute(sql`
-    select month, coalesce(sum(total_amount::numeric * ${pkrRateExpr(sql`currency`)}), 0)::float as pkr
-    from invoices where type = 'teacher' and is_latest and year = ${year}
-      and ${feeInBooks(database, sql`year`, sql`month`)}
-    group by 1`);
+  // Whole slips (after any deductions); a side = its slip lines for local / online students
+  // (salary lines and older lines without a mode count as local)
+  const teacherPay = segment
+    ? await database.execute(sql`
+        select i.month, coalesce(sum(li.amount::numeric * ${pkrRateExpr(sql`i.currency`)}), 0)::float as pkr
+        from invoices i join invoice_line_items li on li.invoice_id = i.id
+        where i.type = 'teacher' and i.is_latest and i.year = ${year}
+          and ${feeInBooks(database, sql`i.year`, sql`i.month`)}
+          and coalesce(li.metadata->>'attendanceMode', 'local') = ${segment}
+        group by 1`)
+    : await database.execute(sql`
+        select month, coalesce(sum(total_amount::numeric * ${pkrRateExpr(sql`currency`)}), 0)::float as pkr
+        from invoices where type = 'teacher' and is_latest and year = ${year}
+          and ${feeInBooks(database, sql`year`, sql`month`)}
+        group by 1`);
   for (const r of teacherPay.rows as any[]) months[r.month - 1].teacherPayPKR = r.pkr;
 
   const spent = await database.execute(sql`
@@ -77,6 +106,7 @@ async function summaryFor(database: Database, year: number): Promise<MonthSummar
            coalesce(sum(amount::numeric * ${pkrRateExpr(sql`currency`)}), 0)::float as pkr
     from expenses where extract(year from expense_date) = ${year}
       and ${feeInBooks(database, sql`extract(year from expense_date)`, sql`extract(month from expense_date)`)}
+      ${side(sql`coalesce((select s.segment from expense_segments s where s.expense_id = expenses.id), 'local')`)}
     group by 1, 2`);
   for (const r of spent.rows as any[]) {
     const m = months[r.month - 1];
@@ -86,9 +116,20 @@ async function summaryFor(database: Database, year: number): Promise<MonthSummar
   return months;
 }
 
+async function setSegment(expenseId: string, segment?: Segment) {
+  if (segment === undefined) return;
+  if (segment === 'online') {
+    await db.insert(expenseSegments).values({ expenseId, segment })
+      .onConflictDoUpdate({ target: expenseSegments.expenseId, set: { segment } });
+  } else {
+    await db.delete(expenseSegments).where(eq(expenseSegments.expenseId, expenseId));
+  }
+}
+
 export const expensesService = {
   async list(campus: Campus, startDate: string, endDate: string, category?: string) {
-    const lists = await Promise.all(databases(campus).map(async (database, i) => {
+    const lists = await Promise.all(views(campus).map(async (view) => {
+      const { database } = view;
       const rows = await database
         .select({
           id: expenses.id,
@@ -103,6 +144,7 @@ export const expensesService = {
           createdAt: expenses.createdAt,
           createdBy: expenses.createdBy,
           createdByName: sql<string | null>`trim(${users.firstName} || ' ' || ${users.lastName})`,
+          segment: segmentOf,
         })
         .from(expenses)
         .leftJoin(users, eq(users.id, expenses.createdBy))
@@ -112,16 +154,16 @@ export const expensesService = {
           gte(expenses.expenseDate, booksStartDate(database) ?? startDate),
           lte(expenses.expenseDate, endDate),
           category ? eq(expenses.category, category) : undefined,
+          view.segment ? sql`${segmentOf} = ${view.segment}` : undefined,
         ))
         .orderBy(desc(expenses.expenseDate), desc(expenses.createdAt));
-      const campusName = campus === 'both' ? (i === 0 ? 'senior' : 'junior') : campus;
-      return rows.map((r) => ({ ...r, campus: campusName }));
+      return rows.map((r) => ({ ...r, campus: view.campus, segment: view.campus === 'senior' ? r.segment : null }));
     }));
     return lists.flat().sort((a, b) => (a.expenseDate < b.expenseDate ? 1 : a.expenseDate > b.expenseDate ? -1 : 0));
   },
 
   async summary(campus: Campus, year: number): Promise<MonthSummary[]> {
-    const parts = await Promise.all(databases(campus).map((database) => summaryFor(database, year)));
+    const parts = await Promise.all(views(campus).map((view) => summaryFor(view, year)));
     const months = parts[0];
     for (const other of parts.slice(1)) {
       other.forEach((m, i) => {
@@ -148,6 +190,7 @@ export const expensesService = {
       notes: blank(input.notes),
       createdBy: userId,
     }).returning();
+    await setSegment(row.id, input.segment);
     return row;
   },
 
@@ -165,6 +208,7 @@ export const expensesService = {
       updatedAt: new Date(),
     }).where(eq(expenses.id, id)).returning();
     if (!row) throw new AppError(404, 'Expense not found');
+    await setSegment(id, input.segment);
     return row;
   },
 

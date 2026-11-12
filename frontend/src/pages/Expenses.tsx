@@ -36,6 +36,7 @@ const Expenses: React.FC = () => {
   const [month, setMonth] = useState(now.getMonth() + 1); // 0 = whole year
   const [category, setCategory] = useState('');
   const [campus, setCampus] = useState<ExpenseCampus>('senior');
+  const isSeniorPortal = brand.campus === 'senior';
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [summary, setSummary] = useState<MonthSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,7 +52,11 @@ const Expenses: React.FC = () => {
 
   // Sudo on the Senior portal can also read the Junior Campus; entries are added on each campus's own portal.
   const canSwitchCampus = isSudo && brand.campus === 'senior';
-  const readOnly = campus !== 'senior';
+  const readOnly = campus === 'junior' || campus === 'both';
+  // Sudo opens on the Local Senior tab
+  useEffect(() => {
+    if (canSwitchCampus) setCampus((c) => (c === 'senior' ? 'senior_local' : c));
+  }, [canSwitchCampus]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -92,6 +97,7 @@ const Expenses: React.FC = () => {
     setEditing(null);
     const f = emptyForm();
     if (month && !(year === now.getFullYear() && month === now.getMonth() + 1)) f.expenseDate = `${year}-${pad(month)}-01`;
+    if (isSeniorPortal) f.segment = campus === 'senior_online' ? 'online' : 'local';
     setForm(f);
     setShowForm(true);
   };
@@ -101,6 +107,7 @@ const Expenses: React.FC = () => {
     setForm({
       expenseDate: e.expenseDate, category: e.category, description: e.description || '', paidTo: e.paidTo || '',
       amount: String(Number(e.amount)), currency: e.currency, paymentMethod: e.paymentMethod || '', notes: e.notes || '',
+      segment: e.segment || 'local',
     });
     setShowForm(true);
   };
@@ -169,7 +176,7 @@ const Expenses: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2">
           {canSwitchCampus && (
             <div className="inline-flex rounded-lg bg-white shadow p-1" role="group" aria-label="Campus">
-              {([['senior', 'Senior Campus'], ['junior', 'Junior Campus'], ['both', 'Both']] as [ExpenseCampus, string][]).map(([value, label]) => (
+              {([['senior_local', 'Local Senior Campus'], ['senior_online', 'Online Senior Campus'], ['junior', 'Junior Campus'], ['both', 'All campuses']] as [ExpenseCampus, string][]).map(([value, label]) => (
                 <button
                   key={value}
                   type="button"
@@ -192,7 +199,7 @@ const Expenses: React.FC = () => {
 
       {readOnly && (
         <p className="rounded-md bg-blue-50 px-4 py-2 text-sm text-blue-800">
-          Showing {campus === 'junior' ? 'the Junior Campus' : 'both campuses'} (read only). Add Junior Campus expenses on the Junior portal.
+          Showing {campus === 'junior' ? 'the Junior Campus' : 'all campuses'} (read only). Add Junior Campus expenses on the Junior portal.
         </p>
       )}
 
@@ -248,7 +255,7 @@ const Expenses: React.FC = () => {
             <thead className="bg-gray-50 text-left text-xs font-medium uppercase text-gray-500">
               <tr>
                 <th className="px-4 py-3">Date</th>
-                {campus === 'both' && <th className="px-4 py-3">Campus</th>}
+                {isSeniorPortal && (campus === 'both' || campus === 'senior') && <th className="px-4 py-3">Campus</th>}
                 <th className="px-4 py-3">Category</th>
                 <th className="px-4 py-3">Description</th>
                 <th className="px-4 py-3">Paid to</th>
@@ -262,7 +269,11 @@ const Expenses: React.FC = () => {
               {expenses.map((e) => (
                 <tr key={`${e.campus}-${e.id}`} className="hover:bg-gray-50">
                   <td className="whitespace-nowrap px-4 py-3">{e.expenseDate}</td>
-                  {campus === 'both' && <td className="px-4 py-3 capitalize">{e.campus}</td>}
+                  {isSeniorPortal && (campus === 'both' || campus === 'senior') && (
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {e.campus === 'junior' ? 'Junior' : e.segment === 'online' ? 'Online Senior' : 'Local Senior'}
+                    </td>
+                  )}
                   <td className="px-4 py-3">{categoryLabel(e.category)}</td>
                   <td className="px-4 py-3">
                     {e.description || '–'}
@@ -360,6 +371,15 @@ const Expenses: React.FC = () => {
                   {METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
               </label>
+              {isSeniorPortal && (
+                <label className="col-span-2 text-sm">
+                  <span className="mb-1 block font-medium text-gray-700">For *</span>
+                  <select value={form.segment || 'local'} onChange={set('segment')} className={input}>
+                    <option value="local">Local Senior Campus</option>
+                    <option value="online">Online Senior Campus</option>
+                  </select>
+                </label>
+              )}
               <label className="col-span-2 text-sm">
                 <span className="mb-1 block font-medium text-gray-700">Notes</span>
                 <textarea value={form.notes} onChange={set('notes')} rows={2} maxLength={2000} className={input} />

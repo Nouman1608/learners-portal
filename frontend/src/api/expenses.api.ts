@@ -14,7 +14,9 @@ export const EXPENSE_CATEGORIES = [
 ] as const;
 
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number]['value'];
-export type ExpenseCampus = 'senior' | 'junior' | 'both';
+// Sudo on the Senior portal: senior_local / senior_online / junior / both (all); 'senior' = this portal, both sides
+export type ExpenseCampus = 'senior' | 'senior_local' | 'senior_online' | 'junior' | 'both';
+export type ExpenseSegment = 'local' | 'online';
 
 export interface Expense {
   id: string;
@@ -30,6 +32,7 @@ export interface Expense {
   createdBy: string | null;
   createdByName: string | null;
   campus: 'senior' | 'junior';
+  segment: ExpenseSegment | null; // Senior portal side (null for the Junior Campus)
 }
 
 export interface ExpenseInput {
@@ -41,6 +44,7 @@ export interface ExpenseInput {
   currency?: string;
   paymentMethod?: string;
   notes?: string;
+  segment?: ExpenseSegment; // Senior portal: Local (default) or Online
 }
 
 export interface MonthSummary {

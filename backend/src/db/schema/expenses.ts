@@ -26,3 +26,10 @@ export const expenses = pgTable('expenses', {
 }, (table) => ({
   expenseDateIdx: index('expenses_expense_date_idx').on(table.expenseDate),
 }));
+
+// Senior portal: which side of the senior campus an expense belongs to (Expenses tabs
+// Local Senior / Online Senior). Only 'online' is stored; an expense without a row is Local.
+export const expenseSegments = pgTable('expense_segments', {
+  expenseId: uuid('expense_id').primaryKey().references(() => expenses.id, { onDelete: 'cascade' }),
+  segment: varchar('segment', { length: 10 }).notNull(), // 'online'
+});
