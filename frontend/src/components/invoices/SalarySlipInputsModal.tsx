@@ -2,15 +2,20 @@ import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { XMarkIcon, TrashIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { salaryAdvancesApi, SalaryAdvance } from '../../api/salaryAdvances.api';
-import { teacherAttendanceApi, TeacherMark, TeacherMonthSummary, MarkKind } from '../../api/teacherAttendance.api';
+import { teacherAttendanceApi, MonthCounts, deductionDays } from '../../api/teacherAttendance.api';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const pad = (n: number) => String(n).padStart(2, '0');
 const dayLabel = (d: string) =>
   new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
-const isWeekend = (d: string) => [0, 6].includes(new Date(`${d}T12:00:00Z`).getUTCDay());
 const pkr = (n: number) => `Rs ${Math.round(n).toLocaleString('en-PK')}`;
-const daysText = (n: number) => `${n} day${n === 1 ? '' : 's'}`;
+const daysText = (n: number) => (n === 0 ? 'nothing deducted' : `${n} day${n === 1 ? '' : 's'} deducted`);
+const ZERO: MonthCounts = { absences: 0, friMonAbsences: 0, lates: 0 };
+const FIELDS: [keyof MonthCounts, string][] = [
+  ['absences', 'Absences (Tue–Thu)'],
+  ['friMonAbsences', 'Absences on Fri / Mon'],
+  ['lates', 'Lates'],
+];
 
 interface Props {
   teacherId: string;
@@ -23,36 +28,34 @@ interface Props {
 }
 
 /**
- * Before a salary slip is generated, review and add the teacher's salary advances (both
- * portals) and absences / lates (Junior portal) for that month. Changes are saved straight
- * away; "Generate Salary Slip" then builds the slip with them.
+ * Before a salary slip is generated, review the teacher's salary advances (both portals)
+ * and enter the month's absences / lates totals (Junior portal). Advances save straight
+ * away; the totals are saved when "Generate Salary Slip" is pressed.
  */
 const SalarySlipInputsModal: React.FC<Props> = ({ teacherId, teacherName, month, year, onCancel, onContinue, showAttendance }) => {
-  const firstDay = `${year}-${pad(month)}-01`;
-  const lastDay = `${year}-${pad(month)}-${pad(new Date(year, month, 0).getDate())}`;
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
-  const defaultDay = todayStr >= firstDay && todayStr <= lastDay ? todayStr : firstDay;
 
-  const [marks, setMarks] = useState<TeacherMark[]>([]);
-  const [summary, setSummary] = useState<TeacherMonthSummary | null>(null);
+  const [saved, setSaved] = useState<MonthCounts>(ZERO);
+  const [counts, setCounts] = useState<MonthCounts>(ZERO);
   const [advances, setAdvances] = useState<SalaryAdvance[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [mark, setMark] = useState({ date: defaultDay, kind: 'absent' as MarkKind, note: '' });
   const [advance, setAdvance] = useState({ amount: '', paidOn: todayStr, paymentMethod: 'cash', note: '' });
 
   const load = useCallback(async () => {
     try {
-      const [att, adv] = await Promise.all([
-        showAttendance ? teacherAttendanceApi.list(month, year, teacherId) : Promise.resolve({ marks: [], summary: [] }),
+      const [rows, adv] = await Promise.all([
+        showAttendance ? teacherAttendanceApi.list(month, year, teacherId) : Promise.resolve([]),
         salaryAdvancesApi.list({ teacherId, month, year }),
       ]);
-      setMarks(att.marks);
-      setSummary(att.summary.find((s) => s.teacherId === teacherId) || null);
+      const row = rows.find((r) => r.teacherId === teacherId);
+      const c = row ? { absences: row.absences, friMonAbsences: row.friMonAbsences, lates: row.lates } : ZERO;
+      setSaved(c);
+      setCounts(c);
       setAdvances(adv);
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to load advances');
+      toast.error(error.response?.data?.error || 'Failed to load');
     } finally {
       setLoading(false);
     }
@@ -77,14 +80,6 @@ const SalarySlipInputsModal: React.FC<Props> = ({ teacherId, teacherName, month,
     }
   };
 
-  const addMark = async () => {
-    if (mark.date < firstDay || mark.date > lastDay) return void toast.error(`Pick a day in ${MONTHS[month - 1]} ${year}`);
-    if (isWeekend(mark.date)) return void toast.error('Marks are for Monday to Friday only');
-    if (await run(() => teacherAttendanceApi.create({ teacherId, ...mark }), mark.kind === 'absent' ? 'Marked absent' : 'Marked late')) {
-      setMark((m) => ({ ...m, note: '' }));
-    }
-  };
-
   const addAdvance = async () => {
     const amount = advance.amount.replace(/,/g, '').trim();
     if (!(Number(amount) > 0)) return void toast.error('Enter the advance amount');
@@ -94,8 +89,29 @@ const SalarySlipInputsModal: React.FC<Props> = ({ teacherId, teacherName, month,
     }
   };
 
+  // Save the absences / lates totals (if changed), then make the slip
+  const generate = async () => {
+    const changed = counts.absences !== saved.absences || counts.friMonAbsences !== saved.friMonAbsences || counts.lates !== saved.lates;
+    if (showAttendance && changed) {
+      setBusy(true);
+      try {
+        await teacherAttendanceApi.save({ teacherId, month, year, ...counts });
+      } catch (error: any) {
+        toast.error(error.response?.data?.error || 'Failed to save absences and lates');
+        setBusy(false);
+        return;
+      }
+      setBusy(false);
+    }
+    onContinue();
+  };
+
+  const setField = (field: keyof MonthCounts, value: string) =>
+    setCounts((c) => ({ ...c, [field]: Math.max(0, Math.min(31, parseInt(value, 10) || 0)) }));
+
   const input = 'rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-indigo-500 focus:ring-indigo-500';
   const advanceTotal = advances.reduce((s, a) => s + Number(a.amount), 0);
+  const days = deductionDays(counts);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -115,48 +131,27 @@ const SalarySlipInputsModal: React.FC<Props> = ({ teacherId, teacherName, month,
             <p className="text-sm text-gray-500">Loading…</p>
           ) : (
             <>
-              {/* Absences & lates (Junior portal only) */}
-              {showAttendance && <section>
-                <div className="flex items-baseline justify-between">
-                  <h3 className="font-semibold text-gray-900">Absences &amp; lates</h3>
-                  <span className={`text-sm font-medium ${summary && summary.days > 0 ? 'text-red-700' : 'text-gray-500'}`}>
-                    {summary ? `${summary.absences} absent · ${summary.lates} late → ${summary.days ? `${daysText(summary.days)} deducted` : 'nothing deducted'}` : 'None this month'}
-                  </span>
-                </div>
-                <p className="text-xs text-gray-500">2 lates and 2 absences a month are allowed; then half a day per late and 1 day per absence. A Friday or Monday absence always costs 2 days.</p>
-                {marks.length > 0 && (
-                  <ul className="mt-2 divide-y divide-gray-100 rounded-md border border-gray-200 text-sm">
-                    {marks.map((m) => (
-                      <li key={m.id} className="flex items-center justify-between gap-2 px-3 py-2">
-                        <span>
-                          <span className="font-medium">{dayLabel(m.date)}</span>{' '}
-                          <span className={`rounded-full px-2 py-0.5 text-xs ${m.kind === 'absent' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}>{m.kind === 'absent' ? 'Absent' : 'Late'}</span>{' '}
-                          <span className={m.days ? 'text-red-700' : 'text-gray-500'}>{m.days ? `${daysText(m.days)} – ${m.reason}` : m.reason}</span>
-                          {m.note && <span className="text-gray-500"> · {m.note}</span>}
-                        </span>
-                        <button disabled={busy} onClick={() => run(() => teacherAttendanceApi.remove(m.id), 'Mark removed')}
-                          aria-label="Remove mark" className="p-1 text-gray-400 hover:text-red-600 disabled:opacity-40">
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
-                      </li>
+              {/* Absences & lates totals (Junior portal only) */}
+              {showAttendance && (
+                <section>
+                  <div className="flex items-baseline justify-between">
+                    <h3 className="font-semibold text-gray-900">Absences &amp; lates this month</h3>
+                    <span className={`text-sm font-medium ${days ? 'text-red-700' : 'text-gray-500'}`}>{daysText(days)}</span>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    2 absences (Tue–Thu) and 2 lates are allowed; then 1 day per absence and half a day per late. Every Friday or Monday absence costs 2 days.
+                  </p>
+                  <div className="mt-2 grid grid-cols-3 gap-3">
+                    {FIELDS.map(([field, label]) => (
+                      <label key={field} className="text-sm">
+                        <span className="mb-1 block text-gray-700">{label}</span>
+                        <input type="number" min={0} max={31} value={counts[field]} onChange={(e) => setField(field, e.target.value)}
+                          className={`${input} w-full`} />
+                      </label>
                     ))}
-                  </ul>
-                )}
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <input type="date" value={mark.date} min={firstDay} max={lastDay} aria-label="Day"
-                    onChange={(e) => setMark((m) => ({ ...m, date: e.target.value }))} className={input} />
-                  <select value={mark.kind} aria-label="Absent or late" onChange={(e) => setMark((m) => ({ ...m, kind: e.target.value as MarkKind }))} className={input}>
-                    <option value="absent">Absent</option>
-                    <option value="late">Late</option>
-                  </select>
-                  <input value={mark.note} maxLength={500} placeholder="Note (optional)" aria-label="Note"
-                    onChange={(e) => setMark((m) => ({ ...m, note: e.target.value }))} className={`${input} min-w-0 flex-1`} />
-                  <button disabled={busy} onClick={addMark}
-                    className="inline-flex items-center gap-1 rounded-md bg-gray-800 px-3 py-1.5 text-sm text-white hover:bg-gray-900 disabled:opacity-50">
-                    <PlusIcon className="h-4 w-4" /> Add
-                  </button>
-                </div>
-              </section>}
+                  </div>
+                </section>
+              )}
 
               {/* Salary advances */}
               <section>
@@ -206,7 +201,7 @@ const SalarySlipInputsModal: React.FC<Props> = ({ teacherId, teacherName, month,
 
         <div className="flex justify-end gap-2 border-t border-gray-200 p-4">
           <button onClick={onCancel} className="rounded-md bg-gray-100 px-4 py-2 text-sm text-gray-700 hover:bg-gray-200">Cancel</button>
-          <button disabled={loading || busy} onClick={onContinue}
+          <button disabled={loading || busy} onClick={generate}
             className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
             Generate Salary Slip
           </button>

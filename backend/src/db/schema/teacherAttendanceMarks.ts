@@ -1,11 +1,27 @@
-import { pgTable, uuid, date, varchar, text, timestamp, unique, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, date, varchar, text, timestamp, unique, index, integer } from 'drizzle-orm/pg-core';
 import { users } from './users';
 
 // ============================================================================
-// TEACHER ABSENT / LATE MARKS (Junior portal) - admins mark the days a teacher was
-// absent or late. The pay deduction for a month is worked out from these marks
-// (see teacherDeductions.service) and taken off that month's teacher invoice.
+// TEACHER ABSENCES / LATES PER MONTH (Junior portal) - admins enter each teacher's
+// monthly totals; the pay deduction is worked out from them (teacherDeductions.service)
+// and taken off that month's salary slip.
 // ============================================================================
+
+export const teacherMonthlyAttendance = pgTable('teacher_monthly_attendance', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  teacherId: uuid('teacher_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  month: integer('month').notNull(),
+  year: integer('year').notNull(),
+  absences: integer('absences').default(0).notNull(), // absences on Tuesday-Thursday
+  friMonAbsences: integer('fri_mon_absences').default(0).notNull(), // absences on a Friday or Monday
+  lates: integer('lates').default(0).notNull(),
+  updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+  oneRowPerMonth: unique('teacher_monthly_attendance_teacher_month').on(table.teacherId, table.year, table.month),
+}));
+
+// Superseded by teacher_monthly_attendance (2026-11-12): per-day marks, no longer used.
 
 export const teacherAttendanceMarks = pgTable('teacher_attendance_marks', {
   id: uuid('id').primaryKey().defaultRandom(),

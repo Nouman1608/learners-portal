@@ -710,14 +710,12 @@ export const invoicesService = {
     doc.fontSize(11).font('Helvetica-Bold').text('ATTENDANCE DEDUCTIONS', 50, y);
     y += 16;
     doc.fontSize(8).font('Helvetica')
-      .text(`Day's pay ${pkr(deduction.dayPay)} = earnings ${pkr(deduction.gross)} / ${deduction.workingDays} working days. 2 lates and 2 absences a month are allowed.`, 70, y, { width: 470 });
+      .text(`Day's pay ${pkr(deduction.dayPay)} = earnings ${pkr(deduction.gross)} / ${deduction.workingDays} working days.`, 70, y, { width: 470 });
     y += 16;
     for (const item of deduction.items) {
-      const day = new Date(item.date + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
-      const what = item.kind === 'absent' ? 'Absent' : 'Late';
-      const days = item.days ? ` – ${item.days} day${item.days === 1 ? '' : 's'}` : '';
+      const days = item.days ? ` – ${item.days} day${item.days === 1 ? '' : 's'}` : ' – nothing deducted';
       doc.fontSize(9).font('Helvetica')
-        .text(`${day}: ${what} (${item.reason})${days}`, 90, y, { width: 350 })
+        .text(`${item.label}${days}`, 90, y, { width: 350 })
         .text(item.amount ? `- ${pkr(item.amount)}` : pkr(0), 450, y, { width: 90, align: 'right' });
       y += 15;
     }

@@ -1,26 +1,24 @@
 import apiClient from './client';
 
-export type MarkKind = 'absent' | 'late';
-
-export interface TeacherMark {
-  id: string;
+/** A teacher's absences / lates totals for one month (Junior portal) */
+export interface TeacherMonthRow {
   teacherId: string;
   teacherName: string;
-  date: string; // YYYY-MM-DD
-  kind: MarkKind;
-  note: string | null;
-  createdByName: string | null;
-  days?: number; // days of pay deducted for this mark (0 = allowed)
-  reason?: string; // e.g. "allowed (1 of 2)", "3rd absence", "Friday absence"
-}
-
-export interface TeacherMonthSummary {
-  teacherId: string;
-  teacherName: string;
-  absences: number;
+  absences: number; // Tuesday-Thursday
+  friMonAbsences: number; // on a Friday or Monday
   lates: number;
-  days: number; // total days of pay deducted
+  days: number; // days of pay deducted
 }
+
+export interface MonthCounts {
+  absences: number;
+  friMonAbsences: number;
+  lates: number;
+}
+
+/** Days of pay deducted (same rules as the server): 2 absences and 2 lates free; Fri/Mon absence = 2 days */
+export const deductionDays = (c: MonthCounts) =>
+  Math.max(0, c.absences - 2) + 2 * c.friMonAbsences + 0.5 * Math.max(0, c.lates - 2);
 
 /** Absent/late deduction on one teacher invoice (returned with teacher invoices) */
 export interface InvoiceDeduction {
@@ -28,26 +26,23 @@ export interface InvoiceDeduction {
   dayPay: number;
   gross: number;
   absences: number;
+  friMonAbsences: number;
   lates: number;
   days: number;
   total: number;
 }
 
 export const teacherAttendanceApi = {
-  list: async (month: number, year: number, teacherId?: string): Promise<{ marks: TeacherMark[]; summary: TeacherMonthSummary[] }> => {
+  list: async (month: number, year: number, teacherId?: string): Promise<TeacherMonthRow[]> => {
     const params = new URLSearchParams({ month: String(month), year: String(year) });
     if (teacherId) params.append('teacherId', teacherId);
-    const response = await apiClient.get<{ marks: TeacherMark[]; summary: TeacherMonthSummary[] }>(`/teacher-attendance?${params.toString()}`);
-    return response.data;
+    const response = await apiClient.get<{ rows: TeacherMonthRow[] }>(`/teacher-attendance?${params.toString()}`);
+    return response.data.rows;
   },
 
-  create: async (data: { teacherId: string; date: string; kind: MarkKind; note?: string }) => {
-    const response = await apiClient.post('/teacher-attendance', data);
+  save: async (data: { teacherId: string; month: number; year: number } & MonthCounts) => {
+    const response = await apiClient.put('/teacher-attendance', data);
     return response.data;
-  },
-
-  remove: async (id: string): Promise<void> => {
-    await apiClient.delete(`/teacher-attendance/${id}`);
   },
 };
 

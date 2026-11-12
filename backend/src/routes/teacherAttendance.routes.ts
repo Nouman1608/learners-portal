@@ -6,11 +6,10 @@ import { logActivity } from '../middleware/requestLogger';
 
 const router = Router();
 
-// Teacher absent / late marks (Junior portal): admins mark, teachers see their own
+// Teacher absences / lates per month (Junior portal): admins enter totals, teachers see their own
 router.use(authenticate);
 
-router.get('/', requireTeacher, controller.listMarks);
-router.post('/', requireAdmin, logActivity('create', 'teacher-attendance-mark'), controller.createMark);
-router.delete('/:id', requireAdmin, logActivity('delete', 'teacher-attendance-mark'), controller.deleteMark);
+router.get('/', requireTeacher, controller.listMonth);
+router.put('/', requireAdmin, logActivity('update', 'teacher-attendance'), controller.saveMonth);
 
 export default router;
