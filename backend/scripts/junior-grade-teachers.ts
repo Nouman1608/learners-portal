@@ -1,11 +1,11 @@
 /**
- * Junior Campus (owner, 2026-11-12): Maida Jawed, Muhammad Hassan and Maryam Nawaz are
- * the ONLY teachers of Grade 6, 7 and 8. Other teachers are taken off those grades.
- * (All three are salaried, so this does not change their pay; a teacher taken off
- * stops earning from those grades' students on future salary slips.)
+ * Junior Campus: make the given teachers the ONLY teachers of a range of grades
+ * ("Grade N" classes). Other teachers are taken off those grades; a teacher taken off
+ * stops earning from those grades' students on future salary slips.
  *
- * Preview (changes nothing):  npx tsx scripts/junior-grade-teachers.ts .env.junior
- * Apply:                      npx tsx scripts/junior-grade-teachers.ts .env.junior --apply
+ * Preview (changes nothing):  npx tsx scripts/junior-grade-teachers.ts .env.junior 6-8 maida.jawed,Muhammad.hassan,maryam.nawaz
+ * Apply:                      add --apply
+ * (Owner, 2026-11-12: Grade 6-8 = Maida, Hassan, Maryam; Grade 1-5 = Anum Aslam, Maryam Nawaz.)
  */
 import * as dotenv from 'dotenv';
 import { Client } from 'pg';
@@ -14,8 +14,14 @@ const envFile = process.argv.find((a) => a.startsWith('.env')) || '.env.junior';
 const apply = process.argv.includes('--apply');
 dotenv.config({ path: envFile, override: true });
 
-const GRADES = ['Grade 6', 'Grade 7', 'Grade 8'];
-const TEACHERS = ['maida.jawed', 'Muhammad.hassan', 'maryam.nawaz'];
+const [rangeArg, teachersArg] = process.argv.slice(2).filter((a) => !a.startsWith('.env') && !a.startsWith('--'));
+const [from, to] = (rangeArg || '').split('-').map(Number);
+if (!from || !to || from > to || !teachersArg) {
+  console.error('Usage: npx tsx scripts/junior-grade-teachers.ts .env.junior 1-5 anum.aslam,maryam.nawaz [--apply]');
+  process.exit(1);
+}
+const GRADES = Array.from({ length: to - from + 1 }, (_, i) => `Grade ${from + i}`);
+const TEACHERS = teachersArg.split(',').map((t) => t.trim()).filter(Boolean);
 
 async function main() {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
