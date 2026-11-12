@@ -74,9 +74,9 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
   const [inputsFor, setInputsFor] = useState<{ id: string; month: number; year: number; name: string } | null>(null);
   const [salaryTab, setSalaryTab] = useState<'slips' | 'advances' | 'attendance'>('slips');
 
+  // Both portals review salary advances (and, on Junior, absences / lates) before a slip is made
   const startSalarySlip = (id: string, month: number, year: number, name: string) => {
-    if (isJuniorPortal) setInputsFor({ id, month, year, name });
-    else void handleIndividualTeacher(id, month, year, name);
+    setInputsFor({ id, month, year, name });
   };
 
   const handleIndividualTeacher = async (id: string, month: number, year: number, name: string, alreadyConfirmed = false) => {
@@ -336,10 +336,12 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
   // Teachers only have salary slips (old /invoices links land there)
   if (!isSalary && user?.role === 'teacher') return <Navigate to="/salary-slips" replace />;
 
-  // Junior portal: Advances and Absences & Lates live inside Salary Slips as sub-tabs
-  const salaryTabs = isSalary && isJuniorPortal && (
+  // Advances (both portals) and Absences & Lates (Junior only) live inside Salary Slips as sub-tabs
+  const tabList: (readonly ['slips' | 'advances' | 'attendance', string])[] = [['slips', 'Salary Slips'], ['advances', 'Advances']];
+  if (isJuniorPortal) tabList.push(['attendance', 'Absences & Lates']);
+  const salaryTabs = isSalary && (
     <div className="mb-6 flex gap-1 border-b border-gray-200" role="tablist">
-      {([['slips', 'Salary Slips'], ['advances', 'Advances'], ['attendance', 'Absences & Lates']] as const).map(([value, label]) => (
+      {tabList.map(([value, label]) => (
         <button
           key={value}
           role="tab"
@@ -382,6 +384,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
           teacherName={inputsFor.name}
           month={inputsFor.month}
           year={inputsFor.year}
+          showAttendance={isJuniorPortal}
           onCancel={() => setInputsFor(null)}
           onContinue={() => {
             const target = inputsFor;

@@ -19,14 +19,15 @@ interface Props {
   year: number;
   onCancel: () => void;
   onContinue: () => void; // generate the salary slip
+  showAttendance: boolean; // absences / lates apply on the Junior portal only
 }
 
 /**
- * Junior portal: before a salary slip is generated, review and add the teacher's
- * absences / lates and salary advances for that month. Both are saved straight away;
- * "Generate Salary Slip" then builds the slip with them.
+ * Before a salary slip is generated, review and add the teacher's salary advances (both
+ * portals) and absences / lates (Junior portal) for that month. Changes are saved straight
+ * away; "Generate Salary Slip" then builds the slip with them.
  */
-const SalarySlipInputsModal: React.FC<Props> = ({ teacherId, teacherName, month, year, onCancel, onContinue }) => {
+const SalarySlipInputsModal: React.FC<Props> = ({ teacherId, teacherName, month, year, onCancel, onContinue, showAttendance }) => {
   const firstDay = `${year}-${pad(month)}-01`;
   const lastDay = `${year}-${pad(month)}-${pad(new Date(year, month, 0).getDate())}`;
   const today = new Date();
@@ -44,18 +45,18 @@ const SalarySlipInputsModal: React.FC<Props> = ({ teacherId, teacherName, month,
   const load = useCallback(async () => {
     try {
       const [att, adv] = await Promise.all([
-        teacherAttendanceApi.list(month, year, teacherId),
+        showAttendance ? teacherAttendanceApi.list(month, year, teacherId) : Promise.resolve({ marks: [], summary: [] }),
         salaryAdvancesApi.list({ teacherId, month, year }),
       ]);
       setMarks(att.marks);
       setSummary(att.summary.find((s) => s.teacherId === teacherId) || null);
       setAdvances(adv);
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to load absences and advances');
+      toast.error(error.response?.data?.error || 'Failed to load advances');
     } finally {
       setLoading(false);
     }
-  }, [teacherId, month, year]);
+  }, [teacherId, month, year, showAttendance]);
 
   useEffect(() => {
     load();
@@ -102,7 +103,7 @@ const SalarySlipInputsModal: React.FC<Props> = ({ teacherId, teacherName, month,
         <div className="flex items-start justify-between border-b border-gray-200 p-5">
           <div>
             <h2 className="text-lg font-bold text-gray-900">Salary slip – {teacherName}</h2>
-            <p className="text-sm text-gray-500">{MONTHS[month - 1]} {year}: check absences, lates and advances before generating</p>
+            <p className="text-sm text-gray-500">{MONTHS[month - 1]} {year}: check {showAttendance ? 'absences, lates and advances' : 'salary advances'} before generating</p>
           </div>
           <button onClick={onCancel} aria-label="Close" className="text-gray-400 hover:text-gray-600">
             <XMarkIcon className="h-6 w-6" />
@@ -114,8 +115,8 @@ const SalarySlipInputsModal: React.FC<Props> = ({ teacherId, teacherName, month,
             <p className="text-sm text-gray-500">Loading…</p>
           ) : (
             <>
-              {/* Absences & lates */}
-              <section>
+              {/* Absences & lates (Junior portal only) */}
+              {showAttendance && <section>
                 <div className="flex items-baseline justify-between">
                   <h3 className="font-semibold text-gray-900">Absences &amp; lates</h3>
                   <span className={`text-sm font-medium ${summary && summary.days > 0 ? 'text-red-700' : 'text-gray-500'}`}>
@@ -155,7 +156,7 @@ const SalarySlipInputsModal: React.FC<Props> = ({ teacherId, teacherName, month,
                     <PlusIcon className="h-4 w-4" /> Add
                   </button>
                 </div>
-              </section>
+              </section>}
 
               {/* Salary advances */}
               <section>
