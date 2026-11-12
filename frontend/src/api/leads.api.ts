@@ -105,6 +105,15 @@ export const leadsApi = {
     return response.data.lead;
   },
 
+  /** Create a student account from a lead (password Student@123) and mark the lead enrolled */
+  createStudentFromLead: async (id: string, data: {
+    username: string; firstName: string; lastName: string; email?: string; phone?: string; parentPhone?: string;
+    studentCategory?: string; studentSubcategory?: string;
+  }): Promise<{ student: { id: string; username: string }; lead: Lead; password: string }> => {
+    const response = await apiClient.post(`/leads/${id}/create-student`, data);
+    return response.data;
+  },
+
   getLeadsDueForMessage: async (date?: string): Promise<Lead[]> => {
     const params = new URLSearchParams();
     if (date) params.append('date', date);

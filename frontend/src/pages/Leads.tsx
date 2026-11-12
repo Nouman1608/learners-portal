@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { PlusIcon, MagnifyingGlassIcon, UserGroupIcon } from '@heroicons/react/24/outline';
 import LeadFormModal from '../components/leads/LeadFormModal';
+import CreateStudentFromLeadModal from '../components/leads/CreateStudentFromLeadModal';
 import EmptyState from '../components/common/EmptyState';
 import SendMessageModal from '../components/leads/SendMessageModal';
 import BulkMessageModal from '../components/leads/BulkMessageModal';
@@ -26,6 +27,7 @@ const Leads: React.FC = () => {
   const [showBulkMessageModal, setShowBulkMessageModal] = useState(false);
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
   const [historyLead, setHistoryLead] = useState<Lead | null>(null);
+  const [studentLead, setStudentLead] = useState<Lead | null>(null); // "Make student" pop-up
 
   const isSudo = currentUser?.role === 'sudo';
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'sudo';
@@ -367,6 +369,17 @@ const Leads: React.FC = () => {
                           </button>
                         </>
                       )}
+                      {lead.convertedToStudentId ? (
+                        <span className="px-2 py-1 text-xs text-green-700" title="This lead has a student account">Student account made</span>
+                      ) : (
+                        <button
+                          onClick={() => setStudentLead(lead)}
+                          title="Demo done and joining: make their student account"
+                          className="px-2 py-1 text-green-700 hover:text-green-900 hover:bg-green-50 rounded-lg transition-colors whitespace-nowrap"
+                        >
+                          Make student
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           setEditingLead(lead);
@@ -464,6 +477,17 @@ const Leads: React.FC = () => {
           }}
           leadId={historyLead.id}
           leadName={historyLead.name}
+        />
+      )}
+
+      {studentLead && (
+        <CreateStudentFromLeadModal
+          lead={studentLead}
+          onClose={() => setStudentLead(null)}
+          onCreated={(updated) => {
+            setLeads((all) => all.map((l) => (l.id === updated.id ? { ...l, ...updated } : l)));
+            setStudentLead(null);
+          }}
         />
       )}
 

@@ -1,6 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { leadsService } from '../services/leads.service';
+import usersService from '../services/users.service';
+import { db } from '../config/database';
+import { users } from '../db/schema';
+import { eq } from 'drizzle-orm';
+import { AppError } from '../middleware/errorHandler';
 
 // Validation schemas
 const createLeadSchema = z.object({
@@ -168,6 +173,49 @@ export const convertLeadToStudent = async (req: Request, res: Response, next: Ne
     const { studentId } = z.object({ studentId: z.string().uuid() }).parse(req.body);
     const lead = await leadsService.convertLeadToStudent(req.params.id, studentId);
     res.json({ message: 'Lead converted to student successfully', lead });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const createStudentSchema = z.object({
+  username: z.string().trim().min(3).max(50),
+  firstName: z.string().trim().min(1).max(100),
+  lastName: z.string().trim().min(1).max(100),
+  email: z.string().trim().email().optional().or(z.literal('')),
+  phone: z.string().trim().max(20).optional(),
+  parentPhone: z.string().trim().max(20).optional(),
+  studentCategory: z.string().trim().max(20).optional(),
+  studentSubcategory: z.string().trim().max(30).optional(),
+});
+
+/**
+ * Create a student account from a lead (demo done, joining) and link the lead to it
+ * POST /api/leads/:id/create-student
+ * Access: admin, sudo. Password is the default Student@123 (no forced change).
+ */
+export const createStudentFromLead = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = createStudentSchema.parse(req.body);
+    const lead = await leadsService.getLeadById(req.params.id);
+    if (lead.convertedToStudentId) throw new AppError(400, 'This lead already has a student account');
+
+    const student = await usersService.createUser({
+      username: input.username,
+      password: 'Student@123',
+      role: 'student',
+      firstName: input.firstName,
+      lastName: input.lastName,
+      email: input.email || undefined,
+      phone: input.phone || undefined,
+      parentPhone: input.parentPhone || undefined,
+      studentCategory: input.studentCategory || undefined,
+      studentSubcategory: input.studentSubcategory || undefined,
+      createdBy: req.user!.id,
+    });
+    await db.update(users).set({ mustChangePassword: false }).where(eq(users.id, student.id));
+    const updatedLead = await leadsService.convertLeadToStudent(req.params.id, student.id);
+    res.status(201).json({ student, lead: updatedLead, password: 'Student@123' });
   } catch (error) {
     next(error);
   }

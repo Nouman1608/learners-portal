@@ -24,5 +24,6 @@ router.post('/:id/opt-in', requireAdmin, logActivity('opt-in', 'lead'), leadsCon
 
 // Lead conversion
 router.post('/:id/convert', requireAdmin, logActivity('convert', 'lead'), leadsController.convertLeadToStudent);
+router.post('/:id/create-student', requireAdmin, logActivity('create-student', 'lead'), leadsController.createStudentFromLead);
 
 export default router;
