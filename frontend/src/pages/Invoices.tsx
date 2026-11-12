@@ -15,7 +15,9 @@ import {
   ArrowDownTrayIcon,
   ArrowPathIcon,
   EyeIcon,
-  MagnifyingGlassIcon
+  MagnifyingGlassIcon,
+  ArrowsPointingOutIcon,
+  ArrowsPointingInIcon,
 } from '@heroicons/react/24/outline';
 import { useSortableData } from '../hooks/useSortableData';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -44,6 +46,15 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
   const [viewingPdfUrl, setViewingPdfUrl] = useState<string | null>(null);
+  // PDF viewer size: remembered on this computer between views
+  const [pdfFull, setPdfFullState] = useState<boolean>(() => {
+    try { return localStorage.getItem('invoicePdfFull') === '1'; } catch { return false; }
+  });
+  const setPdfFull = (update: (f: boolean) => boolean) => setPdfFullState((f) => {
+    const next = update(f);
+    try { localStorage.setItem('invoicePdfFull', next ? '1' : '0'); } catch { /* storage unavailable */ }
+    return next;
+  });
   const [emailingId, setEmailingId] = useState<string | null>(null);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [sessionModal, setSessionModal] = useState<{
@@ -741,22 +752,33 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
 
       {/* PDF Viewer Modal */}
       {viewingInvoice && viewingPdfUrl && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl h-5/6 flex flex-col">
+        <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${pdfFull ? 'p-0' : 'p-4'}`}>
+          <div className={`bg-white shadow-xl w-full flex flex-col ${pdfFull ? 'h-full rounded-none' : 'max-w-6xl h-5/6 rounded-lg'}`}>
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-lg font-semibold">
                 {viewingInvoice.invoiceNumber} - {MONTHS[viewingInvoice.month - 1]} {viewingInvoice.year}
               </h3>
-              <button
-                onClick={() => {
-                  setViewingInvoice(null);
-                  setViewingPdfUrl(null);
-                }}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <span className="text-2xl">&times;</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPdfFull((f) => !f)}
+                  title={pdfFull ? 'Smaller window' : 'Full screen'}
+                  aria-label={pdfFull ? 'Smaller window' : 'Full screen'}
+                  className="p-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
+                >
+                  {pdfFull ? <ArrowsPointingInIcon className="h-5 w-5" /> : <ArrowsPointingOutIcon className="h-5 w-5" />}
+                </button>
+                <button
+                  onClick={() => {
+                    setViewingInvoice(null);
+                    setViewingPdfUrl(null);
+                  }}
+                  aria-label="Close"
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <span className="text-2xl">&times;</span>
+                </button>
+              </div>
             </div>
 
             {/* PDF Viewer */}
