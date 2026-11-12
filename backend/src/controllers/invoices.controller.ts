@@ -2,7 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { invoicesService } from '../services/invoices.service';
 import { emailService } from '../services/email.service';
-import { db } from '../config/database';
+import { db, juniorDb } from '../config/database';
+import { AppError } from '../middleware/errorHandler';
 import { invoices } from '../db/schema/invoices';
 import { eq } from 'drizzle-orm';
 
@@ -151,7 +152,13 @@ export const getInvoices = async (req: Request, res: Response, next: NextFunctio
       filters.recipientId = req.user!.id;
     }
 
-    const invoicesList = await invoicesService.getInvoices(filters);
+    // Sudo on the Senior portal can read the Junior Campus (?campus=junior, read-only)
+    let database;
+    if (req.query.campus === 'junior' && req.user?.role === 'sudo') {
+      if (!juniorDb) throw new AppError(400, 'Junior Campus is not connected to this portal');
+      database = juniorDb;
+    }
+    const invoicesList = await invoicesService.getInvoices(filters, database);
     res.json({ invoices: invoicesList });
   } catch (error) {
     next(error);

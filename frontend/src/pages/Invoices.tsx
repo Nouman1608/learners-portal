@@ -64,6 +64,12 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
   const [filterSubcategory, setFilterSubcategory] = useState<string>('all');
 
   const isAdmin = user?.role === 'admin' || user?.role === 'sudo';
+  // Sudo on the Senior portal: Senior / Junior campus tabs (Junior is a read-only view)
+  const canPickCampus = user?.role === 'sudo' && !isJuniorPortal;
+  const [campusTab, setCampusTab] = useState<'senior' | 'junior'>('senior');
+  const juniorTab = canPickCampus && campusTab === 'junior';
+  const juniorView = isJuniorPortal || juniorTab;
+  const canAct = isAdmin && !juniorTab;
 
   useEffect(() => {
     if (isAdmin) usersApi.getUsersByRole('teacher').then(setTeachers)
@@ -111,7 +117,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
       loadInvoices();
     }, delay);
     return () => clearTimeout(handle);
-  }, [selectedMonth, selectedYear, selectedType, searchTerm]);
+  }, [selectedMonth, selectedYear, selectedType, searchTerm, juniorTab]);
 
   const loadInvoices = async () => {
     const seq = ++requestSeq.current;
@@ -127,6 +133,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
         filters.year = selectedYear;
       }
       filters.type = selectedType;
+      if (juniorTab) filters.campus = 'junior';
       const data = await invoicesApi.getInvoices(filters);
       if (seq !== requestSeq.current) return; // stale response — a newer request is in flight
       setInvoices(data);
@@ -339,7 +346,18 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
   // Advances (both portals) and Absences & Lates (Junior only) live inside Salary Slips as sub-tabs
   const tabList: (readonly ['slips' | 'advances' | 'attendance', string])[] = [['slips', 'Salary Slips'], ['advances', 'Advances']];
   if (isJuniorPortal) tabList.push(['attendance', 'Absences & Lates']);
-  const salaryTabs = isSalary && (
+  const campusTabs = canPickCampus && (
+    <div className="mb-4 inline-flex rounded-lg bg-white p-1 shadow" role="tablist" aria-label="Campus">
+      {([['senior', isSalary ? 'Senior Campus Teachers' : 'Senior Campus Students'], ['junior', isSalary ? 'Junior Campus Teachers' : 'Junior Campus Students']] as const).map(([value, label]) => (
+        <button key={value} role="tab" aria-selected={campusTab === value} onClick={() => { setCampusTab(value); setSalaryTab('slips'); setFilterCategory('all'); setFilterSubcategory('all'); }}
+          className={`rounded-md px-3 py-2 text-sm font-medium ${campusTab === value ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  const salaryTabs = isSalary && !juniorTab && (
     <div className="mb-6 flex gap-1 border-b border-gray-200" role="tablist">
       {tabList.map(([value, label]) => (
         <button
@@ -359,6 +377,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="mb-4 text-3xl font-bold text-gray-900">Salary Slips</h1>
+        {campusTabs}
         {salaryTabs}
         {salaryTab === 'advances' ? <SalaryAdvances /> : <TeacherAttendance />}
       </div>
@@ -376,6 +395,12 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
             : "Students' fee invoices"}
         </p>
       </div>
+      {campusTabs}
+      {juniorTab && (
+        <p className="mb-4 rounded-md bg-blue-50 px-4 py-2 text-sm text-blue-800">
+          Junior Campus (view only). To generate, regenerate, email or open the PDFs, use the Junior portal.
+        </p>
+      )}
       {salaryTabs}
 
       {inputsFor && (
@@ -394,7 +419,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
         />
       )}
 
-      {isAdmin && isSalary && (
+      {canAct && isSalary && (
         <div className="bg-white rounded-lg shadow p-6 mb-6 flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-48">
             <label htmlFor="individual-teacher" className="block text-sm font-medium text-gray-700 mb-2">Salary slip for one teacher</label>
@@ -475,7 +500,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
           </div>
 
           {/* Category Filter (students' invoices, admin only; the junior portal only has junior) */}
-          {isAdmin && !isSalary && !isJuniorPortal && (
+          {isAdmin && !isSalary && !juniorView && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Category
@@ -496,14 +521,14 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
           {isAdmin && !isSalary && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                {isJuniorPortal ? 'Category' : 'Subcategory'}
+                {juniorView ? 'Category' : 'Subcategory'}
               </label>
               <select
                 value={filterSubcategory}
                 onChange={(e) => setFilterSubcategory(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
               >
-                {isJuniorPortal ? (
+                {juniorView ? (
                   <>
                     <option value="all">All Categories</option>
                     {JUNIOR_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
@@ -524,7 +549,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
           )}
 
           {/* Generate Buttons (Admin only) */}
-          {isAdmin && (
+          {canAct && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Actions
@@ -639,7 +664,8 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
                     {formatDate(invoice.emailedAt)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex items-center justify-end gap-1">
+                    {juniorTab && <span className="text-xs text-gray-400">On Junior portal</span>}
+                    <div className={`flex items-center justify-end gap-1 ${juniorTab ? 'hidden' : ''}`}>
                     {invoice.pdfUrl && (
                       <>
                         <button

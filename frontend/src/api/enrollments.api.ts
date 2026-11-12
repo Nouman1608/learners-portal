@@ -260,8 +260,10 @@ export const feesApi = {
     status?: string;
     month?: number;
     year?: number;
+    campus?: 'senior' | 'junior'; // sudo on the Senior portal: Junior Campus (read-only)
   }): Promise<Fee[]> => {
     const params = new URLSearchParams();
+    if (filters?.campus === 'junior') params.append('campus', 'junior');
     if (filters?.studentId) params.append('studentId', filters.studentId);
     if (filters?.courseId) params.append('courseId', filters.courseId);
     if (filters?.status) params.append('status', filters.status);

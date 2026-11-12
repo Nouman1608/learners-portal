@@ -45,15 +45,21 @@ export default function Fees() {
   const [savingSessions, setSavingSessions] = useState(false);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'sudo';
+  // Sudo on the Senior portal: Senior / Junior campus tabs (Junior is a read-only view)
+  const canPickCampus = user?.role === 'sudo' && !isJuniorPortal;
+  const [campusTab, setCampusTab] = useState<'senior' | 'junior'>('senior');
+  const juniorTab = canPickCampus && campusTab === 'junior';
+  const juniorView = isJuniorPortal || juniorTab;
+  const canAct = isAdmin && !juniorTab;
 
   useEffect(() => {
     loadFees();
-  }, [filterStatus]);
+  }, [filterStatus, juniorTab]);
 
   const loadFees = async () => {
     try {
       setLoading(true);
-      const filters = filterStatus === 'all' ? {} : { status: filterStatus };
+      const filters = { ...(filterStatus === 'all' ? {} : { status: filterStatus }), ...(juniorTab ? { campus: 'junior' as const } : {}) };
       const data = await feesApi.getFees(filters);
       setFees(data);
     } catch (error: any) {
@@ -374,6 +380,20 @@ export default function Fees() {
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Fee Management</h1>
+        {canPickCampus && (
+          <div className="mt-3 inline-flex rounded-lg bg-white p-1 shadow" role="tablist" aria-label="Campus">
+            {([['senior', 'Senior Campus Students'], ['junior', 'Junior Campus Students']] as const).map(([value, label]) => (
+              <button key={value} role="tab" aria-selected={campusTab === value}
+                onClick={() => { setCampusTab(value); setSelectedIds(new Set()); setFilterCategory('all'); setFilterSubcategory('all'); }}
+                className={`rounded-md px-3 py-2 text-sm font-medium ${campusTab === value ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+        {juniorTab && (
+          <p className="mt-3 rounded-md bg-blue-50 px-4 py-2 text-sm text-blue-800">Junior Campus (view only). To mark fees received or change them, use the Junior portal.</p>
+        )}
         <p className="mt-1 text-sm text-gray-500">
           {filteredFees.length} fee{filteredFees.length !== 1 ? 's' : ''} {selectedIds.size > 0 && `(${selectedIds.size} selected)`}
         </p>
@@ -404,7 +424,7 @@ export default function Fees() {
         </div>
 
         {/* Bulk Actions */}
-        {isAdmin && selectedIds.size > 0 && (
+        {canAct && selectedIds.size > 0 && (
           <button
             onClick={handleBulkMarkReceived}
             className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
@@ -415,7 +435,7 @@ export default function Fees() {
         )}
 
         {/* Regenerate Fees - Admin only */}
-        {isAdmin && (
+        {canAct && (
           <button
             onClick={() => setShowRegenerateModal(true)}
             className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm whitespace-nowrap"
@@ -438,7 +458,7 @@ export default function Fees() {
           <option value="overdue">Overdue</option>
           <option value="received">Received</option>
           <option value="dropped">Dropped – not paying</option>
-          {isJuniorPortal && <option value="leave">On leave</option>}
+          {juniorView && <option value="leave">On leave</option>}
         </select>
 
         <select
@@ -499,7 +519,7 @@ export default function Fees() {
           />
         </div>
 
-        {!isJuniorPortal && (
+        {!juniorView && (
         <select
           value={filterCategory}
           onChange={(e) => setFilterCategory(e.target.value)}
@@ -516,7 +536,7 @@ export default function Fees() {
           onChange={(e) => setFilterSubcategory(e.target.value)}
           className="px-3 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"
         >
-          {isJuniorPortal ? (
+          {juniorView ? (
             <>
               <option value="all">All Categories</option>
               {JUNIOR_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
@@ -568,7 +588,7 @@ export default function Fees() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr>
-                  {isAdmin && (
+                  {canAct && (
                     <th className="px-3 py-2 w-12">
                       <input
                         type="checkbox"
@@ -602,12 +622,12 @@ export default function Fees() {
                   <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" title="Not paying because the student dropped this subject">
                     Dropped
                   </th>
-                  {isJuniorPortal && (
+                  {juniorView && (
                     <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider" title="On leave this month: fee not owed, student stays enrolled">
                       On leave
                     </th>
                   )}
-                  {isAdmin && (
+                  {canAct && (
                     <th onClick={() => requestSort('adminNote')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
                       Notes {getSortIndicator('adminNote')}
                     </th>
@@ -618,7 +638,7 @@ export default function Fees() {
                   <th onClick={() => requestSort('serialNumber')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
                     Serial Number {getSortIndicator('serialNumber')}
                   </th>
-                  {isAdmin && (
+                  {canAct && (
                     <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider sticky right-0 bg-gray-50/95 backdrop-blur-sm shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)]">
                       Actions
                     </th>
@@ -628,7 +648,7 @@ export default function Fees() {
               <tbody className="bg-white divide-y divide-gray-200 animate-fade-in">
                 {sortedFees.map((fee) => (
                   <tr key={fee.id} className={`hover:bg-indigo-50/30 transition-colors ${selectedIds.has(fee.id) ? 'bg-indigo-50/50' : ''}`}>
-                    {isAdmin && (
+                    {canAct && (
                       <td className="px-3 py-2">
                         <input
                           type="checkbox"
@@ -669,7 +689,7 @@ export default function Fees() {
                       <input
                         type="checkbox"
                         checked={!!fee.invoiceSentAt}
-                        disabled={!isAdmin}
+                        disabled={!canAct}
                         onChange={() => handleToggleInvoiceSent(fee)}
                         title={fee.invoiceSentAt ? `Invoice sent on ${new Date(fee.invoiceSentAt).toLocaleDateString()}` : 'Tick when the invoice has been sent'}
                         className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:cursor-default"
@@ -679,18 +699,18 @@ export default function Fees() {
                       <input
                         type="checkbox"
                         checked={fee.status === 'dropped'}
-                        disabled={!isAdmin || fee.status === 'received' || fee.status === 'leave' || droppingId === fee.id}
+                        disabled={!canAct || fee.status === 'received' || fee.status === 'leave' || droppingId === fee.id}
                         onChange={() => handleToggleDropped(fee)}
                         title={fee.status === 'received' ? 'Already paid' : fee.status === 'leave' ? 'On leave – untick On leave first' : 'Tick if not paying because the student dropped this subject'}
                         className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500 cursor-pointer disabled:cursor-default disabled:opacity-40"
                       />
                     </td>
-                    {isJuniorPortal && (
+                    {juniorView && (
                       <td className="px-3 py-2 whitespace-nowrap text-center">
                         <input
                           type="checkbox"
                           checked={fee.status === 'leave'}
-                          disabled={!isAdmin || fee.status === 'received' || fee.status === 'dropped' || droppingId === fee.id}
+                          disabled={!canAct || fee.status === 'received' || fee.status === 'dropped' || droppingId === fee.id}
                           onChange={() => handleToggleLeave(fee)}
                           aria-label="On leave"
                           title={fee.status === 'received' ? 'Already paid' : fee.status === 'dropped' ? 'Dropped – untick Dropped first' : 'Tick if the student is on leave this month (stays enrolled)'}
@@ -698,7 +718,7 @@ export default function Fees() {
                         />
                       </td>
                     )}
-                    {isAdmin && (
+                    {canAct && (
                       <td className="px-3 py-2 text-sm">
                         <div className="flex items-center gap-2 max-w-[14rem]">
                           <span className={`truncate ${fee.adminNote ? 'text-gray-700' : 'text-gray-400'}`} title={fee.adminNote || undefined}>
@@ -719,7 +739,7 @@ export default function Fees() {
                       {fee.receivedAt ? (
                         <span className="inline-flex items-center gap-1">
                           {new Date(fee.receivedAt).toLocaleDateString()}
-                          {isAdmin && (
+                          {canAct && (
                             <button
                               onClick={() => handleEditReceivedDate(fee)}
                               title="Change received date"
@@ -735,7 +755,7 @@ export default function Fees() {
                     <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
                       {fee.serialNumber || '-'}
                     </td>
-                    {isAdmin && (
+                    {canAct && (
                       <td className="px-3 py-2 whitespace-nowrap text-right sticky right-0 bg-white shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)]">
                         {fee.billingType === 'usage' && fee.status !== 'received' && (
                           <button
@@ -768,7 +788,7 @@ export default function Fees() {
             {filteredFees.map((fee) => (
               <div key={fee.id} className="p-4 border-b border-gray-200">
                 <div className="flex gap-3 items-start mb-3">
-                  {isAdmin && (
+                  {canAct && (
                     <input
                       type="checkbox"
                       checked={selectedIds.has(fee.id)}
@@ -813,7 +833,7 @@ export default function Fees() {
                     <input
                       type="checkbox"
                       checked={!!fee.invoiceSentAt}
-                      disabled={!isAdmin}
+                      disabled={!canAct}
                       onChange={() => handleToggleInvoiceSent(fee)}
                       className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                     />
@@ -827,26 +847,26 @@ export default function Fees() {
                       <input
                         type="checkbox"
                         checked={fee.status === 'dropped'}
-                        disabled={!isAdmin || fee.status === 'leave' || droppingId === fee.id}
+                        disabled={!canAct || fee.status === 'leave' || droppingId === fee.id}
                         onChange={() => handleToggleDropped(fee)}
                         className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-500"
                       />
                       <span className="text-gray-500">Dropped – not paying</span>
                     </label>
                   )}
-                  {isJuniorPortal && fee.status !== 'received' && (
+                  {juniorView && fee.status !== 'received' && (
                     <label className="flex items-center gap-2">
                       <input
                         type="checkbox"
                         checked={fee.status === 'leave'}
-                        disabled={!isAdmin || fee.status === 'dropped' || droppingId === fee.id}
+                        disabled={!canAct || fee.status === 'dropped' || droppingId === fee.id}
                         onChange={() => handleToggleLeave(fee)}
                         className="h-4 w-4 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
                       />
                       <span className="text-gray-500">On leave this month</span>
                     </label>
                   )}
-                  {isAdmin && (
+                  {canAct && (
                     <div className="flex items-start gap-2">
                       <div className="flex-1">
                         <span className="text-gray-500">Notes:</span>
@@ -869,7 +889,7 @@ export default function Fees() {
                       <span className="ml-1 text-gray-900">
                         {new Date(fee.receivedAt).toLocaleDateString()}
                       </span>
-                      {isAdmin && (
+                      {canAct && (
                         <button
                           onClick={() => handleEditReceivedDate(fee)}
                           aria-label="Change received date"
@@ -889,7 +909,7 @@ export default function Fees() {
                     </div>
                   )}
                 </div>
-                {isAdmin && fee.status !== 'received' && fee.status !== 'dropped' && fee.status !== 'leave' && (
+                {canAct && fee.status !== 'received' && fee.status !== 'dropped' && fee.status !== 'leave' && (
                   <div className="mt-4">
                     <button
                       onClick={() => handleMarkAsReceived(fee)}

@@ -1,4 +1,4 @@
-import { db } from '../config/database';
+import { db, Database } from '../config/database';
 import { teacherMonthlyAttendance } from '../db/schema/teacherAttendanceMarks';
 import { users } from '../db/schema/users';
 import { and, asc, eq, sql } from 'drizzle-orm';
@@ -81,16 +81,16 @@ const counts = (r?: { absences: number; friMonAbsences: number; lates: number } 
   r ? { absences: r.absences, friMonAbsences: r.friMonAbsences, lates: r.lates } : null;
 
 export const teacherDeductionsService = {
-  async countsFor(teacherId: string, month: number, year: number): Promise<MonthCounts | null> {
-    const [row] = await db.select().from(teacherMonthlyAttendance)
+  async countsFor(teacherId: string, month: number, year: number, database: Database = db): Promise<MonthCounts | null> {
+    const [row] = await database.select().from(teacherMonthlyAttendance)
       .where(and(eq(teacherMonthlyAttendance.teacherId, teacherId),
         eq(teacherMonthlyAttendance.month, month), eq(teacherMonthlyAttendance.year, year))).limit(1);
     return counts(row);
   },
 
   /** The deduction on a teacher's salary slip for a month, given the month's gross earnings */
-  async summaryFor(teacherId: string, month: number, year: number, gross: number) {
-    return calculateDeduction(await this.countsFor(teacherId, month, year), gross, month, year);
+  async summaryFor(teacherId: string, month: number, year: number, gross: number, database: Database = db) {
+    return calculateDeduction(await this.countsFor(teacherId, month, year, database), gross, month, year);
   },
 
   /** Every active teacher with their totals for the month (0 when none entered) */

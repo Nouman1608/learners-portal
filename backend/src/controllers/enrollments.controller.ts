@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { enrollmentsService } from '../services/enrollments.service';
 import { feesService } from '../services/fees.service';
 import { paymentsService } from '../services/payments.service';
+import { juniorDb } from '../config/database';
+import { AppError } from '../middleware/errorHandler';
 
 // Validation schemas
 const validDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(
@@ -238,6 +240,13 @@ const isAdminUser = (req: Request) => req.user?.role === 'admin' || req.user?.ro
 const hideNote = <T extends { adminNote?: string | null }>(req: Request, fee: T) =>
   (isAdminUser(req) ? fee : { ...fee, adminNote: undefined });
 
+/** Sudo on the Senior portal can read the Junior Campus (?campus=junior, read-only) */
+const campusDatabase = (req: Request) => {
+  if (req.query.campus !== 'junior' || req.user?.role !== 'sudo') return undefined;
+  if (!juniorDb) throw new AppError(400, 'Junior Campus is not connected to this portal');
+  return juniorDb;
+};
+
 export const getFees = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { studentId, courseId, status, month, year } = req.query;
@@ -247,7 +256,7 @@ export const getFees = async (req: Request, res: Response, next: NextFunction) =
       status: status as string,
       month: month ? parseInt(month as string) : undefined,
       year: year ? parseInt(year as string) : undefined,
-    });
+    }, campusDatabase(req));
     res.json({ fees: fees.map((fee) => hideNote(req, fee)) });
   } catch (error) {
     next(error);

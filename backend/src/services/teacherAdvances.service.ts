@@ -1,4 +1,4 @@
-import { db } from '../config/database';
+import { db, Database } from '../config/database';
 import { teacherAdvances } from '../db/schema/teacherAdvances';
 import { invoices } from '../db/schema/invoices';
 import { users } from '../db/schema/users';
@@ -83,9 +83,9 @@ export const teacherAdvancesService = {
    * advance: each month's earnings (its latest teacher invoice) absorb what is owed, and
    * the rest carries forward. `earnings` is this month's invoice total. Null if none apply.
    */
-  async summaryFor(teacherId: string, month: number, year: number, earnings: number): Promise<AdvanceSummary | null> {
+  async summaryFor(teacherId: string, month: number, year: number, earnings: number, database: Database = db): Promise<AdvanceSummary | null> {
     const target = monthIndex(year, month);
-    const rows = await db
+    const rows = await database
       .select({
         amount: teacherAdvances.amount, paidOn: teacherAdvances.paidOn, month: teacherAdvances.month,
         year: teacherAdvances.year, paymentMethod: teacherAdvances.paymentMethod, note: teacherAdvances.note,
@@ -105,7 +105,7 @@ export const teacherAdvancesService = {
 
     let carry = 0;
     if (first < target) {
-      const earned = await db
+      const earned = await database
         .select({ month: invoices.month, year: invoices.year, total: invoices.totalAmount })
         .from(invoices)
         .where(and(eq(invoices.type, 'teacher'), eq(invoices.recipientId, teacherId), eq(invoices.isLatest, true),

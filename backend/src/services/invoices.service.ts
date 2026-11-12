@@ -1,4 +1,4 @@
-import { db } from '../config/database';
+import { db, Database } from '../config/database';
 import teacherOneToOneRates from '../config/teacherOneToOneRates.json';
 import { invoices, invoiceLineItems } from '../db/schema/invoices';
 import { fees, enrollments, users, courses, courseTeachers, courseEvents } from '../db/schema';
@@ -1576,8 +1576,9 @@ export const invoicesService = {
     year?: number;
     search?: string;
     includeAllVersions?: boolean; // Set to true to include old versions
-  }) {
-    let query = db
+  }, database: Database = db) {
+    // database: the Junior Campus for sudo's Junior tab on the Senior portal (read-only)
+    let query = database
       .select({
         id: invoices.id,
         invoiceNumber: invoices.invoiceNumber,
@@ -1650,20 +1651,20 @@ export const invoicesService = {
     // Fetch line items for each invoice
     const invoicesWithLineItems = await Promise.all(
       invoicesList.map(async (invoice) => {
-        const items = await db
+        const items = await database
           .select()
           .from(invoiceLineItems)
           .where(eq(invoiceLineItems.invoiceId, invoice.id));
 
         // Teacher invoices: salary advances taken off and the balance still to pay
         const advance = invoice.type === 'teacher'
-          ? await teacherAdvancesService.summaryFor(invoice.recipientId, invoice.month, invoice.year, Number(invoice.totalAmount))
+          ? await teacherAdvancesService.summaryFor(invoice.recipientId, invoice.month, invoice.year, Number(invoice.totalAmount), database)
           : null;
 
         // Teacher invoices: absent/late deductions (Junior campus)
         const deduction = invoice.type === 'teacher'
           ? await teacherDeductionsService.summaryFor(invoice.recipientId, invoice.month, invoice.year,
-              items.reduce((sum, item) => sum + Number(item.amount), 0))
+              items.reduce((sum, item) => sum + Number(item.amount), 0), database)
           : null;
 
         return {

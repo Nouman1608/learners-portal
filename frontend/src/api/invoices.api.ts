@@ -98,6 +98,7 @@ export interface GetInvoicesFilters {
   month?: number;
   year?: number;
   search?: string;
+  campus?: 'senior' | 'junior'; // sudo on the Senior portal: Junior Campus (read-only)
 }
 
 /**
@@ -115,6 +116,7 @@ export const invoicesApi = {
     if (filters?.month) params.append('month', filters.month.toString());
     if (filters?.year) params.append('year', filters.year.toString());
     if (filters?.search) params.append('search', filters.search);
+    if (filters?.campus === 'junior') params.append('campus', 'junior');
 
     const response = await apiClient.get(`/invoices?${params.toString()}`);
     return response.data.invoices;

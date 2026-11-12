@@ -1,4 +1,4 @@
-import { db } from '../config/database';
+import { db, Database } from '../config/database';
 import { fees, enrollments, users, courses, payments, courseEvents, courseTeachers, invoices, feeInvoiceSent, feeAdminNotes } from '../db/schema';
 import { eq, and, desc, sql, lte, gte, ne, inArray, notInArray } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler';
@@ -102,8 +102,9 @@ export const feesService = {
     status?: string;
     month?: number;
     year?: number;
-  }) {
-    let query = db
+  }, database: Database = db) {
+    // database: the Junior Campus for sudo's Junior tab on the Senior portal (read-only)
+    let query = database
       .select({
         id: fees.id,
         enrollmentId: fees.enrollmentId,
@@ -145,7 +146,7 @@ export const feesService = {
       .leftJoin(feeAdminNotes, eq(feeAdminNotes.feeId, fees.id));
 
     // Fees for months before the books start (BOOKS_START) are not listed
-    const conditions = [feeInBooks()];
+    const conditions = [feeInBooks(database)];
     if (filters?.studentId) {
       conditions.push(eq(fees.studentId, filters.studentId));
     }
