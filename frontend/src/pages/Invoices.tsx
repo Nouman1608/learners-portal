@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Navigate } from 'react-router-dom';
 import { invoicesApi, Invoice, OneToOneSession, SessionOverride } from '../api/invoices.api';
 import { usersApi, User } from '../api/users.api';
 import { useAuth } from '../context/AuthContext';
@@ -25,13 +26,18 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-export default function Invoices() {
+/**
+ * Two tabs share this page: "Invoices" (kind 'student': students' fee invoices) and
+ * "Salary Slips" (kind 'teacher': teachers' monthly pay invoices).
+ */
+export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
   const { user } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-  const [selectedType, setSelectedType] = useState<'all' | 'student' | 'teacher'>('all');
+  const selectedType = kind;
+  const isSalary = kind === 'teacher';
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
   const [viewingPdfUrl, setViewingPdfUrl] = useState<string | null>(null);
@@ -68,12 +74,12 @@ export default function Invoices() {
       if (sessions.length) {
         setSessionModal({ type: 'teacher', studentId: id, studentName: name, month, year, sessions });
       } else {
-        const confirmed = await confirmDialog({ title: 'Generate Teacher Invoice',
-          message: `Generate invoice for ${name} for ${MONTHS[month - 1]} ${year}?`,
+        const confirmed = await confirmDialog({ title: 'Generate Salary Slip',
+          message: `Generate the salary slip for ${name} for ${MONTHS[month - 1]} ${year}?`,
           confirmLabel: 'Generate', variant: 'info' });
         if (confirmed) {
           await invoicesApi.generateTeacherInvoice({ teacherId: id, month, year });
-          toast.success('Teacher invoice generated successfully');
+          toast.success('Salary slip generated');
           loadInvoices();
         }
       }
@@ -108,9 +114,7 @@ export default function Invoices() {
         filters.month = selectedMonth;
         filters.year = selectedYear;
       }
-      if (selectedType !== 'all') {
-        filters.type = selectedType;
-      }
+      filters.type = selectedType;
       const data = await invoicesApi.getInvoices(filters);
       if (seq !== requestSeq.current) return; // stale response — a newer request is in flight
       setInvoices(data);
@@ -128,7 +132,7 @@ export default function Invoices() {
   const handleGenerateMonthly = async () => {
     const confirmed = await confirmDialog({
       title: 'Generate Student Invoices',
-      message: `Generate invoices for all students for ${MONTHS[selectedMonth - 1]} ${selectedYear}?\n\nNote: Teacher invoices are generated automatically by cronjob at month end.`,
+      message: `Generate invoices for all students for ${MONTHS[selectedMonth - 1]} ${selectedYear}?\n\nNote: Teachers' salary slips are made automatically at month end (see Salary Slips).`,
       confirmLabel: 'Generate',
       variant: 'info',
     });
@@ -148,8 +152,8 @@ export default function Invoices() {
 
   const handleGenerateTeacherInvoices = async () => {
     const confirmed = await confirmDialog({
-      title: 'Generate Teacher Invoices',
-      message: `Generate teacher invoices for ${MONTHS[selectedMonth - 1]} ${selectedYear}?`,
+      title: 'Generate Salary Slips',
+      message: `Generate salary slips for all teachers for ${MONTHS[selectedMonth - 1]} ${selectedYear}?`,
       confirmLabel: 'Generate',
       variant: 'info',
     });
@@ -160,10 +164,10 @@ export default function Invoices() {
         month: selectedMonth,
         year: selectedYear,
       });
-      toast.success(result.message || `Generated ${result.teacherCount} teacher invoices`);
+      toast.success(`Generated ${result.teacherCount} salary slips`);
       loadInvoices();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to generate teacher invoices');
+      toast.error(error.response?.data?.message || 'Failed to generate salary slips');
     }
   };
 
@@ -317,18 +321,25 @@ export default function Invoices() {
 
   const { items: sortedInvoices, requestSort, getSortIndicator } = useSortableData(filteredInvoices);
 
+  // Teachers only have salary slips (old /invoices links land there)
+  if (!isSalary && user?.role === 'teacher') return <Navigate to="/salary-slips" replace />;
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Invoices</h1>
-        <p className="mt-2 text-gray-600">View and manage invoices</p>
+        <h1 className="text-3xl font-bold text-gray-900">{isSalary ? 'Salary Slips' : 'Invoices'}</h1>
+        <p className="mt-2 text-gray-600">
+          {isSalary
+            ? (isAdmin ? "Teachers' monthly salary slips" : 'Your monthly salary slips')
+            : "Students' fee invoices"}
+        </p>
       </div>
 
-      {isAdmin && (
+      {isAdmin && isSalary && (
         <div className="bg-white rounded-lg shadow p-6 mb-6 flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-48">
-            <label htmlFor="individual-teacher" className="block text-sm font-medium text-gray-700 mb-2">Individual teacher invoice</label>
+            <label htmlFor="individual-teacher" className="block text-sm font-medium text-gray-700 mb-2">Salary slip for one teacher</label>
             <select id="individual-teacher" value={teacherId} onChange={e => setTeacherId(e.target.value)}
               disabled={teacherGenerating} className="w-full px-3 py-2 border border-gray-300 rounded-md">
               <option value="">Select a teacher</option>
@@ -337,7 +348,7 @@ export default function Invoices() {
           </div>
           <button disabled={!teacherId || teacherGenerating} className="px-4 py-2 bg-indigo-600 text-white rounded-md disabled:opacity-50"
             onClick={() => { const teacher = teachers.find(t => t.id === teacherId); if (teacher) void handleIndividualTeacher(teacherId, selectedMonth, selectedYear, `${teacher.firstName} ${teacher.lastName}`); }}>
-            {teacherGenerating ? 'Loading...' : 'Generate Teacher Invoice'}
+            {teacherGenerating ? 'Loading...' : 'Generate Salary Slip'}
           </button>
           <p className="w-full text-sm text-gray-500">For {MONTHS[selectedMonth - 1]} {selectedYear}. Review one-to-one classes taken before generating.</p>
         </div>
@@ -405,26 +416,8 @@ export default function Invoices() {
             )}
           </div>
 
-          {/* Type Filter (Admin only) */}
-          {isAdmin && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Type
-              </label>
-              <select
-                value={selectedType}
-                onChange={(e) => setSelectedType(e.target.value as any)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
-              >
-                <option value="all">All</option>
-                <option value="student">Student</option>
-                <option value="teacher">Teacher</option>
-              </select>
-            </div>
-          )}
-
-          {/* Category Filter (Admin only; the junior portal only has junior) */}
-          {isAdmin && !isJuniorPortal && (
+          {/* Category Filter (students' invoices, admin only; the junior portal only has junior) */}
+          {isAdmin && !isSalary && !isJuniorPortal && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Category
@@ -441,8 +434,8 @@ export default function Invoices() {
             </div>
           )}
 
-          {/* Subcategory Filter (Admin only) */}
-          {isAdmin && (
+          {/* Subcategory Filter (students' invoices, admin only) */}
+          {isAdmin && !isSalary && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 {isJuniorPortal ? 'Category' : 'Subcategory'}
@@ -479,18 +472,19 @@ export default function Invoices() {
                 Actions
               </label>
               <div className="flex flex-col gap-2">
-                <button
-                  onClick={handleGenerateMonthly}
-                  className="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
-                >
-                  Generate Monthly
-                </button>
-                {isAdmin && (
+                {isSalary ? (
                   <button
                     onClick={handleGenerateTeacherInvoices}
                     className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
                   >
-                    Generate Teacher Invoices
+                    Generate All Salary Slips
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleGenerateMonthly}
+                    className="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+                  >
+                    Generate Monthly
                   </button>
                 )}
               </div>

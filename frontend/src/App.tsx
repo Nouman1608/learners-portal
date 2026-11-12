@@ -257,7 +257,18 @@ function App() {
             element={
               <ProtectedRoute>
                 <Layout>
-                  <Invoices />
+                  <Invoices kind="student" />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/salary-slips"
+            element={
+              <ProtectedRoute allowedRoles={['sudo', 'admin', 'teacher']}>
+                <Layout>
+                  <Invoices kind="teacher" />
                 </Layout>
               </ProtectedRoute>
             }

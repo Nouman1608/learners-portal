@@ -284,7 +284,7 @@ export const invoicesService = {
         // Invoice details
         doc
           .fontSize(16)
-          .text('TEACHER PAYMENT INVOICE', { align: 'center' })
+          .text('SALARY SLIP', { align: 'center' })
           .moveDown();
 
         doc
@@ -514,7 +514,7 @@ export const invoicesService = {
         // Invoice details
         doc
           .fontSize(16)
-          .text('TEACHER PAYMENT INVOICE', { align: 'center' })
+          .text('SALARY SLIP', { align: 'center' })
           .moveDown();
 
         doc
