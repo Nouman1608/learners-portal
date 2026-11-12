@@ -1792,9 +1792,11 @@ export const invoicesService = {
     }
 
     // Get all teachers
+    // Only active teachers: someone who has left (deactivated) gets no more salary slips
     const withClasses = await db
       .selectDistinct({ teacherId: courseTeachers.teacherId })
-      .from(courseTeachers);
+      .from(courseTeachers)
+      .innerJoin(users, and(eq(users.id, courseTeachers.teacherId), eq(users.isActive, true)));
     // Salaried staff are paid even without a class (e.g. non-teaching staff)
     const salaried = await db
       .select({ teacherId: users.id })
@@ -1825,9 +1827,11 @@ export const invoicesService = {
   async generateMonthlyTeacherInvoices(month: number, year: number) {
     let teacherCount = 0;
 
+    // Only active teachers: someone who has left (deactivated) gets no more salary slips
     const withClasses = await db
       .selectDistinct({ teacherId: courseTeachers.teacherId })
-      .from(courseTeachers);
+      .from(courseTeachers)
+      .innerJoin(users, and(eq(users.id, courseTeachers.teacherId), eq(users.isActive, true)));
     // Salaried staff are paid even without a class (e.g. non-teaching staff)
     const salaried = await db
       .select({ teacherId: users.id })
