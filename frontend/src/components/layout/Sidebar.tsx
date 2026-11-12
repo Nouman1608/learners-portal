@@ -34,6 +34,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   roles?: string[];
   juniorOnly?: boolean; // shown only on the Junior Campus portal
+  seniorOnly?: boolean; // shown only on the Senior Campus portal
 }
 
 interface SidebarProps {
@@ -61,8 +62,8 @@ const navigationItems: NavItem[] = [
   { name: 'My Invoices', path: '/my-invoices', icon: ReceiptPercentIcon, roles: ['student'] },
   { name: 'Analytics', path: '/analytics', icon: ChartBarIcon, roles: ['sudo', 'admin'] },
   { name: 'Expenses', path: '/expenses', icon: WalletIcon, roles: ['sudo', 'admin'] },
-  { name: 'Salary Advances', path: '/salary-advances', icon: BanknotesIcon, roles: ['sudo', 'admin', 'teacher'] },
-  { name: 'Absences & Lates', path: '/teacher-attendance', icon: ClockIcon, roles: ['sudo', 'admin', 'teacher'], juniorOnly: true },
+  // On the Junior portal, Advances and Absences & Lates are sub-tabs of Salary Slips
+  { name: 'Salary Advances', path: '/salary-advances', icon: BanknotesIcon, roles: ['sudo', 'admin', 'teacher'], seniorOnly: true },
   { name: 'Logs', path: '/logs', icon: ClockIcon, roles: ['sudo', 'admin'] },
   { name: 'Account Settings', path: '/account-settings', icon: UserCircleIcon, roles: ['student', 'teacher'] },
   { name: 'Teams Settings', path: '/settings/teams', icon: Cog6ToothIcon, roles: ['sudo', 'admin', 'teacher'] },
@@ -202,6 +203,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           {navigationItems.map((item) => {
             if (!canAccessRoute(item.roles)) return null;
             if (item.juniorOnly && brand.campus !== 'junior') return null;
+            if (item.seniorOnly && brand.campus === 'junior') return null;
 
             return (
               <NavLink

@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
+import SalarySlipInputsModal from '../components/invoices/SalarySlipInputsModal';
+import SalaryAdvances from './SalaryAdvances';
+import TeacherAttendance from './TeacherAttendance';
 import { invoicesApi, Invoice, OneToOneSession, SessionOverride } from '../api/invoices.api';
 import { usersApi, User } from '../api/users.api';
 import { useAuth } from '../context/AuthContext';
@@ -67,14 +70,23 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
       .catch(() => toast.error('Failed to load teachers'));
   }, [isAdmin]);
 
-  const handleIndividualTeacher = async (id: string, month: number, year: number, name: string) => {
+  // Junior portal: absences/lates and advances are reviewed in a pop-up before a slip is made
+  const [inputsFor, setInputsFor] = useState<{ id: string; month: number; year: number; name: string } | null>(null);
+  const [salaryTab, setSalaryTab] = useState<'slips' | 'advances' | 'attendance'>('slips');
+
+  const startSalarySlip = (id: string, month: number, year: number, name: string) => {
+    if (isJuniorPortal) setInputsFor({ id, month, year, name });
+    else void handleIndividualTeacher(id, month, year, name);
+  };
+
+  const handleIndividualTeacher = async (id: string, month: number, year: number, name: string, alreadyConfirmed = false) => {
     setTeacherGenerating(true);
     try {
       const sessions = await invoicesApi.getTeacher1to1Sessions(id, month, year);
       if (sessions.length) {
         setSessionModal({ type: 'teacher', studentId: id, studentName: name, month, year, sessions });
       } else {
-        const confirmed = await confirmDialog({ title: 'Generate Salary Slip',
+        const confirmed = alreadyConfirmed || await confirmDialog({ title: 'Generate Salary Slip',
           message: `Generate the salary slip for ${name} for ${MONTHS[month - 1]} ${year}?`,
           confirmLabel: 'Generate', variant: 'info' });
         if (confirmed) {
@@ -173,7 +185,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
 
   const handleRegenerateInvoice = async (invoice: Invoice) => {
     if (invoice.type === 'teacher') {
-      await handleIndividualTeacher(invoice.recipientId, invoice.month, invoice.year,
+      startSalarySlip(invoice.recipientId, invoice.month, invoice.year,
         `${invoice.recipient.firstName} ${invoice.recipient.lastName}`);
       return;
     }
@@ -324,6 +336,33 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
   // Teachers only have salary slips (old /invoices links land there)
   if (!isSalary && user?.role === 'teacher') return <Navigate to="/salary-slips" replace />;
 
+  // Junior portal: Advances and Absences & Lates live inside Salary Slips as sub-tabs
+  const salaryTabs = isSalary && isJuniorPortal && (
+    <div className="mb-6 flex gap-1 border-b border-gray-200" role="tablist">
+      {([['slips', 'Salary Slips'], ['advances', 'Advances'], ['attendance', 'Absences & Lates']] as const).map(([value, label]) => (
+        <button
+          key={value}
+          role="tab"
+          aria-selected={salaryTab === value}
+          onClick={() => setSalaryTab(value)}
+          className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${salaryTab === value ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (salaryTabs && salaryTab !== 'slips') {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <h1 className="mb-4 text-3xl font-bold text-gray-900">Salary Slips</h1>
+        {salaryTabs}
+        {salaryTab === 'advances' ? <SalaryAdvances /> : <TeacherAttendance />}
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
@@ -335,6 +374,22 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
             : "Students' fee invoices"}
         </p>
       </div>
+      {salaryTabs}
+
+      {inputsFor && (
+        <SalarySlipInputsModal
+          teacherId={inputsFor.id}
+          teacherName={inputsFor.name}
+          month={inputsFor.month}
+          year={inputsFor.year}
+          onCancel={() => setInputsFor(null)}
+          onContinue={() => {
+            const target = inputsFor;
+            setInputsFor(null);
+            void handleIndividualTeacher(target.id, target.month, target.year, target.name, true);
+          }}
+        />
+      )}
 
       {isAdmin && isSalary && (
         <div className="bg-white rounded-lg shadow p-6 mb-6 flex flex-wrap items-end gap-3">
@@ -347,7 +402,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
             </select>
           </div>
           <button disabled={!teacherId || teacherGenerating} className="px-4 py-2 bg-indigo-600 text-white rounded-md disabled:opacity-50"
-            onClick={() => { const teacher = teachers.find(t => t.id === teacherId); if (teacher) void handleIndividualTeacher(teacherId, selectedMonth, selectedYear, `${teacher.firstName} ${teacher.lastName}`); }}>
+            onClick={() => { const teacher = teachers.find(t => t.id === teacherId); if (teacher) startSalarySlip(teacherId, selectedMonth, selectedYear, `${teacher.firstName} ${teacher.lastName}`); }}>
             {teacherGenerating ? 'Loading...' : 'Generate Salary Slip'}
           </button>
           <p className="w-full text-sm text-gray-500">For {MONTHS[selectedMonth - 1]} {selectedYear}. Review one-to-one classes taken before generating.</p>
