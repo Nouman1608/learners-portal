@@ -152,6 +152,9 @@ export const getInvoices = async (req: Request, res: Response, next: NextFunctio
       filters.recipientId = req.user!.id;
     }
 
+    // Admins see a family's children in the other campus too (students only ever see their own)
+    else filters.includeOtherCampus = true;
+
     // Sudo on the Senior portal can read the Junior Campus (?campus=junior, read-only)
     let database;
     if (req.query.campus === 'junior' && req.user?.role === 'sudo') {

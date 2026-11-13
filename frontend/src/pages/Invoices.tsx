@@ -308,8 +308,12 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
     if (family.withoutFees.length) {
       toast(`No fees this month for ${family.withoutFees.join(', ')}, so not on the family invoice`);
     }
-    // A sibling's own invoice was just made: show it in the family row
-    if (family.students.length !== (invoice.members?.length ?? 1)) loadInvoices();
+    if (family.otherCampusMissing) {
+      toast.error('The other campus portal did not answer, so this copy has this campus\'s children only. Try again in a minute.');
+    }
+    // A sibling's own invoice was just made (here or in the other campus): show it in the family row
+    const shown = (invoice.members?.length ?? 1) + (invoice.otherCampusSiblings?.filter((s) => s.invoiceNumber).length ?? 0);
+    if (family.students.length !== shown) loadInvoices();
     return family;
   };
 
@@ -432,13 +436,20 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
   }
   for (const row of familyRows.values()) {
     // "Ali & Sara Khan" when the surname is shared, full names otherwise
-    const members = row.members!;
-    const sameSurname = members.every((m) => m.recipient.lastName === members[0].recipient.lastName);
+    // Children in the other campus are part of the same row: their names and their invoices' totals
+    const names = [
+      ...row.members!.map((m) => m.recipient),
+      ...(row.otherCampusSiblings ?? []),
+    ];
+    const sameSurname = names.every((n) => n.lastName === names[0].lastName);
     row.recipient = {
       ...row.recipient,
-      firstName: members.map((m) => (sameSurname ? m.recipient.firstName : `${m.recipient.firstName} ${m.recipient.lastName}`)).join(' & '),
-      lastName: sameSurname ? members[0].recipient.lastName : '',
+      firstName: names.map((n) => (sameSurname ? n.firstName : `${n.firstName} ${n.lastName}`)).join(' & '),
+      lastName: sameSurname ? names[0].lastName : '',
     };
+    for (const sibling of row.otherCampusSiblings ?? []) {
+      if (sibling.totalAmount) row.totalAmount = (parseFloat(row.totalAmount) + parseFloat(sibling.totalAmount)).toFixed(2);
+    }
   }
   const [openFamilies, setOpenFamilies] = useState<Set<string>>(new Set());
   const toggleFamily = (invoiceNumber: string) => setOpenFamilies((open) => {
@@ -757,7 +768,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
                           onClick={() => toggleFamily(invoice.invoiceNumber)}
                           className="block text-xs text-indigo-600 hover:underline"
                         >
-                          {openFamilies.has(invoice.invoiceNumber) ? 'Hide' : 'Show'} each child ({invoice.members.length})
+                          {openFamilies.has(invoice.invoiceNumber) ? 'Hide' : 'Show'} each child ({invoice.members.length + (invoice.otherCampusSiblings?.length ?? 0)})
                         </button>
                       )}
                     </td>
@@ -877,6 +888,18 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
                         </button>
                       )}
                     </td>
+                  </tr>
+                ))}
+                {/* Siblings in the other campus: their invoice is made and regenerated on that portal */}
+                {invoice.members && openFamilies.has(invoice.invoiceNumber) && invoice.otherCampusSiblings?.map((sibling) => (
+                  <tr key={`other-${sibling.id}`} className="bg-amber-50/60 text-sm text-gray-600">
+                    <td className="px-6 py-2 pl-10 whitespace-nowrap">{sibling.invoiceNumber || 'No invoice yet'}</td>
+                    <td className="px-6 py-2 whitespace-nowrap text-xs text-amber-800">{sibling.campus}</td>
+                    <td className="px-6 py-2 whitespace-nowrap">{sibling.firstName} {sibling.lastName}</td>
+                    <td className="px-6 py-2" />
+                    <td className="px-6 py-2 whitespace-nowrap">{sibling.totalAmount ? formatAmount(sibling.totalAmount, invoice.currency) : '-'}</td>
+                    <td className="px-6 py-2" />
+                    <td className="px-6 py-2 text-right text-xs text-gray-400">On the {sibling.campus} portal</td>
                   </tr>
                 ))}
                 </Fragment>

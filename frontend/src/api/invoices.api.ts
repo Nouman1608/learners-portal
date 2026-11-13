@@ -31,6 +31,8 @@ export interface Invoice {
   };
   lineItems: InvoiceLineItem[];
   siblings?: { id: string; firstName: string; lastName: string }[]; // student invoices: linked brothers / sisters
+  /** Siblings who study in the other campus, each with their own invoice there (null = not made yet) */
+  otherCampusSiblings?: { id: string; firstName: string; lastName: string; campus: string; invoiceNumber: string | null; totalAmount: string | null }[];
   familyInvoiceNumber?: string | null; // set when the student has siblings: they share one family invoice
   /** Invoices page only: a family row carries each sibling's own invoice here */
   members?: Invoice[];
@@ -102,8 +104,9 @@ export interface FamilyInvoice {
   pdfUrl: string;
   currency: string;
   totalAmount: string;
-  students: { id: string; name: string; invoiceNumber: string; totalAmount: string }[];
+  students: { id: string; name: string; campus?: string; invoiceNumber: string; totalAmount: string }[];
   withoutFees: string[]; // siblings with no fees that month (left off the invoice)
+  otherCampusMissing?: boolean; // the other campus portal did not answer: its children are not on this copy
 }
 
 export interface GetInvoicesFilters {

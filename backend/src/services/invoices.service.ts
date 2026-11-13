@@ -7,6 +7,7 @@ import { AppError } from '../middleware/errorHandler';
 import { feesService } from './fees.service';
 import { teacherAdvancesService, AdvanceSummary } from './teacherAdvances.service';
 import { teacherDeductionsService, DeductionSummary } from './teacherDeductions.service';
+import { otherCampus, ownCampusLabel, otherCampusLabel } from './otherCampus.service';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
@@ -48,6 +49,29 @@ function teacherCreditDate(enrolledAt: Date | string | null, startDate: string |
 export function familyInvoiceNumber(familyId: string, month: number, year: number, currency: string): string {
   const suffix = currency !== 'PKR' ? `-${currency}` : '';
   return `FAM-${year}-${month.toString().padStart(2, '0')}-${familyId.slice(0, 8).toUpperCase()}${suffix}`;
+}
+
+// Heading on a family invoice whose children study in both campuses (owner's choice)
+const CROSS_CAMPUS_NAME = 'Learners Academy';
+
+/** A family's invoice for one month in one currency */
+export interface FamilyPeriod {
+  familyId: string;
+  month: number;
+  year: number;
+  currency: string;
+}
+
+/** One campus's part of a family invoice: its children and each child's own invoice */
+export interface FamilyPart extends FamilyPeriod {
+  members: { id: string; firstName: string; lastName: string }[];
+  sections: {
+    student: { id: string; firstName: string; lastName: string };
+    invoice: { id: string; invoiceNumber: string; totalAmount: string };
+    lineItems: { description: string; amount: string }[];
+  }[];
+  withoutFees: string[];
+  emails: string[];
 }
 
 export interface SessionOverride {
@@ -1582,6 +1606,7 @@ export const invoicesService = {
     year?: number;
     search?: string;
     includeAllVersions?: boolean; // Set to true to include old versions
+    includeOtherCampus?: boolean; // admins: add siblings who study in the other campus
   }, database: Database = db) {
     // database: the Junior Campus for sudo's Junior tab on the Senior portal (read-only)
     let query = database
@@ -1665,6 +1690,27 @@ export const invoicesService = {
           .orderBy(asc(users.firstName))
       : [];
 
+    // Siblings who study in the other campus, with their own invoices for the same month and
+    // currency (one request for the whole list). If that portal is down the list still loads.
+    const otherCampusParts = new Map<string, FamilyPart>();
+    if (filters?.includeOtherCampus && database === db && otherCampus.enabled) {
+      const periods = new Map<string, FamilyPeriod>();
+      for (const invoice of invoicesList) {
+        if (invoice.type !== 'student' || !invoice.recipient.familyId) continue;
+        const period = { familyId: invoice.recipient.familyId, month: invoice.month, year: invoice.year, currency: invoice.currency };
+        periods.set(familyInvoiceNumber(period.familyId, period.month, period.year, period.currency), period);
+      }
+      if (periods.size) {
+        try {
+          for (const part of await otherCampus.familyInvoices([...periods.values()])) {
+            otherCampusParts.set(familyInvoiceNumber(part.familyId, part.month, part.year, part.currency), part);
+          }
+        } catch {
+          // other campus unreachable: families show this campus's children only
+        }
+      }
+    }
+
     // Fetch line items for each invoice
     const invoicesWithLineItems = await Promise.all(
       invoicesList.map(async (invoice) => {
@@ -1690,16 +1736,30 @@ export const invoicesService = {
               .map(({ id, firstName, lastName }) => ({ id, firstName, lastName }))
           : [];
 
+        // Brothers / sisters in the other campus, each with their own invoice there (if made yet)
+        const familyNumber = invoice.type === 'student' && invoice.recipient.familyId
+          ? familyInvoiceNumber(invoice.recipient.familyId, invoice.month, invoice.year, invoice.currency)
+          : null;
+        const otherPart = familyNumber ? otherCampusParts.get(familyNumber) : undefined;
+        const otherCampusSiblings = (otherPart?.members ?? []).map((member) => {
+          const section = otherPart!.sections.find((s) => s.student.id === member.id);
+          return {
+            ...member,
+            campus: otherCampusLabel,
+            invoiceNumber: section?.invoice.invoiceNumber ?? null,
+            totalAmount: section?.invoice.totalAmount ?? null,
+          };
+        });
+
         return {
           ...invoice,
           lineItems: items,
           advance,
           deduction,
           siblings,
+          otherCampusSiblings,
           // Siblings share this number: the Invoices page shows them as one family row
-          familyInvoiceNumber: invoice.type === 'student' && siblings.length
-            ? familyInvoiceNumber(invoice.recipient.familyId!, invoice.month, invoice.year, invoice.currency)
-            : null,
+          familyInvoiceNumber: siblings.length || otherCampusSiblings.length ? familyNumber : null,
         };
       })
     );
@@ -1769,54 +1829,38 @@ export const invoicesService = {
 
     const [student] = await db.select().from(users).where(eq(users.id, base.recipientId)).limit(1);
     if (!student?.familyId) throw new AppError(400, 'This student is not linked to any siblings');
+    const period = { familyId: student.familyId, month: base.month, year: base.year, currency: base.currency };
 
-    const members = await db
-      .select()
-      .from(users)
-      .where(and(eq(users.familyId, student.familyId), eq(users.role, 'student')))
-      .orderBy(asc(users.firstName));
-    if (members.length < 2) throw new AppError(400, 'This student is not linked to any siblings');
-
-    const sections: { student: typeof members[number]; invoice: typeof invoices.$inferSelect; lineItems: (typeof invoiceLineItems.$inferSelect)[] }[] = [];
-    const withoutFees: string[] = [];
-
-    for (const member of members) {
-      let [invoice] = await db
-        .select()
-        .from(invoices)
-        .where(and(
-          eq(invoices.recipientId, member.id),
-          eq(invoices.type, 'student'),
-          eq(invoices.month, base.month),
-          eq(invoices.year, base.year),
-          eq(invoices.currency, base.currency),
-          eq(invoices.isLatest, true),
-        ))
-        .limit(1);
-
-      if (!invoice) {
-        try {
-          ({ invoice } = await this.generateStudentInvoice({
-            studentId: member.id, month: base.month, year: base.year, currency: base.currency, generatedBy,
-          }));
-        } catch (error: any) {
-          if (error.statusCode !== 404) throw error;
-          withoutFees.push(`${member.firstName} ${member.lastName}`); // no fees this month
-          continue;
-        }
+    // This campus's children, then the other campus's (siblings can study in different campuses)
+    const here = await this.familySectionsHere(period, { ensure: true, generatedBy });
+    let there: FamilyPart | null = null;
+    let otherCampusMissing = false;
+    if (otherCampus.enabled) {
+      try {
+        [there] = await otherCampus.familyInvoices([period], true);
+      } catch {
+        otherCampusMissing = true; // the admin is told; the invoice then covers this campus only
       }
-
-      const lineItems = await db.select().from(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoice.id));
-      sections.push({ student: member, invoice, lineItems });
+    }
+    if (here.members.length + (there?.members.length ?? 0) < 2) {
+      throw new AppError(400, otherCampusMissing
+        ? `The ${otherCampusLabel} portal could not be reached, so the family invoice cannot be made right now`
+        : 'This student is not linked to any siblings');
     }
 
+    const crossCampus = !!there?.sections.length;
+    const sections = [
+      ...here.sections.map((s) => ({ ...s, campus: ownCampusLabel })),
+      ...(there?.sections ?? []).map((s) => ({ ...s, campus: otherCampusLabel })),
+    ];
+    const withoutFees = [...here.withoutFees, ...(there?.withoutFees ?? [])];
     const totalAmount = sections.reduce((sum, s) => sum + Number(s.invoice.totalAmount), 0);
     const invoiceNumber = familyInvoiceNumber(student.familyId, base.month, base.year, base.currency);
 
     const pdfUrl = await this.generateFamilyInvoicePDF({
-      invoiceNumber, month: base.month, year: base.year, currency: base.currency, totalAmount, sections,
+      invoiceNumber, month: base.month, year: base.year, currency: base.currency, totalAmount, sections, crossCampus,
     });
-    logger.info(`[INVOICE] Family invoice ${invoiceNumber}: ${sections.length} student(s), ${base.currency} ${totalAmount}`);
+    logger.info(`[INVOICE] Family invoice ${invoiceNumber}: ${sections.length} student(s), ${base.currency} ${totalAmount}${crossCampus ? ' (both campuses)' : ''}`);
 
     return {
       invoiceNumber,
@@ -1826,17 +1870,81 @@ export const invoicesService = {
       month: base.month,
       year: base.year,
       // Where the family's copy can be emailed: the siblings' own addresses, without stand-ins
-      emails: [...new Set(sections.map((s) => s.student.email).filter((e) => !e.endsWith('@no-email.invalid')))],
-      invoiceIds: sections.map((s) => s.invoice.id),
+      emails: [...new Set([...here.emails, ...(there?.emails ?? [])])],
+      invoiceIds: here.sections.map((s) => s.invoice.id), // this campus's own invoices only
       currency: base.currency,
       totalAmount: totalAmount.toFixed(2),
       students: sections.map((s) => ({
         id: s.student.id,
         name: `${s.student.firstName} ${s.student.lastName}`,
+        campus: s.campus,
         invoiceNumber: s.invoice.invoiceNumber,
         totalAmount: s.invoice.totalAmount,
       })),
       withoutFees,
+      otherCampusMissing,
+    };
+  },
+
+  /**
+   * One family's part in THIS campus for a month and currency: the children here and each
+   * one's own latest invoice with its lines. With `ensure`, a child who has fees but no
+   * invoice yet gets one made first. Also what the other campus is given when it asks.
+   */
+  async familySectionsHere(
+    period: FamilyPeriod,
+    options: { ensure?: boolean; generatedBy?: string } = {},
+  ): Promise<FamilyPart> {
+    const members = await db
+      .select()
+      .from(users)
+      .where(and(eq(users.familyId, period.familyId), eq(users.role, 'student')))
+      .orderBy(asc(users.firstName));
+
+    const sections: FamilyPart['sections'] = [];
+    const withoutFees: string[] = [];
+
+    for (const member of members) {
+      let [invoice] = await db
+        .select()
+        .from(invoices)
+        .where(and(
+          eq(invoices.recipientId, member.id),
+          eq(invoices.type, 'student'),
+          eq(invoices.month, period.month),
+          eq(invoices.year, period.year),
+          eq(invoices.currency, period.currency),
+          eq(invoices.isLatest, true),
+        ))
+        .limit(1);
+
+      if (!invoice && options.ensure) {
+        try {
+          ({ invoice } = await this.generateStudentInvoice({
+            studentId: member.id, month: period.month, year: period.year, currency: period.currency,
+            generatedBy: options.generatedBy,
+          }));
+        } catch (error: any) {
+          if (error.statusCode !== 404) throw error;
+          withoutFees.push(`${member.firstName} ${member.lastName}`); // no fees this month
+        }
+      }
+      if (!invoice) continue;
+
+      const lineItems = await db.select().from(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoice.id));
+      sections.push({
+        student: { id: member.id, firstName: member.firstName, lastName: member.lastName },
+        invoice: { id: invoice.id, invoiceNumber: invoice.invoiceNumber, totalAmount: invoice.totalAmount },
+        lineItems: lineItems.map((item) => ({ description: item.description, amount: item.amount })),
+      });
+    }
+
+    return {
+      ...period,
+      members: members.map((m) => ({ id: m.id, firstName: m.firstName, lastName: m.lastName })),
+      sections,
+      withoutFees,
+      emails: [...new Set(members.map((m) => m.email).filter((e) => !e.endsWith('@no-email.invalid')))],
     };
   },
 
@@ -1846,7 +1954,8 @@ export const invoicesService = {
     year: number;
     currency: string;
     totalAmount: number;
-    sections: { student: { firstName: string; lastName: string }; invoice: { invoiceNumber: string; totalAmount: string }; lineItems: { description: string; amount: string }[] }[];
+    sections: { campus?: string; student: { firstName: string; lastName: string }; invoice: { invoiceNumber: string; totalAmount: string }; lineItems: { description: string; amount: string }[] }[];
+    crossCampus?: boolean; // children from both campuses: one heading, grouped by campus
   }): Promise<string> {
     return new Promise((resolve, reject) => {
       try {
@@ -1858,7 +1967,7 @@ export const invoicesService = {
         const money = (amount: number | string) => invoicesService.formatCurrency(amount, family.currency);
 
         doc
-          .fontSize(20).text(SCHOOL_NAME, { align: 'center' })
+          .fontSize(20).text(family.crossCampus ? CROSS_CAMPUS_NAME : SCHOOL_NAME, { align: 'center' })
           .fontSize(10).text('Excellence in Education', { align: 'center' })
           .moveDown()
           .fontSize(16).text('FAMILY INVOICE', { align: 'center' });
@@ -1878,8 +1987,17 @@ export const invoicesService = {
           }
         };
 
+        let campus: string | undefined;
         for (const section of family.sections) {
-          ensureSpace(80);
+          const newCampus = !!family.crossCampus && section.campus !== campus;
+          ensureSpace(newCampus ? 105 : 80);
+          if (newCampus) {
+            campus = section.campus;
+            doc.font('Helvetica-Bold').fontSize(10).fillColor('#444444')
+              .text((campus || '').toUpperCase(), 50, y, { characterSpacing: 1 })
+              .fillColor('black');
+            y += 22;
+          }
           doc.font('Helvetica-Bold').fontSize(11)
             .text(`${section.student.firstName} ${section.student.lastName}`, 50, y);
           doc.font('Helvetica').fontSize(8).fillColor('#666666')

@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import env from '../config/env';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
+import type { FamilyPeriod, FamilyPart } from './invoices.service';
 
 /*
  * Private channel between the two campus portals (Senior <-> Junior), for siblings who study
@@ -14,6 +15,11 @@ import logger from '../utils/logger';
  * through a browser, can never be replayed here, and these passes can never sign anyone in.
  */
 const AUDIENCE = 'campus-internal';
+
+// Which campus this instance is: the Junior Campus instance runs as "Learners Preschool"
+const isJuniorInstance = /preschool|junior/i.test(env.SCHOOL_NAME);
+export const ownCampusLabel = isJuniorInstance ? 'Junior Campus' : 'Senior Campus';
+export const otherCampusLabel = isJuniorInstance ? 'Senior Campus' : 'Junior Campus';
 
 export interface OtherCampusStudent {
   id: string;
@@ -72,6 +78,13 @@ export const otherCampus = {
 
   familyMembers: (familyId: string) => otherCampus.request<{ students: OtherCampusStudent[] }>(
     'GET', `/families/${familyId}/members`).then((r) => r.students),
+
+  /**
+   * The other campus's part of family invoices: its children in each family and their own
+   * invoices for that month and currency. `ensure` makes a missing invoice first.
+   */
+  familyInvoices: (families: FamilyPeriod[], ensure = false) => otherCampus.request<{ families: FamilyPart[] }>(
+    'POST', '/family-invoices', { families, ensure }).then((r) => r.families),
 
   /** Put a student of the other campus into a family (null takes them out) */
   setFamily: (id: string, familyId: string | null) => otherCampus.request<{ previousFamilyId: string | null }>(

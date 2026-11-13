@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import usersService from '../services/users.service';
+import { invoicesService } from '../services/invoices.service';
 import { otherCampus } from '../services/otherCampus.service';
 import { AppError } from '../middleware/errorHandler';
 
@@ -39,6 +40,23 @@ router.get('/families/:familyId/members', async (req, res) => {
 router.post('/students/:id/family', async (req, res) => {
   const { familyId } = z.object({ familyId: uuid.nullable() }).parse(req.body);
   res.json(await usersService.setFamilyFromOtherCampus(uuid.parse(req.params.id), familyId));
+});
+
+// Our part of family invoices: our children in each family and their invoices for the period
+router.post('/family-invoices', async (req, res) => {
+  const { families, ensure } = z.object({
+    families: z.array(z.object({
+      familyId: uuid,
+      month: z.number().int().min(1).max(12),
+      year: z.number().int().min(2020),
+      currency: z.enum(['PKR', 'USD', 'GBP', 'SAR']),
+    })).max(500),
+    ensure: z.boolean().default(false),
+  }).parse(req.body);
+
+  const parts = [];
+  for (const family of families) parts.push(await invoicesService.familySectionsHere(family, { ensure }));
+  res.json({ families: parts });
 });
 
 export default router;
