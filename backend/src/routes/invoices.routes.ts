@@ -60,6 +60,7 @@ router.post(
 
 // Family invoice (siblings on one PDF) - admin only
 router.post('/:id/family', requireAdmin, logActivity('generate', 'family-invoice'), invoicesController.generateFamilyInvoice);
+router.post('/:id/family/email', requireAdmin, logActivity('email', 'family-invoice'), invoicesController.emailFamilyInvoice);
 
 // Email invoice - admin only
 router.post('/:id/email', requireAdmin, logActivity('email', 'invoice'), invoicesController.emailInvoice);

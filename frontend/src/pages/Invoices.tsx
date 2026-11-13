@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { Fragment, useState, useEffect, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import SalarySlipInputsModal from '../components/invoices/SalarySlipInputsModal';
 import SalaryAdvances from './SalaryAdvances';
@@ -18,7 +18,6 @@ import {
   MagnifyingGlassIcon,
   ArrowsPointingOutIcon,
   ArrowsPointingInIcon,
-  UserGroupIcon,
 } from '@heroicons/react/24/outline';
 import { useSortableData } from '../hooks/useSortableData';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -273,11 +272,11 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
     }
   };
 
-  const handleEmailInvoice = async (invoiceId: string) => {
+  const handleEmailInvoice = async (invoiceId: string, family = false) => {
     try {
       setEmailingId(invoiceId);
-      await invoicesApi.emailInvoice(invoiceId);
-      toast.success('Invoice emailed successfully');
+      const result = family ? await invoicesApi.emailFamilyInvoice(invoiceId) : await invoicesApi.emailInvoice(invoiceId);
+      toast.success(family ? result.message : 'Invoice emailed successfully');
       loadInvoices();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Failed to email invoice');
@@ -287,6 +286,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
   };
 
   const handleViewPDF = async (invoice: Invoice) => {
+    if (invoice.members) return handleFamilyInvoice(invoice);
     try {
       // Get the appropriate PDF URL based on user role
       const { pdfUrl } = await invoicesApi.downloadInvoice(invoice.id);
@@ -302,15 +302,28 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
     }
   };
 
-  // One PDF for the student and their linked siblings; missing sibling invoices are made first
+  // Siblings have one PDF: built from each child's own invoice (a missing one is made first)
+  const makeFamilyInvoice = async (invoice: Invoice) => {
+    const family = await invoicesApi.generateFamilyInvoice(invoice.id);
+    if (family.withoutFees.length) {
+      toast(`No fees this month for ${family.withoutFees.join(', ')}, so not on the family invoice`);
+    }
+    // A sibling's own invoice was just made: show it in the family row
+    if (family.students.length !== (invoice.members?.length ?? 1)) loadInvoices();
+    return family;
+  };
+
+  const saveFamilyPdf = (family: FamilyInvoice) => {
+    const link = document.createElement('a');
+    link.href = fileUrl(family.pdfUrl);
+    link.download = `${family.invoiceNumber}.pdf`;
+    link.click();
+  };
+
   const handleFamilyInvoice = async (invoice: Invoice) => {
     setFamilyLoadingId(invoice.id);
     try {
-      const family = await invoicesApi.generateFamilyInvoice(invoice.id);
-      if (family.withoutFees.length) {
-        toast(`No fees this month for ${family.withoutFees.join(', ')}, so not on the family invoice`);
-      }
-      loadInvoices(); // a sibling's own invoice may just have been made
+      const family = await makeFamilyInvoice(invoice);
       if (isNativeApp) {
         await openExternal(fileUrl(family.pdfUrl));
         return;
@@ -332,11 +345,15 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
   };
 
   const handleDownloadPDF = async (invoice: Invoice) => {
-    if (viewingFamily) {
-      const link = document.createElement('a');
-      link.href = fileUrl(viewingFamily.pdfUrl);
-      link.download = `${viewingFamily.invoiceNumber}.pdf`;
-      link.click();
+    if (viewingFamily) return saveFamilyPdf(viewingFamily);
+    if (invoice.members) {
+      try {
+        const family = await makeFamilyInvoice(invoice);
+        if (isNativeApp) await openExternal(fileUrl(family.pdfUrl));
+        else saveFamilyPdf(family);
+      } catch (error: any) {
+        toast.error(error.response?.data?.message || 'Failed to make the family invoice');
+      }
       return;
     }
     try {
@@ -390,7 +407,47 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
     return true;
   });
 
-  const { items: sortedInvoices, requestSort, getSortIndicator } = useSortableData(filteredInvoices);
+  // Siblings appear as ONE row: one invoice number, one total, one PDF. The row keeps the first
+  // child's invoice id (any sibling's id reaches the family invoice) and each child's own
+  // invoice under `members`. Students log in to their own invoice only, so this is admin-side.
+  const invoiceRows: Invoice[] = [];
+  const familyRows = new Map<string, Invoice>();
+  for (const inv of filteredInvoices) {
+    if (!isAdmin || isSalary || !inv.familyInvoiceNumber) {
+      invoiceRows.push(inv);
+      continue;
+    }
+    const row = familyRows.get(inv.familyInvoiceNumber);
+    if (!row) {
+      const created = { ...inv, invoiceNumber: inv.familyInvoiceNumber, members: [inv] };
+      familyRows.set(inv.familyInvoiceNumber, created);
+      invoiceRows.push(created);
+      continue;
+    }
+    row.members!.push(inv);
+    row.totalAmount = (parseFloat(row.totalAmount) + parseFloat(inv.totalAmount)).toFixed(2);
+    row.pdfUrl = row.pdfUrl || inv.pdfUrl;
+    row.emailedAt = row.emailedAt || inv.emailedAt;
+    row.recipient = { ...row.recipient, whatsappGroupLink: row.recipient.whatsappGroupLink || inv.recipient.whatsappGroupLink };
+  }
+  for (const row of familyRows.values()) {
+    // "Ali & Sara Khan" when the surname is shared, full names otherwise
+    const members = row.members!;
+    const sameSurname = members.every((m) => m.recipient.lastName === members[0].recipient.lastName);
+    row.recipient = {
+      ...row.recipient,
+      firstName: members.map((m) => (sameSurname ? m.recipient.firstName : `${m.recipient.firstName} ${m.recipient.lastName}`)).join(' & '),
+      lastName: sameSurname ? members[0].recipient.lastName : '',
+    };
+  }
+  const [openFamilies, setOpenFamilies] = useState<Set<string>>(new Set());
+  const toggleFamily = (invoiceNumber: string) => setOpenFamilies((open) => {
+    const next = new Set(open);
+    if (!next.delete(invoiceNumber)) next.add(invoiceNumber);
+    return next;
+  });
+
+  const { items: sortedInvoices, requestSort, getSortIndicator } = useSortableData(invoiceRows);
 
   // Teachers only have salary slips (old /invoices links land there)
   if (!isSalary && user?.role === 'teacher') return <Navigate to="/salary-slips" replace />;
@@ -673,28 +730,35 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200 animate-fade-in">
               {sortedInvoices.map((invoice) => (
-                <tr key={invoice.id} className="hover:bg-indigo-50/30 transition-colors">
+                <Fragment key={invoice.id}>
+                <tr className="hover:bg-indigo-50/30 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {invoice.invoiceNumber}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <span
                       className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        invoice.type === 'student'
+                        invoice.members
+                          ? 'bg-purple-100 text-purple-800'
+                          : invoice.type === 'student'
                           ? 'bg-blue-100 text-blue-800'
                           : 'bg-green-100 text-green-800'
                       }`}
                     >
-                      {invoice.type}
+                      {invoice.members ? 'family' : invoice.type}
                     </span>
                   </td>
                   {isAdmin && (
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {invoice.recipient.firstName} {invoice.recipient.lastName}
-                      {!!invoice.siblings?.length && (
-                        <div className="text-xs text-indigo-600">
-                          Sibling of {invoice.siblings.map((s) => s.firstName).join(', ')}
-                        </div>
+                      {invoice.members && (
+                        <button
+                          type="button"
+                          onClick={() => toggleFamily(invoice.invoiceNumber)}
+                          className="block text-xs text-indigo-600 hover:underline"
+                        >
+                          {openFamilies.has(invoice.invoiceNumber) ? 'Hide' : 'Show'} each child ({invoice.members.length})
+                        </button>
                       )}
                     </td>
                   )}
@@ -727,8 +791,9 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
                       <>
                         <button
                           onClick={() => handleViewPDF(invoice)}
-                          className="p-1.5 text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 rounded-lg transition-colors"
-                          title="View PDF"
+                          disabled={familyLoadingId === invoice.id}
+                          className="p-1.5 text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50"
+                          title={invoice.members ? 'View family invoice (one PDF for all siblings)' : 'View PDF'}
                         >
                           <EyeIcon className="h-5 w-5" />
                         </button>
@@ -741,19 +806,9 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
                         </button>
                       </>
                     )}
-                    {isAdmin && invoice.type === 'student' && !!invoice.siblings?.length && (
-                      <button
-                        onClick={() => handleFamilyInvoice(invoice)}
-                        disabled={familyLoadingId === invoice.id}
-                        className="p-1.5 text-purple-600 hover:text-purple-900 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50"
-                        title={`Family invoice (with ${invoice.siblings.map((s) => s.firstName).join(', ')})`}
-                      >
-                        <UserGroupIcon className={`h-5 w-5 ${familyLoadingId === invoice.id ? 'animate-pulse' : ''}`} />
-                      </button>
-                    )}
                     {isAdmin && invoice.pdfUrl && (
                       <button
-                        onClick={() => handleEmailInvoice(invoice.id)}
+                        onClick={() => handleEmailInvoice(invoice.id, !!invoice.members)}
                         disabled={emailingId === invoice.id}
                         className="p-1.5 text-green-600 hover:text-green-900 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
                         title="Email Invoice"
@@ -763,10 +818,13 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
                     )}
                     {isAdmin && (
                       <button
-                        onClick={() => handleRegenerateInvoice(invoice)}
+                        // A family is regenerated one child at a time (each may have 1-to-1 classes to review)
+                        onClick={() => invoice.members
+                          ? setOpenFamilies((open) => new Set(open).add(invoice.invoiceNumber))
+                          : handleRegenerateInvoice(invoice)}
                         disabled={regeneratingId === invoice.id || teacherGenerating}
                         className="p-1.5 text-orange-500 hover:text-orange-700 hover:bg-orange-50 rounded-lg transition-colors disabled:opacity-50"
-                        title="Regenerate Invoice"
+                        title={invoice.members ? 'Regenerate: choose the child below' : 'Regenerate Invoice'}
                       >
                         <ArrowPathIcon className={`h-5 w-5 ${regeneratingId === invoice.id ? 'animate-spin' : ''}`} />
                       </button>
@@ -775,7 +833,9 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
                       <button
                         onClick={async () => {
                           try {
-                            const { pdfUrl, invoiceNumber } = await invoicesApi.downloadInvoice(invoice.id);
+                            const { pdfUrl, invoiceNumber } = invoice.members
+                              ? await makeFamilyInvoice(invoice)
+                              : await invoicesApi.downloadInvoice(invoice.id);
                             const downloadUrl = new URL(fileUrl(pdfUrl), window.location.origin).href;
                             const message = `Here is your invoice ${invoiceNumber}:\n${downloadUrl}`;
                             await navigator.clipboard.writeText(message);
@@ -796,6 +856,30 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
                     </div>
                   </td>
                 </tr>
+                {/* Each child's own part of a family invoice (amounts; regenerate one child) */}
+                {invoice.members && openFamilies.has(invoice.invoiceNumber) && invoice.members.map((member) => (
+                  <tr key={member.id} className="bg-gray-50 text-sm text-gray-600">
+                    <td className="px-6 py-2 pl-10 whitespace-nowrap">{member.invoiceNumber}</td>
+                    <td className="px-6 py-2" />
+                    <td className="px-6 py-2 whitespace-nowrap">{member.recipient.firstName} {member.recipient.lastName}</td>
+                    <td className="px-6 py-2" />
+                    <td className="px-6 py-2 whitespace-nowrap">{formatAmount(member.totalAmount, member.currency)}</td>
+                    <td className="px-6 py-2" />
+                    <td className="px-6 py-2 text-right">
+                      {canAct && (
+                        <button
+                          onClick={() => handleRegenerateInvoice(member)}
+                          disabled={regeneratingId === member.id}
+                          className="p-1.5 text-orange-500 hover:text-orange-700 hover:bg-orange-50 rounded-lg transition-colors disabled:opacity-50"
+                          title={`Regenerate ${member.recipient.firstName}'s part`}
+                        >
+                          <ArrowPathIcon className={`h-5 w-5 ${regeneratingId === member.id ? 'animate-spin' : ''}`} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                </Fragment>
               ))}
             </tbody>
           </table>

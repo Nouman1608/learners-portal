@@ -5,7 +5,7 @@ import { emailService } from '../services/email.service';
 import { db, juniorDb } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { invoices } from '../db/schema/invoices';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 
 // Validation schemas
 const generateStudentInvoiceSchema = z.object({
@@ -229,6 +229,35 @@ export const downloadInvoice = async (req: Request, res: Response, next: NextFun
 export const generateFamilyInvoice = async (req: Request, res: Response, next: NextFunction) => {
   try {
     res.json(await invoicesService.generateFamilyInvoice(req.params.id, req.user!.id));
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** POST /api/invoices/:id/family/email — email the family invoice to the siblings' addresses */
+export const emailFamilyInvoice = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const family = await invoicesService.generateFamilyInvoice(req.params.id, req.user!.id);
+    if (!family.emails.length) throw new AppError(400, 'None of these siblings has an email address');
+
+    const sent: string[] = [];
+    for (const to of family.emails) {
+      const ok = await emailService.sendInvoiceEmail({
+        to,
+        recipientName: family.students.map((s) => s.name).join(' and '),
+        invoiceNumber: family.invoiceNumber,
+        month: getMonthName(family.month),
+        year: family.year,
+        totalAmount: family.totalAmount,
+        pdfPath: family.pdfPath,
+        type: 'student',
+      });
+      if (ok) sent.push(to);
+    }
+    if (!sent.length) return res.status(500).json({ message: 'Failed to send email (SMTP not configured)' });
+
+    await db.update(invoices).set({ emailedAt: new Date() }).where(inArray(invoices.id, family.invoiceIds));
+    res.json({ message: `Family invoice emailed to ${sent.join(', ')}` });
   } catch (error) {
     next(error);
   }

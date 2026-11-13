@@ -44,6 +44,12 @@ function teacherCreditDate(enrolledAt: Date | string | null, startDate: string |
   return new Date(y, m - 1, d);
 }
 
+/** Number on a family invoice (siblings on one PDF): the same for a family every time it is made */
+export function familyInvoiceNumber(familyId: string, month: number, year: number, currency: string): string {
+  const suffix = currency !== 'PKR' ? `-${currency}` : '';
+  return `FAM-${year}-${month.toString().padStart(2, '0')}-${familyId.slice(0, 8).toUpperCase()}${suffix}`;
+}
+
 export interface SessionOverride {
   enrollmentId: string;
   sessionCount: number;
@@ -1690,6 +1696,10 @@ export const invoicesService = {
           advance,
           deduction,
           siblings,
+          // Siblings share this number: the Invoices page shows them as one family row
+          familyInvoiceNumber: invoice.type === 'student' && siblings.length
+            ? familyInvoiceNumber(invoice.recipient.familyId!, invoice.month, invoice.year, invoice.currency)
+            : null,
         };
       })
     );
@@ -1801,9 +1811,7 @@ export const invoicesService = {
     }
 
     const totalAmount = sections.reduce((sum, s) => sum + Number(s.invoice.totalAmount), 0);
-    const monthStr = base.month.toString().padStart(2, '0');
-    const currencySuffix = base.currency !== 'PKR' ? `-${base.currency}` : '';
-    const invoiceNumber = `FAM-${base.year}-${monthStr}-${student.familyId.slice(0, 8).toUpperCase()}${currencySuffix}`;
+    const invoiceNumber = familyInvoiceNumber(student.familyId, base.month, base.year, base.currency);
 
     const pdfUrl = await this.generateFamilyInvoicePDF({
       invoiceNumber, month: base.month, year: base.year, currency: base.currency, totalAmount, sections,
@@ -1814,6 +1822,12 @@ export const invoicesService = {
       invoiceNumber,
       // The file is rewritten each time, so the address changes to stop browsers showing an old copy
       pdfUrl: `${pdfUrl}?v=${Date.now()}`,
+      pdfPath: pdfUrl,
+      month: base.month,
+      year: base.year,
+      // Where the family's copy can be emailed: the siblings' own addresses, without stand-ins
+      emails: [...new Set(sections.map((s) => s.student.email).filter((e) => !e.endsWith('@no-email.invalid')))],
+      invoiceIds: sections.map((s) => s.invoice.id),
       currency: base.currency,
       totalAmount: totalAmount.toFixed(2),
       students: sections.map((s) => ({

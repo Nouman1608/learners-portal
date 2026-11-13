@@ -31,6 +31,9 @@ export interface Invoice {
   };
   lineItems: InvoiceLineItem[];
   siblings?: { id: string; firstName: string; lastName: string }[]; // student invoices: linked brothers / sisters
+  familyInvoiceNumber?: string | null; // set when the student has siblings: they share one family invoice
+  /** Invoices page only: a family row carries each sibling's own invoice here */
+  members?: Invoice[];
   advance?: InvoiceAdvance | null; // teacher invoices: salary advances taken off
   deduction?: InvoiceDeduction | null; // teacher invoices: absent/late deductions (Junior)
 }
@@ -205,6 +208,12 @@ export const invoicesApi = {
    */
   async generateFamilyInvoice(invoiceId: string): Promise<FamilyInvoice> {
     const response = await apiClient.post(`/invoices/${invoiceId}/family`);
+    return response.data;
+  },
+
+  /** Email the family invoice to the siblings' email addresses (admin only) */
+  async emailFamilyInvoice(invoiceId: string): Promise<{ message: string }> {
+    const response = await apiClient.post(`/invoices/${invoiceId}/family/email`);
     return response.data;
   },
 
