@@ -332,7 +332,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
       setViewingPdfUrl(family.pdfUrl);
       setViewingInvoice(invoice);
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to make the family invoice');
+      toast.error(error.response?.data?.error || error.response?.data?.message || 'Failed to make the family invoice');
     } finally {
       setFamilyLoadingId(null);
     }
@@ -352,7 +352,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
         if (isNativeApp) await openExternal(fileUrl(family.pdfUrl));
         else saveFamilyPdf(family);
       } catch (error: any) {
-        toast.error(error.response?.data?.message || 'Failed to make the family invoice');
+        toast.error(error.response?.data?.error || error.response?.data?.message || 'Failed to make the family invoice');
       }
       return;
     }

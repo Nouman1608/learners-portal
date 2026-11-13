@@ -6,6 +6,7 @@ import { hashPassword } from '../utils/bcrypt';
 import { AppError } from '../middleware/errorHandler';
 import { Role } from '../types';
 import logger from '../utils/logger';
+import { otherCampus } from './otherCampus.service';
 
 /**
  * Stand-in address for a student created without an email (email is required and unique in
@@ -45,6 +46,16 @@ const familyMemberColumns = {
   parentPhone: users.parentPhone,
   isActive: users.isActive,
 };
+
+interface FamilyMemberRow {
+  id: string;
+  username: string;
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+  parentPhone: string | null;
+  isActive: boolean;
+}
 
 /** Last 10 digits of a phone number, so "0300 1234567" and "+92 300 1234567" compare equal */
 const phoneKey = (phone?: string | null) => {
@@ -187,51 +198,137 @@ export const usersService = {
     return familyId;
   },
 
+  /**
+   * Link a student here with a sibling who studies in the OTHER campus. Both portals store
+   * the same family id on their own student; the other portal is changed first, so if it
+   * cannot be reached nothing has changed here either.
+   */
+  async linkOtherCampusSibling(userId: string, otherCampusStudentId: string) {
+    const student = await this.requireStudent(userId);
+    const sibling = await otherCampus.student(otherCampusStudentId);
+
+    const familyId = student.familyId || sibling.familyId || randomUUID();
+    await otherCampus.setFamily(sibling.id, familyId); // moves the sibling's whole old family there
+
+    const joining = [eq(users.id, student.id)];
+    // The sibling's old family may have children in this campus too: they come along
+    if (sibling.familyId && sibling.familyId !== familyId) joining.push(eq(users.familyId, sibling.familyId));
+    await db.update(users).set({ familyId, updatedAt: new Date() }).where(or(...joining));
+
+    logger.info(`[FAMILY] Linked ${student.username} with other-campus student ${sibling.username} (family ${familyId})`);
+    return familyId;
+  },
+
   /** Take a student out of their family. A family left with one child is cleared as well. */
   async unlinkFromFamily(userId: string) {
     const student = await this.requireStudent(userId);
     if (!student.familyId) return;
-    const familyId = student.familyId;
 
-    await db.transaction(async (tx) => {
-      await tx.update(users).set({ familyId: null, updatedAt: new Date() }).where(eq(users.id, userId));
-      const left = await tx.select({ id: users.id }).from(users).where(eq(users.familyId, familyId));
-      if (left.length === 1) {
-        await tx.update(users).set({ familyId: null, updatedAt: new Date() }).where(eq(users.id, left[0].id));
+    await db.update(users).set({ familyId: null, updatedAt: new Date() }).where(eq(users.id, userId));
+    await this.tidyFamily(student.familyId);
+    logger.info(`[FAMILY] Unlinked ${student.username} from family ${student.familyId}`);
+  },
+
+  /** A family left with a single child (counting both campuses) is no longer a family */
+  async tidyFamily(familyId: string) {
+    const here = await db.select({ id: users.id }).from(users).where(eq(users.familyId, familyId));
+    let there: { id: string }[] = [];
+    if (otherCampus.enabled) {
+      try {
+        there = await otherCampus.familyMembers(familyId);
+      } catch {
+        return; // other campus unreachable: leave the family as it is rather than guess
       }
-    });
-    logger.info(`[FAMILY] Unlinked ${student.username} from family ${familyId}`);
+    }
+    if (here.length + there.length !== 1) return;
+    if (here.length) await db.update(users).set({ familyId: null, updatedAt: new Date() }).where(eq(users.id, here[0].id));
+    else await otherCampus.setFamily(there[0].id, null).catch(() => undefined);
   },
 
   /**
    * A student's linked siblings, plus suggestions: other students who share one of this
-   * student's phone numbers but are not linked yet.
+   * student's phone numbers but are not linked yet. Both include the other campus when the
+   * two portals are connected; `campus` says where each child studies.
    */
   async getFamily(userId: string) {
     const student = await this.getUserById(userId);
+    const keys = [...new Set([phoneKey(student.phone), phoneKey(student.parentPhone)].filter((k): k is string => !!k))];
 
-    const siblings = student.familyId
+    const own = (rows: { id: string }[]) => rows.map((r) => ({ ...r, campus: 'own' as const }));
+    const siblings: (FamilyMemberRow & { campus: 'own' | 'other' })[] = own(student.familyId
       ? await db.select(familyMemberColumns).from(users)
           .where(and(eq(users.familyId, student.familyId), ne(users.id, userId)))
           .orderBy(asc(users.firstName))
-      : [];
+      : []) as any;
 
-    const keys = [...new Set([phoneKey(student.phone), phoneKey(student.parentPhone)].filter((k): k is string => !!k))];
-    const linked = new Set(siblings.map((s) => s.id));
-    const suggestions = keys.length
-      ? (await db.select(familyMemberColumns).from(users)
-          .where(and(
-            eq(users.role, 'student'),
-            ne(users.id, userId),
-            or(...keys.flatMap((key) => [
-              sql`${phoneKeySql(users.phone)} = ${key}`,
-              sql`${phoneKeySql(users.parentPhone)} = ${key}`,
-            ])),
-          ))
-          .orderBy(asc(users.firstName))).filter((s) => !linked.has(s.id))
-      : [];
+    const suggestions: typeof siblings = own(keys.length
+      ? await this.studentsByPhoneKeys(keys, userId)
+      : []) as any;
 
-    return { familyId: student.familyId, siblings, suggestions };
+    // The other campus: linked siblings there, and children there with the same phone number
+    let otherCampusAvailable = otherCampus.enabled;
+    if (otherCampus.enabled) {
+      try {
+        if (student.familyId) {
+          siblings.push(...(await otherCampus.familyMembers(student.familyId)).map((s) => ({ ...s, campus: 'other' as const })));
+        }
+        if (keys.length) {
+          suggestions.push(...(await otherCampus.students(keys)).map((s) => ({ ...s, campus: 'other' as const })));
+        }
+      } catch {
+        otherCampusAvailable = false;
+      }
+    }
+
+    const linked = new Set(siblings.map((s) => `${s.campus}:${s.id}`));
+    return {
+      familyId: student.familyId,
+      siblings,
+      suggestions: suggestions.filter((s) => !linked.has(`${s.campus}:${s.id}`)),
+      otherCampusAvailable,
+    };
+  },
+
+  /** Students whose phone or parent phone matches one of the keys (last 10 digits) */
+  async studentsByPhoneKeys(keys: string[], exceptUserId?: string) {
+    return db.select({ ...familyMemberColumns, familyId: users.familyId }).from(users)
+      .where(and(
+        eq(users.role, 'student'),
+        exceptUserId ? ne(users.id, exceptUserId) : undefined,
+        or(...keys.flatMap((key) => [
+          sql`${phoneKeySql(users.phone)} = ${key}`,
+          sql`${phoneKeySql(users.parentPhone)} = ${key}`,
+        ])),
+      ))
+      .orderBy(asc(users.firstName));
+  },
+
+  // ---- What this portal does when the OTHER campus asks (routes/campusInternal.routes.ts) ----
+
+  /** All students here, or only those matching phone keys: the other campus's sibling picker */
+  async studentsForOtherCampus(keys?: string[]) {
+    if (keys?.length) return this.studentsByPhoneKeys(keys);
+    return db.select({ ...familyMemberColumns, familyId: users.familyId }).from(users)
+      .where(eq(users.role, 'student')).orderBy(asc(users.firstName));
+  },
+
+  async familyMembersForOtherCampus(familyId: string) {
+    return db.select({ ...familyMemberColumns, familyId: users.familyId }).from(users)
+      .where(and(eq(users.familyId, familyId), eq(users.role, 'student'))).orderBy(asc(users.firstName));
+  },
+
+  /**
+   * The other campus puts one of our students into a family (or, with null, takes them out).
+   * A student who was already in a different family brings that whole family along.
+   */
+  async setFamilyFromOtherCampus(studentId: string, familyId: string | null) {
+    const student = await this.requireStudent(studentId);
+    const previousFamilyId = student.familyId;
+    const moving = [eq(users.id, student.id)];
+    if (familyId && previousFamilyId && previousFamilyId !== familyId) moving.push(eq(users.familyId, previousFamilyId));
+    await db.update(users).set({ familyId, updatedAt: new Date() }).where(or(...moving));
+    logger.info(`[FAMILY] Other campus set family ${familyId} on ${student.username} (was ${previousFamilyId})`);
+    return { previousFamilyId };
   },
 
   /** `database` lets the Senior portal's sudo read the Junior Campus users (read-only connection) */
@@ -401,10 +498,7 @@ export const usersService = {
       .where(eq(users.id, userId));
 
     // A family left with one child is no longer a family
-    if (user.familyId) {
-      const left = await db.select({ id: users.id }).from(users).where(eq(users.familyId, user.familyId));
-      if (left.length === 1) await db.update(users).set({ familyId: null }).where(eq(users.id, left[0].id));
-    }
+    if (user.familyId) await this.tidyFamily(user.familyId);
 
     logger.info(`[USER DELETE] Permanently deleted user ${userId} (${user.username}, role: ${user.role})`);
 

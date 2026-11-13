@@ -26,6 +26,9 @@ const envSchema = z.object({
   // secret; HANDOFF_TARGET_URL is the other portal (set on the Senior Campus instance only).
   CAMPUS_HANDOFF_SECRET: z.string().min(32).optional().or(z.literal('')),
   HANDOFF_TARGET_URL: z.string().url().optional().or(z.literal('')),
+  // The other campus portal's backend, e.g. http://127.0.0.1:5050/api (set on both instances, each
+  // pointing at the other). With CAMPUS_HANDOFF_SECRET it lets siblings be linked across campuses.
+  OTHER_CAMPUS_API_URL: z.string().url().optional().or(z.literal('')),
   // Name shown in emails; the Junior Campus instance sets "Learners Preschool".
   SCHOOL_NAME: z.string().default('Learners Academy'),
   // First month the portal's books cover (YYYY-MM). Money pages ignore fees for earlier

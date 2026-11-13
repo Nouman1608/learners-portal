@@ -22,6 +22,7 @@ import teacherAttendanceRoutes from './teacherAttendance.routes';
 import messagesRoutes from './messages.routes';
 import whatsappWebhookRoutes from './whatsapp-webhook.routes';
 import currencyRoutes from './currency.routes';
+import campusInternalRoutes from './campusInternal.routes';
 
 const router = Router();
 
@@ -49,6 +50,8 @@ router.use('/salary-advances', teacherAdvancesRoutes);
 router.use('/teacher-attendance', teacherAttendanceRoutes);
 router.use('/messages', messagesRoutes);
 router.use('/webhooks/whatsapp', whatsappWebhookRoutes);
+// Portal-to-portal only (signed pass, no login): siblings across the two campuses
+router.use('/internal/campus', campusInternalRoutes);
 
 // Health check
 router.get('/health', (req, res) => {

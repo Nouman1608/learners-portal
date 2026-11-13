@@ -37,12 +37,14 @@ export interface FamilyMember {
   phone: string | null;
   parentPhone: string | null;
   isActive: boolean;
+  campus?: 'own' | 'other'; // 'other' = studies in the other campus (Senior <-> Junior)
 }
 
 export interface Family {
   familyId: string | null;
   siblings: FamilyMember[]; // linked
   suggestions: FamilyMember[]; // share a phone number but are not linked yet
+  otherCampusAvailable?: boolean; // the other campus portal is connected and answering
 }
 
 export interface UpdateUserInput {
@@ -132,8 +134,13 @@ export const usersApi = {
   // Siblings: students linked as one family (their invoices can be made as one family invoice)
   getFamily: async (id: string): Promise<Family> => (await apiClient.get<Family>(`/users/${id}/family`)).data,
 
-  linkSibling: async (id: string, siblingId: string): Promise<Family> =>
-    (await apiClient.post<Family>(`/users/${id}/family`, { siblingId })).data,
+  /** campus 'other': the sibling studies in the other campus */
+  linkSibling: async (id: string, siblingId: string, campus: 'own' | 'other' = 'own'): Promise<Family> =>
+    (await apiClient.post<Family>(`/users/${id}/family`, { siblingId, campus })).data,
+
+  /** Students of the other campus, for linking siblings across campuses */
+  getOtherCampusStudents: async (): Promise<{ available: boolean; students: FamilyMember[] }> =>
+    (await apiClient.get('/users/other-campus/students')).data,
 
   unlinkFamily: async (id: string): Promise<Family> => (await apiClient.delete<Family>(`/users/${id}/family`)).data,
 };

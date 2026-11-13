@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { usersApi, Family, FamilyMember } from '../../api/users.api';
 import { User } from '../../types';
+import { isJuniorPortal } from '../../brand';
 import SearchableSelect from '../common/SearchableSelect';
 
 interface SiblingsFieldProps {
@@ -16,15 +17,21 @@ interface SiblingsFieldProps {
 }
 
 const fullName = (u: { firstName: string; lastName: string }) => `${u.firstName} ${u.lastName}`;
+const OTHER_CAMPUS = isJuniorPortal ? 'Senior Campus' : 'Junior Campus';
+const pickerOption = (s: { id: string; username: string; firstName: string; lastName: string; phone?: string | null; parentPhone?: string | null }) =>
+  ({ value: s.id, label: fullName(s), sublabel: [`@${s.username}`, s.parentPhone || s.phone].filter(Boolean).join(' · ') });
 
 /**
  * Siblings on the student form. Linked students are one family: the Invoices page can then
  * make one family invoice for all of them. On an existing student, links save straight away.
+ * A sibling may also study in the other campus (Senior <-> Junior).
  */
 export default function SiblingsField({ userId, siblingOfId, onPickSibling, onChanged, disabled }: SiblingsFieldProps) {
   const [students, setStudents] = useState<User[]>([]);
+  const [otherStudents, setOtherStudents] = useState<FamilyMember[] | null>(null); // null = not connected
   const [family, setFamily] = useState<Family | null>(null);
   const [picked, setPicked] = useState('');
+  const [pickedOther, setPickedOther] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -33,21 +40,28 @@ export default function SiblingsField({ userId, siblingOfId, onPickSibling, onCh
   }, []);
 
   useEffect(() => {
-    if (userId) usersApi.getFamily(userId).then(setFamily).catch(() => toast.error('Failed to load siblings'));
+    if (!userId) return;
+    usersApi.getFamily(userId).then(setFamily).catch(() => toast.error('Failed to load siblings'));
+    usersApi.getOtherCampusStudents().then((r) => setOtherStudents(r.available ? r.students : null))
+      .catch(() => setOtherStudents(null));
   }, [userId]);
 
-  const options = useMemo(() => {
-    const linked = new Set(family?.siblings.map((s) => s.id));
-    return students
-      .filter((s) => s.id !== userId && !linked.has(s.id))
-      .map((s) => ({ value: s.id, label: fullName(s), sublabel: [`@${s.username}`, s.parentPhone || s.phone].filter(Boolean).join(' · ') }));
-  }, [students, family, userId]);
+  const linked = useMemo(() => new Set(family?.siblings.map((s) => `${s.campus || 'own'}:${s.id}`)), [family]);
+  const options = useMemo(
+    () => students.filter((s) => s.id !== userId && !linked.has(`own:${s.id}`)).map(pickerOption),
+    [students, linked, userId],
+  );
+  const otherOptions = useMemo(
+    () => (otherStudents || []).filter((s) => !linked.has(`other:${s.id}`)).map(pickerOption),
+    [otherStudents, linked],
+  );
 
   const run = async (action: () => Promise<Family>, done: string) => {
     setSaving(true);
     try {
       setFamily(await action());
       setPicked('');
+      setPickedOther('');
       toast.success(done);
       onChanged?.();
     } catch (error: any) {
@@ -57,10 +71,8 @@ export default function SiblingsField({ userId, siblingOfId, onPickSibling, onCh
     }
   };
 
-  const link = (sibling: FamilyMember | string) => {
-    const id = typeof sibling === 'string' ? sibling : sibling.id;
-    return run(() => usersApi.linkSibling(userId!, id), 'Sibling linked');
-  };
+  const link = (id: string, campus: 'own' | 'other' = 'own') =>
+    run(() => usersApi.linkSibling(userId!, id, campus), 'Sibling linked');
 
   const busy = disabled || saving;
 
@@ -78,6 +90,7 @@ export default function SiblingsField({ userId, siblingOfId, onPickSibling, onCh
         />
         <p className="mt-1 text-xs text-gray-500">
           Siblings get one family invoice. Empty phone numbers here are filled from the sibling.
+          A sibling in the {OTHER_CAMPUS} can be linked after saving (edit the student).
         </p>
       </div>
     );
@@ -91,8 +104,8 @@ export default function SiblingsField({ userId, siblingOfId, onPickSibling, onCh
       {family && family.siblings.length > 0 ? (
         <div className="mb-2 flex flex-wrap items-center gap-2">
           {family.siblings.map((s) => (
-            <span key={s.id} className="rounded-full bg-indigo-50 px-3 py-1 text-sm text-indigo-800">
-              {fullName(s)}{!s.isActive && ' (inactive)'}
+            <span key={`${s.campus}:${s.id}`} className={`rounded-full px-3 py-1 text-sm ${s.campus === 'other' ? 'bg-amber-50 text-amber-900' : 'bg-indigo-50 text-indigo-800'}`}>
+              {fullName(s)}{s.campus === 'other' && ` (${OTHER_CAMPUS})`}{!s.isActive && ' (inactive)'}
             </span>
           ))}
           <button
@@ -112,9 +125,9 @@ export default function SiblingsField({ userId, siblingOfId, onPickSibling, onCh
         <div className="mb-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
           Same phone number:
           {family.suggestions.map((s) => (
-            <span key={s.id} className="ml-2 inline-flex items-center gap-1">
-              {fullName(s)}
-              <button type="button" disabled={busy} onClick={() => link(s)} className="font-medium text-indigo-700 hover:underline disabled:opacity-50">
+            <span key={`${s.campus}:${s.id}`} className="ml-2 inline-flex items-center gap-1">
+              {fullName(s)}{s.campus === 'other' && ` (${OTHER_CAMPUS})`}
+              <button type="button" disabled={busy} onClick={() => link(s.id, s.campus || 'own')} className="font-medium text-indigo-700 hover:underline disabled:opacity-50">
                 Link
               </button>
             </span>
@@ -124,7 +137,7 @@ export default function SiblingsField({ userId, siblingOfId, onPickSibling, onCh
 
       <div className="flex items-start gap-2">
         <div className="flex-1">
-          <SearchableSelect options={options} value={picked} onChange={setPicked} placeholder="Add a sibling..." disabled={busy} />
+          <SearchableSelect options={options} value={picked} onChange={setPicked} placeholder="Add a sibling from this campus..." disabled={busy} />
         </div>
         <button
           type="button"
@@ -135,6 +148,25 @@ export default function SiblingsField({ userId, siblingOfId, onPickSibling, onCh
           Link
         </button>
       </div>
+
+      {/* A brother or sister who studies in the other campus */}
+      {otherStudents ? (
+        <div className="mt-2 flex items-start gap-2">
+          <div className="flex-1">
+            <SearchableSelect options={otherOptions} value={pickedOther} onChange={setPickedOther} placeholder={`Add a sibling from the ${OTHER_CAMPUS}...`} disabled={busy} />
+          </div>
+          <button
+            type="button"
+            disabled={busy || !pickedOther}
+            onClick={() => link(pickedOther, 'other')}
+            className="rounded-md bg-amber-600 px-3 py-2 text-sm text-white hover:bg-amber-700 disabled:opacity-50"
+          >
+            Link
+          </button>
+        </div>
+      ) : (
+        <p className="mt-2 text-xs text-gray-400">The {OTHER_CAMPUS} is not connected right now, so siblings there cannot be linked from here.</p>
+      )}
     </div>
   );
 }

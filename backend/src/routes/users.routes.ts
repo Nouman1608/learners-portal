@@ -15,6 +15,9 @@ router.get('/', requireTeacher, usersController.getUsers);
 // Get users by role - teachers can access
 router.get('/role/:role', requireTeacher, usersController.getUsersByRole);
 
+// The other campus's students, for linking siblings across campuses (admin only; before /:id)
+router.get('/other-campus/students', requireAdmin, usersController.getOtherCampusStudents);
+
 // Get single user - teachers can access
 router.get('/:id', requireTeacher, usersController.getUserById);
 

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import usersService from '../services/users.service';
 import { juniorDb } from '../config/database';
+import { otherCampus } from '../services/otherCampus.service';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
 
@@ -290,6 +291,16 @@ export const resetPassword = async (req: Request, res: Response) => {
   }
 };
 
+/** GET /api/users/other-campus/students — the other campus's students, for the sibling picker */
+export const getOtherCampusStudents = async (_req: Request, res: Response) => {
+  if (!otherCampus.enabled) return res.json({ available: false, students: [] });
+  try {
+    return res.json({ available: true, students: await otherCampus.students() });
+  } catch {
+    return res.json({ available: false, students: [] });
+  }
+};
+
 /** GET /api/users/:id/family — linked siblings, and students sharing a phone number (suggestions) */
 export const getFamily = async (req: Request, res: Response) => {
   return res.json(await usersService.getFamily(req.params.id));
@@ -297,10 +308,12 @@ export const getFamily = async (req: Request, res: Response) => {
 
 /** POST /api/users/:id/family { siblingId } — link two students as siblings */
 export const linkSibling = async (req: Request, res: Response) => {
-  const parsed = z.object({ siblingId: z.string().uuid() }).safeParse(req.body);
+  // campus 'other': the sibling studies in the other campus (its student id, from that portal)
+  const parsed = z.object({ siblingId: z.string().uuid(), campus: z.enum(['own', 'other']).default('own') }).safeParse(req.body);
   if (!parsed.success) throw new AppError(400, 'Choose the sibling to link');
-  await usersService.linkSiblings(req.params.id, parsed.data.siblingId);
-  logger.info(`Siblings linked: ${req.params.id} + ${parsed.data.siblingId} by ${req.user!.username}`);
+  if (parsed.data.campus === 'other') await usersService.linkOtherCampusSibling(req.params.id, parsed.data.siblingId);
+  else await usersService.linkSiblings(req.params.id, parsed.data.siblingId);
+  logger.info(`Siblings linked: ${req.params.id} + ${parsed.data.siblingId} (${parsed.data.campus} campus) by ${req.user!.username}`);
   return res.json(await usersService.getFamily(req.params.id));
 };
 
