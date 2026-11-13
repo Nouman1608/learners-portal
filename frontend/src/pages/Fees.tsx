@@ -23,7 +23,7 @@ export default function Fees() {
   const [filterStudent, setFilterStudent] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterSubcategory, setFilterSubcategory] = useState<string>('all');
-  // Junior: local / online, taken from how the child attends that class (the enrolment)
+  // Local / online, taken from how the child attends that class (the enrolment)
   const [filterMode, setFilterMode] = useState<string>('all');
   const [filterInvoice, setFilterInvoice] = useState<'all' | 'sent' | 'not_sent'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -294,7 +294,7 @@ export default function Fees() {
     }
 
     // Local / online filter (Junior): the class's attendance mode
-    if (juniorView && filterMode !== 'all' && fee.attendanceMode !== filterMode) {
+    if (filterMode !== 'all' && fee.attendanceMode !== filterMode) {
       return false;
     }
 
@@ -561,18 +561,18 @@ export default function Fees() {
           )}
         </select>
 
-        {juniorView && (
-          <select
-            value={filterMode}
-            onChange={(e) => setFilterMode(e.target.value)}
-            aria-label="Local or online"
-            className="px-3 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"
-          >
-            <option value="all">Local &amp; Online</option>
-            <option value="local">Local</option>
-            <option value="online">Online</option>
-          </select>
-        )}
+        {/* Both portals. On Senior the "All Types" list also has Local / Online, but that one reads
+            the student's profile; this one reads how the child attends the class, so it says "Attends". */}
+        <select
+          value={filterMode}
+          onChange={(e) => setFilterMode(e.target.value)}
+          aria-label="Local or online"
+          className="px-3 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"
+        >
+          <option value="all">{juniorView ? 'Local & Online' : 'Attends: Local & Online'}</option>
+          <option value="local">{juniorView ? 'Local' : 'Attends: Local'}</option>
+          <option value="online">{juniorView ? 'Online' : 'Attends: Online'}</option>
+        </select>
 
         {(searchQuery || filterStatus !== 'all' || filterPeriod !== 'all' || filterCourse !== 'all' || filterStudent !== 'all' || filterCategory !== 'all' || filterSubcategory !== 'all' || filterInvoice !== 'all' || filterMode !== 'all') && (
           <button
