@@ -21,6 +21,8 @@ const createUserSchema = z.object({
   studentSubcategory: z.string().optional(),
   whatsappGroupLink: z.string().url('Must be a valid URL').optional().or(z.literal('')),
   teamsUsername: z.string().max(100).optional().or(z.literal('')),
+  // Students: brother or sister already in the portal (links the two as one family)
+  siblingOfId: z.string().uuid().optional(),
   // Teacher fee configuration (only for teachers)
   localStudentFeePercentage: z.number()
     .min(0, 'Fee percentage must be between 0 and 100')
@@ -286,6 +288,27 @@ export const resetPassword = async (req: Request, res: Response) => {
     }
     throw error;
   }
+};
+
+/** GET /api/users/:id/family — linked siblings, and students sharing a phone number (suggestions) */
+export const getFamily = async (req: Request, res: Response) => {
+  return res.json(await usersService.getFamily(req.params.id));
+};
+
+/** POST /api/users/:id/family { siblingId } — link two students as siblings */
+export const linkSibling = async (req: Request, res: Response) => {
+  const parsed = z.object({ siblingId: z.string().uuid() }).safeParse(req.body);
+  if (!parsed.success) throw new AppError(400, 'Choose the sibling to link');
+  await usersService.linkSiblings(req.params.id, parsed.data.siblingId);
+  logger.info(`Siblings linked: ${req.params.id} + ${parsed.data.siblingId} by ${req.user!.username}`);
+  return res.json(await usersService.getFamily(req.params.id));
+};
+
+/** DELETE /api/users/:id/family — take the student out of their family */
+export const unlinkFamily = async (req: Request, res: Response) => {
+  await usersService.unlinkFromFamily(req.params.id);
+  logger.info(`Sibling link removed: ${req.params.id} by ${req.user!.username}`);
+  return res.json(await usersService.getFamily(req.params.id));
 };
 
 export const getUsersByRole = async (req: Request, res: Response) => {

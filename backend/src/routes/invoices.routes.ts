@@ -58,6 +58,9 @@ router.post(
   invoicesController.generatePreviousMonthInvoices
 );
 
+// Family invoice (siblings on one PDF) - admin only
+router.post('/:id/family', requireAdmin, logActivity('generate', 'family-invoice'), invoicesController.generateFamilyInvoice);
+
 // Email invoice - admin only
 router.post('/:id/email', requireAdmin, logActivity('email', 'invoice'), invoicesController.emailInvoice);
 

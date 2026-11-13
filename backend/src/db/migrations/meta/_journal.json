@@ -50,6 +50,13 @@
       "when": 1794499825843,
       "tag": "0006_last_bruce_banner",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1794571667579,
+      "tag": "0007_great_shockwave",
+      "breakpoints": true
     }
   ]
 }

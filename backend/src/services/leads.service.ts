@@ -37,6 +37,9 @@ export interface LeadFilters {
   search?: string; // Search in name, phone, email, notes
 }
 
+/** Same lead name, ignoring capitals and spaces at the ends */
+const sameName = (name: string) => sql`lower(trim(${leads.name})) = ${name.trim().toLowerCase()}`;
+
 export const leadsService = {
   /**
    * Create a new lead
@@ -46,15 +49,16 @@ export const leadsService = {
       // Validate and normalize phone number
       const normalizedPhone = whatsappService.validatePhoneNumber(input.phone);
 
-      // Check if lead with same phone already exists
+      // Siblings often share a parent's number, so the same phone is allowed for a
+      // different name. Only the same name on the same number is a duplicate.
       const [existing] = await db
         .select()
         .from(leads)
-        .where(eq(leads.phone, normalizedPhone))
+        .where(and(eq(leads.phone, normalizedPhone), sameName(input.name)))
         .limit(1);
 
       if (existing) {
-        throw new AppError(400, 'A lead with this phone number already exists');
+        throw new AppError(400, 'A lead with this name and phone number already exists');
       }
 
       // Create lead
@@ -175,7 +179,7 @@ export const leadsService = {
   async updateLead(leadId: string, input: UpdateLeadInput) {
     try {
       // Verify lead exists
-      await this.getLeadById(leadId);
+      const current = await this.getLeadById(leadId);
 
       const updateData: any = {
         updatedAt: new Date(),
@@ -185,15 +189,22 @@ export const leadsService = {
       if (input.phone) {
         updateData.phone = whatsappService.validatePhoneNumber(input.phone);
 
-        // Check if new phone conflicts with another lead
+      }
+
+      // Same name on the same number as another lead is a duplicate (siblings may share a number)
+      if (input.phone || input.name !== undefined) {
         const [existing] = await db
           .select()
           .from(leads)
-          .where(and(eq(leads.phone, updateData.phone), sql`${leads.id} != ${leadId}`))
+          .where(and(
+            eq(leads.phone, updateData.phone || current.phone),
+            sameName(input.name ?? current.name),
+            sql`${leads.id} != ${leadId}`,
+          ))
           .limit(1);
 
         if (existing) {
-          throw new AppError(400, 'A lead with this phone number already exists');
+          throw new AppError(400, 'A lead with this name and phone number already exists');
         }
       }
 
@@ -286,11 +297,13 @@ export const leadsService = {
 
       const normalizedPhone = whatsappService.validatePhoneNumber(studentData.phone);
 
-      // Check if lead with this phone already exists
+      // Check if lead with this phone already exists. Siblings can share a number, so the
+      // lead with this student's own name is preferred over a brother's or sister's.
       const [existingLead] = await db
         .select()
         .from(leads)
         .where(eq(leads.phone, normalizedPhone))
+        .orderBy(sql`(${sameName(studentData.name)}) DESC`, leads.createdAt)
         .limit(1);
 
       if (existingLead) {

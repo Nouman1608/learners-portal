@@ -12,6 +12,7 @@ export interface User {
   studentCategory?: string; // 'junior' or 'senior'
   studentSubcategory?: string; // 'aitchison', 'preschool', 'summer_camp', 'academy', 'local', 'online'
   whatsappGroupLink?: string;
+  familyId?: string | null; // siblings share one familyId
   teamsUsername?: string;
   isActive: boolean;
   mustChangePassword?: boolean;

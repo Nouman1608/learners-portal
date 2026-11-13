@@ -33,4 +33,9 @@ router.patch('/:id/password', requireAdmin, logActivity('change-password', 'user
 // Reset user password (admin only)
 router.post('/:id/reset-password', requireAdmin, logActivity('reset-password', 'user'), usersController.resetPassword);
 
+// Siblings (admin only): students linked as one family get a combined family invoice
+router.get('/:id/family', requireAdmin, usersController.getFamily);
+router.post('/:id/family', requireAdmin, logActivity('link-sibling', 'user'), usersController.linkSibling);
+router.delete('/:id/family', requireAdmin, logActivity('unlink-sibling', 'user'), usersController.unlinkFamily);
+
 export default router;

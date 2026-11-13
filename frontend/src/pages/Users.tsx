@@ -35,6 +35,11 @@ const Users: React.FC = () => {
   // Sorting
   const { items: sortedUsers, requestSort, getSortIndicator } = useSortableData(users);
 
+  // Siblings share a familyId: names of each student's brothers / sisters among the listed users
+  const siblingsOf = (user: User) => !user.familyId ? [] : users
+    .filter((u) => u.familyId === user.familyId && u.id !== user.id && isJuniorRow(u) === isJuniorRow(user))
+    .map((u) => u.firstName);
+
   // Helper function to format phone number for WhatsApp
   const formatWhatsAppNumber = (phone: string) => {
     // Remove all non-digit characters
@@ -463,6 +468,9 @@ const Users: React.FC = () => {
                         )}
                       </div>
                       <div className="text-xs text-gray-500">@{user.username}</div>
+                      {siblingsOf(user).length > 0 && (
+                        <div className="text-xs text-indigo-600">Sibling of {siblingsOf(user).join(', ')}</div>
+                      )}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${
@@ -598,7 +606,8 @@ const Users: React.FC = () => {
             setShowModal(false);
             setEditingUser(null);
           }}
-          onSubmit={editingUser ? (data) => handleUpdateUser(editingUser.id, data as UpdateUserInput) : (data) => handleCreateUser(data as CreateUserInput)}
+          onSiblingsChanged={fetchUsers}
+          onSubmit={editingUser ?(data) => handleUpdateUser(editingUser.id, data as UpdateUserInput) : (data) => handleCreateUser(data as CreateUserInput)}
         />
       )}
 

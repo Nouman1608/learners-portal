@@ -30,6 +30,7 @@ export interface Invoice {
     studentSubcategory?: string;
   };
   lineItems: InvoiceLineItem[];
+  siblings?: { id: string; firstName: string; lastName: string }[]; // student invoices: linked brothers / sisters
   advance?: InvoiceAdvance | null; // teacher invoices: salary advances taken off
   deduction?: InvoiceDeduction | null; // teacher invoices: absent/late deductions (Junior)
 }
@@ -90,6 +91,16 @@ export interface GenerateMonthlyInvoicesResult {
   message: string;
   studentCount: number;
   teacherCount: number;
+}
+
+/** One PDF covering a student and their linked siblings for a month */
+export interface FamilyInvoice {
+  invoiceNumber: string;
+  pdfUrl: string;
+  currency: string;
+  totalAmount: string;
+  students: { id: string; name: string; invoiceNumber: string; totalAmount: string }[];
+  withoutFees: string[]; // siblings with no fees that month (left off the invoice)
 }
 
 export interface GetInvoicesFilters {
@@ -185,6 +196,15 @@ export const invoicesApi = {
    */
   async downloadInvoice(invoiceId: string): Promise<{ pdfUrl: string; invoiceNumber: string }> {
     const response = await apiClient.get(`/invoices/${invoiceId}/download`);
+    return response.data;
+  },
+
+  /**
+   * Family invoice (admin only): one PDF for this invoice's student and their siblings.
+   * A sibling who has fees but no invoice yet for the month gets one made first.
+   */
+  async generateFamilyInvoice(invoiceId: string): Promise<FamilyInvoice> {
+    const response = await apiClient.post(`/invoices/${invoiceId}/family`);
     return response.data;
   },
 

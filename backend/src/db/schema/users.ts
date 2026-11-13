@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, timestamp, text, decimal, AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, boolean, timestamp, text, decimal, index, AnyPgColumn } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -13,6 +13,8 @@ export const users = pgTable('users', {
   studentCategory: varchar('student_category', { length: 20 }), // 'junior', 'senior' (only for students)
   studentSubcategory: varchar('student_subcategory', { length: 30 }), // 'aitchison', 'preschool', 'summer_camp', 'academy', 'local', 'online'
   whatsappGroupLink: text('whatsapp_group_link'), // WhatsApp group link for student
+  // Siblings share one family_id (no separate table); null = not linked to anyone
+  familyId: uuid('family_id'),
   teamsUsername: varchar('teams_username', { length: 100 }), // Microsoft Teams display name for attendance sync
   isActive: boolean('is_active').default(true).notNull(),
   mustChangePassword: boolean('must_change_password').default(false).notNull(),
@@ -26,7 +28,9 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
   createdBy: uuid('created_by').references((): AnyPgColumn => users.id, { onDelete: 'set null' }),
-});
+}, (table) => ({
+  familyIdIndex: index('users_family_id_idx').on(table.familyId),
+}));
 
 export const sessions = pgTable('sessions', {
   id: uuid('id').primaryKey().defaultRandom(),

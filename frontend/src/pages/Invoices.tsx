@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom';
 import SalarySlipInputsModal from '../components/invoices/SalarySlipInputsModal';
 import SalaryAdvances from './SalaryAdvances';
 import TeacherAttendance from './TeacherAttendance';
-import { invoicesApi, Invoice, OneToOneSession, SessionOverride } from '../api/invoices.api';
+import { invoicesApi, Invoice, FamilyInvoice, OneToOneSession, SessionOverride } from '../api/invoices.api';
 import { usersApi, User } from '../api/users.api';
 import { useAuth } from '../context/AuthContext';
 import OneToOneSessionModal from '../components/invoices/OneToOneSessionModal';
@@ -18,6 +18,7 @@ import {
   MagnifyingGlassIcon,
   ArrowsPointingOutIcon,
   ArrowsPointingInIcon,
+  UserGroupIcon,
 } from '@heroicons/react/24/outline';
 import { useSortableData } from '../hooks/useSortableData';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -55,6 +56,9 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
     try { localStorage.setItem('invoicePdfFull', next ? '1' : '0'); } catch { /* storage unavailable */ }
     return next;
   });
+  // Set while the viewer shows a family invoice (siblings on one PDF) instead of viewingInvoice's own
+  const [viewingFamily, setViewingFamily] = useState<FamilyInvoice | null>(null);
+  const [familyLoadingId, setFamilyLoadingId] = useState<string | null>(null);
   const [emailingId, setEmailingId] = useState<string | null>(null);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [sessionModal, setSessionModal] = useState<{
@@ -290,6 +294,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
         await openExternal(fileUrl(pdfUrl));
         return;
       }
+      setViewingFamily(null);
       setViewingPdfUrl(pdfUrl);
       setViewingInvoice(invoice);
     } catch (error: any) {
@@ -297,7 +302,43 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
     }
   };
 
+  // One PDF for the student and their linked siblings; missing sibling invoices are made first
+  const handleFamilyInvoice = async (invoice: Invoice) => {
+    setFamilyLoadingId(invoice.id);
+    try {
+      const family = await invoicesApi.generateFamilyInvoice(invoice.id);
+      if (family.withoutFees.length) {
+        toast(`No fees this month for ${family.withoutFees.join(', ')}, so not on the family invoice`);
+      }
+      loadInvoices(); // a sibling's own invoice may just have been made
+      if (isNativeApp) {
+        await openExternal(fileUrl(family.pdfUrl));
+        return;
+      }
+      setViewingFamily(family);
+      setViewingPdfUrl(family.pdfUrl);
+      setViewingInvoice(invoice);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to make the family invoice');
+    } finally {
+      setFamilyLoadingId(null);
+    }
+  };
+
+  const closeViewer = () => {
+    setViewingInvoice(null);
+    setViewingPdfUrl(null);
+    setViewingFamily(null);
+  };
+
   const handleDownloadPDF = async (invoice: Invoice) => {
+    if (viewingFamily) {
+      const link = document.createElement('a');
+      link.href = fileUrl(viewingFamily.pdfUrl);
+      link.download = `${viewingFamily.invoiceNumber}.pdf`;
+      link.click();
+      return;
+    }
     try {
       // Use the download API to get the appropriate PDF based on user role
       const { pdfUrl, invoiceNumber } = await invoicesApi.downloadInvoice(invoice.id);
@@ -650,6 +691,11 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
                   {isAdmin && (
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {invoice.recipient.firstName} {invoice.recipient.lastName}
+                      {!!invoice.siblings?.length && (
+                        <div className="text-xs text-indigo-600">
+                          Sibling of {invoice.siblings.map((s) => s.firstName).join(', ')}
+                        </div>
+                      )}
                     </td>
                   )}
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -694,6 +740,16 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
                           <ArrowDownTrayIcon className="h-5 w-5" />
                         </button>
                       </>
+                    )}
+                    {isAdmin && invoice.type === 'student' && !!invoice.siblings?.length && (
+                      <button
+                        onClick={() => handleFamilyInvoice(invoice)}
+                        disabled={familyLoadingId === invoice.id}
+                        className="p-1.5 text-purple-600 hover:text-purple-900 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50"
+                        title={`Family invoice (with ${invoice.siblings.map((s) => s.firstName).join(', ')})`}
+                      >
+                        <UserGroupIcon className={`h-5 w-5 ${familyLoadingId === invoice.id ? 'animate-pulse' : ''}`} />
+                      </button>
                     )}
                     {isAdmin && invoice.pdfUrl && (
                       <button
@@ -757,7 +813,14 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-lg font-semibold">
-                {viewingInvoice.invoiceNumber} - {MONTHS[viewingInvoice.month - 1]} {viewingInvoice.year}
+                {viewingFamily
+                  ? `Family invoice: ${viewingFamily.students.map((s) => s.name).join(', ')}`
+                  : viewingInvoice.invoiceNumber} - {MONTHS[viewingInvoice.month - 1]} {viewingInvoice.year}
+                {viewingFamily && (
+                  <span className="ml-2 text-sm font-normal text-gray-500">
+                    Total {formatAmount(viewingFamily.totalAmount, viewingFamily.currency)}
+                  </span>
+                )}
               </h3>
               <div className="flex items-center gap-2">
                 <button
@@ -769,10 +832,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
                   {pdfFull ? <ArrowsPointingInIcon className="h-5 w-5" /> : <ArrowsPointingOutIcon className="h-5 w-5" />}
                 </button>
                 <button
-                  onClick={() => {
-                    setViewingInvoice(null);
-                    setViewingPdfUrl(null);
-                  }}
+                  onClick={closeViewer}
                   aria-label="Close"
                   className="text-gray-400 hover:text-gray-600"
                 >
@@ -799,11 +859,21 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
                 <ArrowDownTrayIcon className="h-5 w-5 mr-2" />
                 Download
               </button>
+              {viewingFamily && viewingInvoice.recipient.whatsappGroupLink && (
+                <button
+                  onClick={async () => {
+                    const downloadUrl = new URL(fileUrl(viewingFamily.pdfUrl), window.location.origin).href;
+                    await navigator.clipboard.writeText(`Here is your family invoice ${viewingFamily.invoiceNumber}:\n${downloadUrl}`);
+                    toast.success('Invoice link copied! Paste it in the WhatsApp group.');
+                    window.open(viewingInvoice.recipient.whatsappGroupLink, '_blank');
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                >
+                  Send via WhatsApp
+                </button>
+              )}
               <button
-                onClick={() => {
-                  setViewingInvoice(null);
-                  setViewingPdfUrl(null);
-                }}
+                onClick={closeViewer}
                 className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
               >
                 Close

@@ -225,6 +225,15 @@ export const downloadInvoice = async (req: Request, res: Response, next: NextFun
   }
 };
 
+/** POST /api/invoices/:id/family — one PDF for this student and their linked siblings */
+export const generateFamilyInvoice = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(await invoicesService.generateFamilyInvoice(req.params.id, req.user!.id));
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const emailInvoice = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const invoice = await invoicesService.getInvoiceById(req.params.id);

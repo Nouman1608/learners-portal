@@ -2,7 +2,7 @@ import { db, Database } from '../config/database';
 import teacherOneToOneRates from '../config/teacherOneToOneRates.json';
 import { invoices, invoiceLineItems } from '../db/schema/invoices';
 import { fees, enrollments, users, courses, courseTeachers, courseEvents } from '../db/schema';
-import { eq, and, or, desc, sql, gte, lte, ilike } from 'drizzle-orm';
+import { eq, and, or, asc, desc, sql, gte, lte, ilike, inArray } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler';
 import { feesService } from './fees.service';
 import { teacherAdvancesService, AdvanceSummary } from './teacherAdvances.service';
@@ -1602,6 +1602,7 @@ export const invoicesService = {
           whatsappGroupLink: users.whatsappGroupLink,
           studentCategory: users.studentCategory,
           studentSubcategory: users.studentSubcategory,
+          familyId: users.familyId,
         },
       })
       .from(invoices)
@@ -1648,6 +1649,16 @@ export const invoicesService = {
 
     const invoicesList = await query;
 
+    // Siblings of each recipient (students linked as one family), for the family invoice
+    const familyIds = [...new Set(invoicesList.map((i) => i.recipient.familyId).filter((id): id is string => !!id))];
+    const familyMembers = familyIds.length
+      ? await database
+          .select({ id: users.id, firstName: users.firstName, lastName: users.lastName, familyId: users.familyId })
+          .from(users)
+          .where(and(inArray(users.familyId, familyIds), eq(users.role, 'student')))
+          .orderBy(asc(users.firstName))
+      : [];
+
     // Fetch line items for each invoice
     const invoicesWithLineItems = await Promise.all(
       invoicesList.map(async (invoice) => {
@@ -1667,11 +1678,18 @@ export const invoicesService = {
               items.reduce((sum, item) => sum + Number(item.amount), 0), database)
           : null;
 
+        const siblings = invoice.recipient.familyId
+          ? familyMembers
+              .filter((m) => m.familyId === invoice.recipient.familyId && m.id !== invoice.recipientId)
+              .map(({ id, firstName, lastName }) => ({ id, firstName, lastName }))
+          : [];
+
         return {
           ...invoice,
           lineItems: items,
           advance,
           deduction,
+          siblings,
         };
       })
     );
@@ -1727,6 +1745,169 @@ export const invoicesService = {
       ...invoice,
       lineItems: items,
     };
+  },
+
+  /**
+   * Family invoice: one PDF for all siblings (students sharing a family_id), built from each
+   * child's own latest invoice for the same month and currency. A sibling with fees but no
+   * invoice yet gets one made first. No invoice row is stored for the family, so nothing is
+   * counted twice: each child's own invoice, fees and payments stay exactly as they are.
+   */
+  async generateFamilyInvoice(invoiceId: string, generatedBy?: string) {
+    const base = await this.getInvoiceById(invoiceId);
+    if (base.type !== 'student') throw new AppError(400, 'Family invoices are for students only');
+
+    const [student] = await db.select().from(users).where(eq(users.id, base.recipientId)).limit(1);
+    if (!student?.familyId) throw new AppError(400, 'This student is not linked to any siblings');
+
+    const members = await db
+      .select()
+      .from(users)
+      .where(and(eq(users.familyId, student.familyId), eq(users.role, 'student')))
+      .orderBy(asc(users.firstName));
+    if (members.length < 2) throw new AppError(400, 'This student is not linked to any siblings');
+
+    const sections: { student: typeof members[number]; invoice: typeof invoices.$inferSelect; lineItems: (typeof invoiceLineItems.$inferSelect)[] }[] = [];
+    const withoutFees: string[] = [];
+
+    for (const member of members) {
+      let [invoice] = await db
+        .select()
+        .from(invoices)
+        .where(and(
+          eq(invoices.recipientId, member.id),
+          eq(invoices.type, 'student'),
+          eq(invoices.month, base.month),
+          eq(invoices.year, base.year),
+          eq(invoices.currency, base.currency),
+          eq(invoices.isLatest, true),
+        ))
+        .limit(1);
+
+      if (!invoice) {
+        try {
+          ({ invoice } = await this.generateStudentInvoice({
+            studentId: member.id, month: base.month, year: base.year, currency: base.currency, generatedBy,
+          }));
+        } catch (error: any) {
+          if (error.statusCode !== 404) throw error;
+          withoutFees.push(`${member.firstName} ${member.lastName}`); // no fees this month
+          continue;
+        }
+      }
+
+      const lineItems = await db.select().from(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoice.id));
+      sections.push({ student: member, invoice, lineItems });
+    }
+
+    const totalAmount = sections.reduce((sum, s) => sum + Number(s.invoice.totalAmount), 0);
+    const monthStr = base.month.toString().padStart(2, '0');
+    const currencySuffix = base.currency !== 'PKR' ? `-${base.currency}` : '';
+    const invoiceNumber = `FAM-${base.year}-${monthStr}-${student.familyId.slice(0, 8).toUpperCase()}${currencySuffix}`;
+
+    const pdfUrl = await this.generateFamilyInvoicePDF({
+      invoiceNumber, month: base.month, year: base.year, currency: base.currency, totalAmount, sections,
+    });
+    logger.info(`[INVOICE] Family invoice ${invoiceNumber}: ${sections.length} student(s), ${base.currency} ${totalAmount}`);
+
+    return {
+      invoiceNumber,
+      // The file is rewritten each time, so the address changes to stop browsers showing an old copy
+      pdfUrl: `${pdfUrl}?v=${Date.now()}`,
+      currency: base.currency,
+      totalAmount: totalAmount.toFixed(2),
+      students: sections.map((s) => ({
+        id: s.student.id,
+        name: `${s.student.firstName} ${s.student.lastName}`,
+        invoiceNumber: s.invoice.invoiceNumber,
+        totalAmount: s.invoice.totalAmount,
+      })),
+      withoutFees,
+    };
+  },
+
+  async generateFamilyInvoicePDF(family: {
+    invoiceNumber: string;
+    month: number;
+    year: number;
+    currency: string;
+    totalAmount: number;
+    sections: { student: { firstName: string; lastName: string }; invoice: { invoiceNumber: string; totalAmount: string }; lineItems: { description: string; amount: string }[] }[];
+  }): Promise<string> {
+    return new Promise((resolve, reject) => {
+      try {
+        const fileName = `${family.invoiceNumber}.pdf`;
+        const doc = new PDFDocument({ margin: 50 });
+        const stream = fs.createWriteStream(path.join(UPLOADS_DIR, fileName));
+        doc.pipe(stream);
+
+        const money = (amount: number | string) => invoicesService.formatCurrency(amount, family.currency);
+
+        doc
+          .fontSize(20).text(SCHOOL_NAME, { align: 'center' })
+          .fontSize(10).text('Excellence in Education', { align: 'center' })
+          .moveDown()
+          .fontSize(16).text('FAMILY INVOICE', { align: 'center' });
+
+        doc
+          .fontSize(10)
+          .text(`Invoice Number: ${family.invoiceNumber}`, 50, 150)
+          .text(`Date: ${new Date().toLocaleDateString()}`, 50, 165)
+          .text(`Period: ${getMonthName(family.month)} ${family.year}`, 50, 180)
+          .text(`Students: ${family.sections.map((s) => `${s.student.firstName} ${s.student.lastName}`).join(', ')}`, 320, 150, { width: 230 });
+
+        let y = Math.max(doc.y, 195) + 25;
+        const ensureSpace = (needed: number) => {
+          if (y + needed > 720) {
+            doc.addPage();
+            y = 50;
+          }
+        };
+
+        for (const section of family.sections) {
+          ensureSpace(80);
+          doc.font('Helvetica-Bold').fontSize(11)
+            .text(`${section.student.firstName} ${section.student.lastName}`, 50, y);
+          doc.font('Helvetica').fontSize(8).fillColor('#666666')
+            .text(section.invoice.invoiceNumber, 350, y + 2, { width: 200, align: 'right' })
+            .fillColor('black');
+          y += 18;
+          doc.moveTo(50, y).lineTo(550, y).stroke();
+          y += 8;
+
+          for (const item of section.lineItems) {
+            ensureSpace(20);
+            doc.fontSize(9)
+              .text(item.description, 60, y, { width: 370 })
+              .text(money(item.amount), 450, y, { width: 100, align: 'right' });
+            y += 18;
+          }
+
+          ensureSpace(25);
+          doc.fontSize(9)
+            .text('Subtotal:', 350, y + 2, { width: 90, align: 'right' })
+            .text(money(section.invoice.totalAmount), 450, y + 2, { width: 100, align: 'right' });
+          y += 32;
+        }
+
+        ensureSpace(45);
+        doc.moveTo(350, y).lineTo(550, y).stroke();
+        doc.font('Helvetica-Bold').fontSize(12)
+          .text('Family Total:', 330, y + 10, { width: 110, align: 'right' })
+          .text(money(family.totalAmount), 450, y + 10, { width: 100, align: 'right' });
+
+        doc.font('Helvetica').fontSize(8).text(
+          'This is a computer-generated invoice. Please contact administration for any queries.',
+          50, doc.page.height - 100, { align: 'center', width: 500 },
+        );
+
+        doc.end();
+        stream.on('finish', () => resolve(`/uploads/invoices/${fileName}`));
+        stream.on('error', reject);
+      } catch (error) {
+        reject(error);
+      }
+    });
   },
 
   /**

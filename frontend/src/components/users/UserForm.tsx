@@ -3,14 +3,17 @@ import { User, Role } from '../../types';
 import { CreateUserInput, UpdateUserInput, isNoEmailAddress } from '../../api/users.api';
 import { useAuth } from '../../context/AuthContext';
 import { brand, JUNIOR_CATEGORIES, isJuniorPortal } from '../../brand';
+import SiblingsField from './SiblingsField';
 
 interface UserFormProps {
   user?: User | null;
   onClose: () => void;
   onSubmit: (data: CreateUserInput | UpdateUserInput) => Promise<void>;
+  /** A sibling link was added or removed (these save straight away, without Update User) */
+  onSiblingsChanged?: () => void;
 }
 
-const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit }) => {
+const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit, onSiblingsChanged }) => {
   const { user: currentUser } = useAuth();
   const isEditing = !!user;
   const isSudo = currentUser?.role === 'sudo';
@@ -39,8 +42,10 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit }) => {
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  // Junior Campus children often have no email of their own.
-  const emailOptional = isJuniorPortal && formData.role === 'student';
+  // New student: the brother or sister picked on the form (linked on save)
+  const [siblingOfId, setSiblingOfId] = useState('');
+  // Children, and siblings sharing a parent's contact details, often have no email of their own.
+  const emailOptional = formData.role === 'student';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,6 +121,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit }) => {
           createData.studentSubcategory = formData.studentSubcategory || undefined;
           createData.whatsappGroupLink = formData.whatsappGroupLink || undefined;
           createData.teamsUsername = formData.teamsUsername || undefined;
+          createData.siblingOfId = siblingOfId || undefined;
         }
         // Include teacher fee fields if role is teacher
         if (formData.role === 'teacher') {
@@ -305,7 +311,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit }) => {
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder={emailOptional ? 'Leave blank if the child has no email' : 'Enter email'}
+                placeholder={emailOptional ? 'Leave blank if the student has no email of their own' : 'Enter email'}
                 disabled={loading}
               />
             </div>
@@ -343,6 +349,23 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit }) => {
             {/* Student Category - Only show for students */}
             {formData.role === 'student' && (
               <>
+                {/* Siblings: linked students get one family invoice */}
+                <SiblingsField
+                  userId={user?.id}
+                  siblingOfId={siblingOfId}
+                  disabled={loading}
+                  onChanged={onSiblingsChanged}
+                  onPickSibling={(sibling) => {
+                    setSiblingOfId(sibling?.id || '');
+                    // A child without their own phone uses the family's numbers
+                    if (sibling) setFormData((current) => ({
+                      ...current,
+                      phone: current.phone || sibling.phone || '',
+                      parentPhone: current.parentPhone || sibling.parentPhone || '',
+                      whatsappGroupLink: current.whatsappGroupLink || sibling.whatsappGroupLink || '',
+                    }));
+                  }}
+                />
                 {!isJuniorPortal && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">

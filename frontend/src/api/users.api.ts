@@ -25,6 +25,24 @@ export interface CreateUserInput {
   onlineStudentFixedAmountIg?: number;
   onlineStudentFixedAmountAlevel?: number;
   monthlySalary?: number;
+  siblingOfId?: string; // students: a brother or sister already in the portal
+}
+
+/** A brother or sister, as shown on the student form */
+export interface FamilyMember {
+  id: string;
+  username: string;
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+  parentPhone: string | null;
+  isActive: boolean;
+}
+
+export interface Family {
+  familyId: string | null;
+  siblings: FamilyMember[]; // linked
+  suggestions: FamilyMember[]; // share a phone number but are not linked yet
 }
 
 export interface UpdateUserInput {
@@ -110,6 +128,14 @@ export const usersApi = {
     );
     return { temporaryPassword: response.data.temporaryPassword };
   },
+
+  // Siblings: students linked as one family (their invoices can be made as one family invoice)
+  getFamily: async (id: string): Promise<Family> => (await apiClient.get<Family>(`/users/${id}/family`)).data,
+
+  linkSibling: async (id: string, siblingId: string): Promise<Family> =>
+    (await apiClient.post<Family>(`/users/${id}/family`, { siblingId })).data,
+
+  unlinkFamily: async (id: string): Promise<Family> => (await apiClient.delete<Family>(`/users/${id}/family`)).data,
 };
 
 export default usersApi;
