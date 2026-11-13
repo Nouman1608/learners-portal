@@ -64,6 +64,7 @@ export interface Fee {
   isCatchUp?: boolean;
   feeNotes?: string;
   sessionCount?: number;
+  attendanceMode?: 'local' | 'online' | null; // how the child attends this class (from the enrolment)
   createdAt: string;
   student: {
     id: string;

@@ -125,6 +125,8 @@ export const feesService = {
         feeNotes: fees.feeNotes,
         sessionCount: fees.sessionCount,
         createdAt: fees.createdAt,
+        // How the child attends this class (local / online): the Fees page filters on it
+        attendanceMode: enrollments.attendanceMode,
         student: {
           id: users.id,
           username: users.username,
@@ -143,7 +145,8 @@ export const feesService = {
       .innerJoin(users, eq(fees.studentId, users.id))
       .innerJoin(courses, eq(fees.courseId, courses.id))
       .leftJoin(feeInvoiceSent, eq(feeInvoiceSent.feeId, fees.id))
-      .leftJoin(feeAdminNotes, eq(feeAdminNotes.feeId, fees.id));
+      .leftJoin(feeAdminNotes, eq(feeAdminNotes.feeId, fees.id))
+      .leftJoin(enrollments, eq(enrollments.id, fees.enrollmentId));
 
     // Fees for months before the books start (BOOKS_START) are not listed
     const conditions = [feeInBooks(database)];

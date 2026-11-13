@@ -23,6 +23,8 @@ export default function Fees() {
   const [filterStudent, setFilterStudent] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterSubcategory, setFilterSubcategory] = useState<string>('all');
+  // Junior: local / online, taken from how the child attends that class (the enrolment)
+  const [filterMode, setFilterMode] = useState<string>('all');
   const [filterInvoice, setFilterInvoice] = useState<'all' | 'sent' | 'not_sent'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -291,6 +293,11 @@ export default function Fees() {
       return false;
     }
 
+    // Local / online filter (Junior): the class's attendance mode
+    if (juniorView && filterMode !== 'all' && fee.attendanceMode !== filterMode) {
+      return false;
+    }
+
     // Subcategory filter (local/online/etc)
     if (filterSubcategory !== 'all' && fee.student.studentSubcategory !== filterSubcategory) {
       return false;
@@ -384,7 +391,7 @@ export default function Fees() {
           <div className="mt-3 inline-flex rounded-lg bg-white p-1 shadow" role="tablist" aria-label="Campus">
             {([['senior', 'Senior Campus Students'], ['junior', 'Junior Campus Students']] as const).map(([value, label]) => (
               <button key={value} role="tab" aria-selected={campusTab === value}
-                onClick={() => { setCampusTab(value); setSelectedIds(new Set()); setFilterCategory('all'); setFilterSubcategory('all'); }}
+                onClick={() => { setCampusTab(value); setSelectedIds(new Set()); setFilterCategory('all'); setFilterSubcategory('all'); setFilterMode('all'); }}
                 className={`rounded-md px-3 py-2 text-sm font-medium ${campusTab === value ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
                 {label}
               </button>
@@ -554,10 +561,24 @@ export default function Fees() {
           )}
         </select>
 
-        {(searchQuery || filterStatus !== 'all' || filterPeriod !== 'all' || filterCourse !== 'all' || filterStudent !== 'all' || filterCategory !== 'all' || filterSubcategory !== 'all' || filterInvoice !== 'all') && (
+        {juniorView && (
+          <select
+            value={filterMode}
+            onChange={(e) => setFilterMode(e.target.value)}
+            aria-label="Local or online"
+            className="px-3 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"
+          >
+            <option value="all">Local &amp; Online</option>
+            <option value="local">Local</option>
+            <option value="online">Online</option>
+          </select>
+        )}
+
+        {(searchQuery || filterStatus !== 'all' || filterPeriod !== 'all' || filterCourse !== 'all' || filterStudent !== 'all' || filterCategory !== 'all' || filterSubcategory !== 'all' || filterInvoice !== 'all' || filterMode !== 'all') && (
           <button
             onClick={() => {
               setSearchQuery('');
+              setFilterMode('all');
               setFilterStatus('all');
               setFilterPeriod('all');
               setFilterCourse('all');
