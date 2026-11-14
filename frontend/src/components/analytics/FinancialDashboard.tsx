@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { analyticsApi, FinancialAnalytics, AnalyticsQueryParams, CurrencyRevenue, CurrencyAmount } from '../../api/analytics.api';
+import { analyticsApi, FinancialAnalytics, AnalyticsQueryParams, CurrencyRevenue, CurrencyAmount, CourseProfitability, TeacherProfitability } from '../../api/analytics.api';
+import AnalyticsTable from './AnalyticsTable';
 import { currencyApi } from '../../api/currency.api';
 import { CurrencyCode } from '../../api/enrollments.api';
 import LineChart from './charts/LineChart';
@@ -17,6 +18,10 @@ interface FinancialDashboardProps {
 
 const pkr = (amount: number) =>
   `PKR ${Math.round(amount).toLocaleString()}`;
+
+/** Every teacher named on the listed classes, A to Z (for the teacher filter) */
+const teacherNames = (rows: CourseProfitability[]) =>
+  [...new Set(rows.flatMap(row => row.teachers ?? []))].sort((a, b) => a.localeCompare(b));
 
 const money = (amount: number, currency: string) =>
   currencyApi.formatAmount(amount, currency as CurrencyCode);
@@ -277,49 +282,84 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
         </div>
       </div>
 
-      {/* Course profitability */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">{terms.course} profitability</h3>
-          <p className="mt-1 text-sm text-gray-500">
-            Revenue collected less teacher invoices for the same period, converted to PKR.
-          </p>
-        </div>
-        {courseProfitability.length === 0 ? (
-          <p className="px-6 py-12 text-center text-gray-500">No {terms.courseLc} revenue in this period</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{terms.course}</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Students</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Revenue</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Teacher cost</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Profit</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Margin</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {courseProfitability.map(course => (
-                  <tr key={course.courseId}>
-                    <td className="px-6 py-4 text-sm text-gray-900">{course.courseTitle}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{course.studentCount}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{pkr(course.revenuePKR)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">{pkr(course.teacherCostPKR)}</td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium text-right ${course.profitPKR >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-                      {pkr(course.profitPKR)}
-                    </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right ${course.marginPercent >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
-                      {course.marginPercent.toFixed(1)}%
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      {/* Course profitability: sort by any heading, search a class or teacher, filter */}
+      <AnalyticsTable<CourseProfitability>
+        title={`${terms.course} profitability`}
+        description="Revenue collected less teacher pay for the same period, converted to PKR. A fixed monthly salary is split equally between that teacher's classes."
+        rows={courseProfitability}
+        rowKey={(c, i) => `${c.courseId}-${i}`}
+        searchPlaceholder={`Search ${terms.courseLc} or teacher...`}
+        emptyText={`No ${terms.courseLc} revenue in this period`}
+        defaultSort={{ key: 'profit', direction: 'desc' }}
+        filters={[
+          { label: 'All results', options: [
+            { label: 'Making a profit', test: c => c.profitPKR > 0 },
+            { label: 'Making a loss', test: c => c.profitPKR < 0 },
+            { label: 'No teacher cost', test: c => c.teacherCostPKR === 0 },
+          ] },
+          { label: 'All teachers', options: teacherNames(courseProfitability).map(name => ({ label: name, test: (c: CourseProfitability) => (c.teachers ?? []).includes(name) })) },
+        ]}
+        columns={[
+          { key: 'course', header: terms.course, value: c => c.courseTitle },
+          { key: 'teacher', header: 'Teacher', value: c => (c.teachers ?? []).join(', ') || null, className: 'text-gray-600' },
+          { key: 'students', header: 'Students', align: 'right', value: c => c.studentCount },
+          { key: 'revenue', header: 'Revenue', align: 'right', value: c => c.revenuePKR, cell: c => pkr(c.revenuePKR) },
+          { key: 'cost', header: 'Teacher cost', align: 'right', value: c => c.teacherCostPKR, cell: c => pkr(c.teacherCostPKR), className: 'text-gray-600' },
+          { key: 'profit', header: 'Profit', align: 'right', value: c => c.profitPKR, cell: c => pkr(c.profitPKR), className: c => `font-medium ${c.profitPKR >= 0 ? 'text-green-700' : 'text-red-600'}` },
+          { key: 'margin', header: 'Margin', align: 'right', value: c => c.marginPercent, cell: c => `${c.marginPercent.toFixed(1)}%`, className: c => (c.marginPercent >= 0 ? 'text-gray-900' : 'text-red-600') },
+        ]}
+        footer={shown => (
+          <tr>
+            <td className="px-6 py-3" colSpan={2}>Total ({shown.length})</td>
+            <td className="px-6 py-3 text-right">{shown.reduce((s, c) => s + c.studentCount, 0)}</td>
+            <td className="px-6 py-3 text-right whitespace-nowrap">{pkr(shown.reduce((s, c) => s + c.revenuePKR, 0))}</td>
+            <td className="px-6 py-3 text-right whitespace-nowrap">{pkr(shown.reduce((s, c) => s + c.teacherCostPKR, 0))}</td>
+            <td className="px-6 py-3 text-right whitespace-nowrap">{pkr(shown.reduce((s, c) => s + c.profitPKR, 0))}</td>
+            <td className="px-6 py-3" />
+          </tr>
         )}
-      </div>
+      />
+
+      {/* Teacher profitability */}
+      <AnalyticsTable<TeacherProfitability>
+        title="Teacher profitability"
+        description="Fees collected from each teacher's classes in the period, less what the teacher was paid (their salary slips for those months), in PKR. A class with two teachers splits its revenue between them."
+        rows={data.teacherProfitability ?? []}
+        rowKey={(t, i) => `${t.teacherId ?? 'none'}-${i}`}
+        searchPlaceholder="Search teacher..."
+        emptyText="No revenue or teacher pay in this period"
+        defaultSort={{ key: 'profit', direction: 'desc' }}
+        filters={[
+          { label: 'All results', options: [
+            { label: 'Making a profit', test: t => t.profitPKR > 0 },
+            { label: 'Making a loss', test: t => t.profitPKR < 0 },
+            { label: 'Paid, but no revenue', test: t => t.revenuePKR === 0 && t.teacherCostPKR > 0 },
+            { label: 'Revenue, but no pay recorded', test: t => t.revenuePKR > 0 && t.teacherCostPKR === 0 },
+          ] },
+        ]}
+        columns={[
+          { key: 'teacher', header: 'Teacher', value: t => t.teacherName, className: t => (t.teacherId ? 'text-gray-900' : 'italic text-gray-500') },
+          { key: 'classes', header: terms.courses, align: 'right', value: t => t.classCount },
+          { key: 'students', header: 'Students', align: 'right', value: t => t.studentCount },
+          { key: 'revenue', header: 'Revenue', align: 'right', value: t => t.revenuePKR, cell: t => pkr(t.revenuePKR) },
+          { key: 'cost', header: 'Teacher pay', align: 'right', value: t => t.teacherCostPKR, cell: t => pkr(t.teacherCostPKR), className: 'text-gray-600' },
+          { key: 'slips', header: 'Slips', align: 'right', value: t => t.slipCount, className: 'text-gray-500' },
+          { key: 'profit', header: 'Profit', align: 'right', value: t => t.profitPKR, cell: t => pkr(t.profitPKR), className: t => `font-medium ${t.profitPKR >= 0 ? 'text-green-700' : 'text-red-600'}` },
+          { key: 'margin', header: 'Margin', align: 'right', value: t => (t.revenuePKR > 0 ? t.marginPercent : null), cell: t => (t.revenuePKR > 0 ? `${t.marginPercent.toFixed(1)}%` : '-'), className: t => (t.marginPercent >= 0 ? 'text-gray-900' : 'text-red-600') },
+        ]}
+        footer={shown => (
+          <tr>
+            <td className="px-6 py-3">Total ({shown.length})</td>
+            <td className="px-6 py-3" />
+            <td className="px-6 py-3" />
+            <td className="px-6 py-3 text-right whitespace-nowrap">{pkr(shown.reduce((s, t) => s + t.revenuePKR, 0))}</td>
+            <td className="px-6 py-3 text-right whitespace-nowrap">{pkr(shown.reduce((s, t) => s + t.teacherCostPKR, 0))}</td>
+            <td className="px-6 py-3" />
+            <td className="px-6 py-3 text-right whitespace-nowrap">{pkr(shown.reduce((s, t) => s + t.profitPKR, 0))}</td>
+            <td className="px-6 py-3" />
+          </tr>
+        )}
+      />
 
       {/* Payment methods table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">

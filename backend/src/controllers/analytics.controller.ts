@@ -64,18 +64,20 @@ export const getFinancialAnalytics = async (req: Request, res: Response, next: N
       courseRevenue,
       collectionRate,
       courseProfitability,
+      teacherProfitability,
       previousRevenue,
       previousCollection,
     } = await forCampuses(
       campusServices(req),
       async (svc) => {
-        const [r, pm, of, cr, col, prof, prevR, prevC] = await Promise.all([
+        const [r, pm, of, cr, col, prof, tprof, prevR, prevC] = await Promise.all([
           svc.getRevenueOverTime(start, end, validated.groupBy as 'day' | 'week' | 'month' | undefined),
           svc.getPaymentMethodBreakdown(start, end),
           svc.getOutstandingFeesAnalysis(),
           svc.getCourseRevenueBreakdown(start, end),
           svc.getCollectionRate(start, end),
           svc.getCourseProfitability(start, end),
+          svc.getTeacherProfitability(start, end),
           svc.getRevenueOverTime(previousStart, previousEnd, 'month'),
           svc.getCollectionRate(previousStart, previousEnd),
         ]);
@@ -86,6 +88,7 @@ export const getFinancialAnalytics = async (req: Request, res: Response, next: N
           courseRevenue: cr,
           collectionRate: col,
           courseProfitability: prof,
+          teacherProfitability: tprof,
           previousRevenue: prevR,
           previousCollection: prevC,
         };
@@ -97,6 +100,7 @@ export const getFinancialAnalytics = async (req: Request, res: Response, next: N
         courseRevenue: campusMerge.mergeCourseRevenue(a.courseRevenue, b.courseRevenue),
         collectionRate: campusMerge.mergeCollection(a.collectionRate, b.collectionRate),
         courseProfitability: campusMerge.mergeProfitability(a.courseProfitability, b.courseProfitability),
+        teacherProfitability: campusMerge.mergeTeacherProfitability(a.teacherProfitability, b.teacherProfitability),
         previousRevenue: campusMerge.mergeRevenue(a.previousRevenue, b.previousRevenue),
         previousCollection: campusMerge.mergeCollection(a.previousCollection, b.previousCollection),
       })
@@ -104,8 +108,10 @@ export const getFinancialAnalytics = async (req: Request, res: Response, next: N
 
     const totalRevenuePKR = revenueOverTime.reduce((s, r) => s + r.revenuePKR, 0);
     const previousRevenuePKR = previousRevenue.reduce((s, r) => s + r.revenuePKR, 0);
-    const totalProfitPKR = courseProfitability.reduce((s, c) => s + c.profitPKR, 0);
-    const totalTeacherCostPKR = courseProfitability.reduce((s, c) => s + c.teacherCostPKR, 0);
+    // Teacher cost is every salary slip in the period (also staff who teach no class), so the
+    // headline profit is revenue less all teacher pay, not only pay tied to a class.
+    const totalTeacherCostPKR = teacherProfitability.reduce((s, t) => s + t.teacherCostPKR, 0);
+    const totalProfitPKR = totalRevenuePKR - totalTeacherCostPKR;
 
     res.json({
       revenueOverTime,
@@ -114,6 +120,7 @@ export const getFinancialAnalytics = async (req: Request, res: Response, next: N
       courseRevenue,
       collectionRate,
       courseProfitability,
+      teacherProfitability,
       totals: {
         revenuePKR: totalRevenuePKR,
         teacherCostPKR: totalTeacherCostPKR,

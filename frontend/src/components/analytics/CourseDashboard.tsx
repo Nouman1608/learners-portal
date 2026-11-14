@@ -5,6 +5,7 @@ import LineChart from './charts/LineChart';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { terms } from '../../brand';
+import AnalyticsTable from './AnalyticsTable';
 
 interface CourseDashboardProps {
   filters: AnalyticsQueryParams;
@@ -106,59 +107,41 @@ export default function CourseDashboard({ filters }: CourseDashboardProps) {
         </div>
       )}
 
-      {/* Course Details Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">{terms.course} Details</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{terms.course}</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Active</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Completed</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Completion Rate</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {data.coursePopularity
-                .sort((a, b) => b.totalEnrollments - a.totalEnrollments)
-                .map((course) => {
-                  const completionRate = course.totalEnrollments > 0
-                    ? (course.completedEnrollments / course.totalEnrollments * 100)
-                    : 0;
-                  return (
-                    <tr key={course.courseId}>
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                        {course.courseTitle}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 text-right">
-                        {course.activeEnrollments}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 text-right">
-                        {course.completedEnrollments}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                        {course.totalEnrollments}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          completionRate >= 50 ? 'bg-green-100 text-green-800' :
-                          completionRate >= 25 ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {completionRate.toFixed(1)}%
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Course details: sort by any heading, search, filter */}
+      <AnalyticsTable
+        title={`${terms.course} Details`}
+        rows={data.coursePopularity}
+        rowKey={(course) => course.courseId}
+        searchPlaceholder={`Search ${terms.courseLc}...`}
+        emptyText={`No ${terms.coursesLc}`}
+        defaultSort={{ key: 'total', direction: 'desc' }}
+        filters={[{ label: 'All', options: [
+          { label: 'With active students', test: (course) => course.activeEnrollments > 0 },
+          { label: 'No active students', test: (course) => course.activeEnrollments === 0 },
+        ] }]}
+        columns={[
+          { key: 'course', header: terms.course, value: (course) => course.courseTitle, className: 'font-medium text-gray-900' },
+          { key: 'active', header: 'Active', align: 'right', value: (course) => course.activeEnrollments, className: 'text-green-600' },
+          { key: 'completed', header: 'Completed', align: 'right', value: (course) => course.completedEnrollments, className: 'text-blue-600' },
+          { key: 'total', header: 'Total', align: 'right', value: (course) => course.totalEnrollments },
+          {
+            key: 'rate', header: 'Completion Rate', align: 'right',
+            value: (course) => (course.totalEnrollments > 0 ? (course.completedEnrollments / course.totalEnrollments) * 100 : 0),
+            cell: (course) => {
+              const completionRate = course.totalEnrollments > 0 ? (course.completedEnrollments / course.totalEnrollments) * 100 : 0;
+              return (
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                  completionRate >= 50 ? 'bg-green-100 text-green-800' :
+                  completionRate >= 25 ? 'bg-yellow-100 text-yellow-800' :
+                  'bg-red-100 text-red-800'
+                }`}>
+                  {completionRate.toFixed(1)}%
+                </span>
+              );
+            },
+          },
+        ]}
+      />
     </div>
   );
 }

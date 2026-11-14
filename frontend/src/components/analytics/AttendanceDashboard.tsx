@@ -4,6 +4,7 @@ import LineChart from './charts/LineChart';
 import PieChart from './charts/PieChart';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
+import AnalyticsTable from './AnalyticsTable';
 
 interface AttendanceDashboardProps {
   filters: AnalyticsQueryParams;
@@ -151,61 +152,44 @@ export default function AttendanceDashboard({ filters }: AttendanceDashboardProp
         </div>
       </div>
 
-      {/* Detailed Attendance Trends Table */}
+      {/* Class-by-class attendance: sort by any heading, filter by rate */}
       {attendanceTrendsArray.length > 0 && (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Class-by-Class Attendance</h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Present</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Late</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Absent</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Rate</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {attendanceTrendsArray.slice().reverse().map((trend) => (
-                  <tr key={trend.eventDate}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {new Date(trend.eventDate).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                      {trend.totalStudents}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 text-right">
-                      {trend.presentCount}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-yellow-600 text-right">
-                      {trend.lateCount}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 text-right">
-                      {trend.absentCount}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        trend.attendanceRate >= 90 ? 'bg-green-100 text-green-800' :
-                        trend.attendanceRate >= 75 ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {trend.attendanceRate.toFixed(1)}%
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <AnalyticsTable
+          title="Class-by-Class Attendance"
+          rows={attendanceTrendsArray}
+          rowKey={(trend, index) => `${trend.eventDate}-${index}`}
+          searchPlaceholder="Search a date, e.g. 2026-11..."
+          defaultSort={{ key: 'date', direction: 'desc' }}
+          filters={[{ label: 'All rates', options: [
+            { label: '90% and above', test: (trend) => trend.attendanceRate >= 90 },
+            { label: '75% to 90%', test: (trend) => trend.attendanceRate >= 75 && trend.attendanceRate < 90 },
+            { label: 'Below 75%', test: (trend) => trend.attendanceRate < 75 },
+          ] }]}
+          columns={[
+            {
+              // Sorts and searches on the stored YYYY-MM-DD text; shown as "Nov 14, 2026"
+              key: 'date', header: 'Date', value: (trend) => String(trend.eventDate).slice(0, 10),
+              cell: (trend) => new Date(trend.eventDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+              className: 'text-gray-900 whitespace-nowrap',
+            },
+            { key: 'total', header: 'Total', align: 'right', value: (trend) => trend.totalStudents },
+            { key: 'present', header: 'Present', align: 'right', value: (trend) => trend.presentCount, className: 'text-green-600' },
+            { key: 'late', header: 'Late', align: 'right', value: (trend) => trend.lateCount, className: 'text-yellow-600' },
+            { key: 'absent', header: 'Absent', align: 'right', value: (trend) => trend.absentCount, className: 'text-red-600' },
+            {
+              key: 'rate', header: 'Rate', align: 'right', value: (trend) => trend.attendanceRate,
+              cell: (trend) => (
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                  trend.attendanceRate >= 90 ? 'bg-green-100 text-green-800' :
+                  trend.attendanceRate >= 75 ? 'bg-yellow-100 text-yellow-800' :
+                  'bg-red-100 text-red-800'
+                }`}>
+                  {trend.attendanceRate.toFixed(1)}%
+                </span>
+              ),
+            },
+          ]}
+        />
       )}
     </div>
   );

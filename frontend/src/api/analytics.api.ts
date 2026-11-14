@@ -103,9 +103,23 @@ export interface CollectionRate {
   paidCount: number;
 }
 
+/** One teacher over the period: fees collected from their classes less what they were paid */
+export interface TeacherProfitability {
+  teacherId: string | null; // null = classes with no teacher assigned
+  teacherName: string;
+  classCount: number;
+  studentCount: number;
+  revenuePKR: number;
+  teacherCostPKR: number;
+  slipCount: number; // salary slips in the period
+  profitPKR: number;
+  marginPercent: number;
+}
+
 export interface CourseProfitability {
   courseId: string;
   courseTitle: string;
+  teachers?: string[];
   revenuePKR: number;
   teacherCostPKR: number;
   profitPKR: number;
@@ -121,6 +135,7 @@ export interface FinancialAnalytics {
   courseRevenue: CourseRevenue[];
   collectionRate: CollectionRate;
   courseProfitability: CourseProfitability[];
+  teacherProfitability: TeacherProfitability[];
   totals: {
     revenuePKR: number;
     teacherCostPKR: number;

@@ -7,6 +7,7 @@ import { ArrowDownTrayIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { exportCsv, stampedFilename } from '../../utils/csv';
 import toast from 'react-hot-toast';
 import { terms } from '../../brand';
+import AnalyticsTable from './AnalyticsTable';
 
 interface GrowthDashboardProps {
   filters: AnalyticsQueryParams;
@@ -169,51 +170,33 @@ export default function GrowthDashboard({ filters }: GrowthDashboardProps) {
         </div>
       </div>
 
-      {/* Conversion by source */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Where enquiries come from</h3>
-          <p className="mt-1 text-sm text-gray-500">
-            Which sources bring enquiries, and which of those actually become students.
-          </p>
-        </div>
-        {leadConversion.bySource.length === 0 ? (
-          <p className="px-6 py-12 text-center text-gray-500">No enquiries in this period</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Enquiries</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Enrolled</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Conversion</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {leadConversion.bySource.map(source => (
-                  <tr key={source.source}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 capitalize">
-                      {source.source.replace(/_/g, ' ')}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{source.total}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{source.converted}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        source.conversionRate >= 40 ? 'bg-green-100 text-green-800' :
-                        source.conversionRate >= 15 ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {source.conversionRate.toFixed(1)}%
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {/* Conversion by source: sort by any heading, search */}
+      <AnalyticsTable
+        title="Where enquiries come from"
+        description="Which sources bring enquiries, and which of those actually become students."
+        rows={leadConversion.bySource}
+        rowKey={(source) => source.source}
+        searchPlaceholder="Search source..."
+        emptyText="No enquiries in this period"
+        defaultSort={{ key: 'total', direction: 'desc' }}
+        columns={[
+          { key: 'source', header: 'Source', value: (source) => source.source.replace(/_/g, ' '), className: 'text-gray-900 capitalize whitespace-nowrap' },
+          { key: 'total', header: 'Enquiries', align: 'right', value: (source) => source.total },
+          { key: 'converted', header: 'Enrolled', align: 'right', value: (source) => source.converted },
+          {
+            key: 'rate', header: 'Conversion', align: 'right', value: (source) => source.conversionRate,
+            cell: (source) => (
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                source.conversionRate >= 40 ? 'bg-green-100 text-green-800' :
+                source.conversionRate >= 15 ? 'bg-yellow-100 text-yellow-800' :
+                'bg-red-100 text-red-800'
+              }`}>
+                {source.conversionRate.toFixed(1)}%
+              </span>
+            ),
+          },
+        ]}
+      />
 
       {/* Retention summary */}
       <div className="bg-white rounded-lg shadow p-6">

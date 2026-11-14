@@ -6,6 +6,7 @@ import { ArrowDownTrayIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { exportCsv, stampedFilename } from '../../utils/csv';
 import toast from 'react-hot-toast';
 import { terms } from '../../brand';
+import AnalyticsTable from './AnalyticsTable';
 
 interface PerformanceDashboardProps {
   filters: AnalyticsQueryParams;
@@ -141,55 +142,41 @@ export default function PerformanceDashboard({ filters }: PerformanceDashboardPr
         </div>
       )}
 
-      {/* Top Performers */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Top Performers</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Assessments</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Avg Score</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {topPerformersArray.map((student, index) => (
-                <tr key={student.studentId}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full ${
-                      index === 0 ? 'bg-yellow-100 text-yellow-800' :
-                      index === 1 ? 'bg-gray-100 text-gray-800' :
-                      index === 2 ? 'bg-orange-100 text-orange-800' :
-                      'bg-blue-100 text-blue-800'
-                    }`}>
-                      {index + 1}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {student.firstName} {student.lastName}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {student.email}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                    {student.assessmentCount}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      {(student.avgScore ?? 0).toFixed(1)}%
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Top performers: sort by any heading, search a student */}
+      <AnalyticsTable
+        title="Top Performers"
+        rows={topPerformersArray.map((student, index) => ({ ...student, rank: index + 1 }))}
+        rowKey={(student) => student.studentId}
+        searchPlaceholder="Search student or email..."
+        emptyText="No graded assessments yet"
+        defaultSort={{ key: 'rank', direction: 'asc' }}
+        columns={[
+          {
+            key: 'rank', header: 'Rank', value: (student) => student.rank,
+            cell: (student) => (
+              <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full ${
+                student.rank === 1 ? 'bg-yellow-100 text-yellow-800' :
+                student.rank === 2 ? 'bg-gray-100 text-gray-800' :
+                student.rank === 3 ? 'bg-orange-100 text-orange-800' :
+                'bg-blue-100 text-blue-800'
+              }`}>
+                {student.rank}
+              </span>
+            ),
+          },
+          { key: 'student', header: 'Student', value: (student) => `${student.firstName} ${student.lastName}`, className: 'font-medium text-gray-900 whitespace-nowrap' },
+          { key: 'email', header: 'Email', value: (student) => student.email, className: 'text-gray-500 whitespace-nowrap' },
+          { key: 'assessments', header: 'Assessments', align: 'right', value: (student) => student.assessmentCount },
+          {
+            key: 'score', header: 'Avg Score', align: 'right', value: (student) => student.avgScore ?? 0,
+            cell: (student) => (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                {(student.avgScore ?? 0).toFixed(1)}%
+              </span>
+            ),
+          },
+        ]}
+      />
 
       {/* Pass/Fail summary */}
       <div className="bg-white rounded-lg shadow p-6">
@@ -217,95 +204,91 @@ export default function PerformanceDashboard({ filters }: PerformanceDashboardPr
         </div>
       </div>
 
-      {/* Students needing attention */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Students needing attention</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              Flagged for weak attendance, low scores, or unpaid fees. Highest concern first.
-            </p>
-          </div>
-          {atRiskStudents.length > 0 && (
-            <button
-              onClick={() => {
-                exportCsv(
-                  stampedFilename('students-needing-attention'),
-                  atRiskStudents,
-                  [
-                    { header: 'Student', value: s => s.studentName },
-                    { header: 'Email', value: s => s.email },
-                    { header: 'Attendance %', value: s => s.attendanceRate?.toFixed(1) ?? '' },
-                    { header: 'Average score %', value: s => s.avgScore?.toFixed(1) ?? '' },
-                    { header: 'Overdue fees', value: s => s.overdueCount },
-                    { header: 'Overdue amount (PKR)', value: s => Math.round(s.overduePKR) },
-                    { header: 'Concerns', value: s => s.reasons.join('; ') },
-                  ]
-                );
-                toast.success('Exported to CSV');
-              }}
-              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-            >
-              <ArrowDownTrayIcon className="h-4 w-4 mr-2" aria-hidden="true" />
-              Export CSV
-            </button>
-          )}
-        </div>
-        {atRiskStudents.length === 0 ? (
-          <p className="px-6 py-12 text-center text-gray-500">
-            No students are currently flagged. Nothing to action.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Concerns</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Attendance</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Avg score</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Overdue</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {atRiskStudents.map((student) => (
-                  <tr key={student.studentId}>
-                    <td className="px-6 py-4 text-sm">
-                      <p className="font-medium text-gray-900">{student.studentName}</p>
-                      <p className="text-gray-500">{student.email}</p>
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <div className="flex flex-wrap gap-1">
-                        {student.reasons.map((reason) => (
-                          <span
-                            key={reason}
-                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                              student.riskScore >= 50
-                                ? 'bg-red-100 text-red-800'
-                                : 'bg-yellow-100 text-yellow-800'
-                            }`}
-                          >
-                            {reason}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">
-                      {student.attendanceRate === null ? '—' : `${student.attendanceRate.toFixed(0)}%`}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">
-                      {student.avgScore === null ? '—' : `${student.avgScore.toFixed(0)}%`}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-red-600">
-                      {student.overdueCount === 0 ? '—' : `PKR ${Math.round(student.overduePKR).toLocaleString()}`}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      {/* Students needing attention: sort by any heading, search, filter by concern */}
+      <AnalyticsTable
+        title="Students needing attention"
+        description="Flagged for weak attendance, low scores, or unpaid fees. Highest concern first."
+        rows={atRiskStudents}
+        rowKey={(student) => student.studentId}
+        searchPlaceholder="Search student, email or concern..."
+        emptyText="No students are currently flagged. Nothing to action."
+        defaultSort={{ key: 'concern', direction: 'desc' }}
+        filters={[{ label: 'All concerns', options: [
+          { label: 'High concern', test: (student) => student.riskScore >= 50 },
+          { label: 'Has overdue fees', test: (student) => student.overdueCount > 0 },
+          { label: 'Attendance recorded', test: (student) => student.attendanceRate !== null },
+          { label: 'Scores recorded', test: (student) => student.avgScore !== null },
+        ] }]}
+        actions={atRiskStudents.length > 0 && (
+          <button
+            onClick={() => {
+              exportCsv(
+                stampedFilename('students-needing-attention'),
+                atRiskStudents,
+                [
+                  { header: 'Student', value: s => s.studentName },
+                  { header: 'Email', value: s => s.email },
+                  { header: 'Attendance %', value: s => s.attendanceRate?.toFixed(1) ?? '' },
+                  { header: 'Average score %', value: s => s.avgScore?.toFixed(1) ?? '' },
+                  { header: 'Overdue fees', value: s => s.overdueCount },
+                  { header: 'Overdue amount (PKR)', value: s => Math.round(s.overduePKR) },
+                  { header: 'Concerns', value: s => s.reasons.join('; ') },
+                ]
+              );
+              toast.success('Exported to CSV');
+            }}
+            className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+          >
+            <ArrowDownTrayIcon className="h-4 w-4 mr-2" aria-hidden="true" />
+            Export CSV
+          </button>
         )}
-      </div>
+        columns={[
+          {
+            // Name and email are both searched; the email is shown under the name
+            key: 'student', header: 'Student', value: (student) => `${student.studentName} ${student.email}`,
+            cell: (student) => (
+              <>
+                <p className="font-medium text-gray-900">{student.studentName}</p>
+                <p className="text-gray-500">{student.email}</p>
+              </>
+            ),
+          },
+          {
+            key: 'reasons', header: 'Concerns', value: (student) => student.reasons.join(', '),
+            cell: (student) => (
+              <div className="flex flex-wrap gap-1">
+                {student.reasons.map((reason) => (
+                  <span
+                    key={reason}
+                    className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                      student.riskScore >= 50
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-yellow-100 text-yellow-800'
+                    }`}
+                  >
+                    {reason}
+                  </span>
+                ))}
+              </div>
+            ),
+          },
+          { key: 'concern', header: 'Concern', align: 'right', value: (student) => student.riskScore, className: 'text-gray-500' },
+          {
+            key: 'attendance', header: 'Attendance', align: 'right', value: (student) => student.attendanceRate,
+            cell: (student) => (student.attendanceRate === null ? '—' : `${student.attendanceRate.toFixed(0)}%`),
+          },
+          {
+            key: 'score', header: 'Avg score', align: 'right', value: (student) => student.avgScore,
+            cell: (student) => (student.avgScore === null ? '—' : `${student.avgScore.toFixed(0)}%`),
+          },
+          {
+            key: 'overdue', header: 'Overdue', align: 'right', value: (student) => (student.overdueCount === 0 ? null : student.overduePKR),
+            cell: (student) => (student.overdueCount === 0 ? '—' : `PKR ${Math.round(student.overduePKR).toLocaleString()}`),
+            className: 'text-red-600',
+          },
+        ]}
+      />
     </div>
   );
 }

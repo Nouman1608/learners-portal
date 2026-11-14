@@ -128,6 +128,13 @@ export function mergeProfitability(a: Profitability, b: Profitability): Profitab
     .sort((x, y) => y.profitPKR - x.profitPKR);
 }
 
+type TeacherProfitability = Awaited<ReturnType<Svc['getTeacherProfitability']>>;
+
+export function mergeTeacherProfitability(a: TeacherProfitability, b: TeacherProfitability): TeacherProfitability {
+  return [...a, ...b.map(t => ({ ...t, teacherName: tagJunior(t.teacherName) as string }))]
+    .sort((x, y) => y.profitPKR - x.profitPKR);
+}
+
 // ---------- performance ----------
 
 type Distributions = Awaited<ReturnType<Svc['getAssessmentDistributions']>>;
