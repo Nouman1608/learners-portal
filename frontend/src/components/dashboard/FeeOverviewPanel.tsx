@@ -144,6 +144,22 @@ export default function FeeOverviewPanel({ campus }: { campus: Campus }) {
     </td>
   );
 
+  // Total of the fees in the open list, one line per currency
+  const feeTotals = (() => {
+    const perCurrency = new Map<string, number>();
+    let count = 0;
+    for (const s of students ?? []) {
+      if (!s.amount) continue;
+      count++;
+      const currency = s.currency || 'PKR';
+      perCurrency.set(currency, (perCurrency.get(currency) || 0) + parseFloat(s.amount));
+    }
+    const amounts = [...perCurrency]
+      .sort(([a], [b]) => (a === 'PKR' ? -1 : b === 'PKR' ? 1 : a.localeCompare(b)))
+      .map(([currency, amount]) => `${SYMBOLS[currency] || currency} ${Math.round(amount).toLocaleString()}`);
+    return { count, amounts };
+  })();
+
   const period_ = data ? `${MONTHS[data.month - 1]} ${data.year}` : '';
   const formatDue = (date: string | null) => {
     if (!date) return '-';
@@ -356,6 +372,20 @@ export default function FeeOverviewPanel({ campus }: { campus: Campus }) {
                       );
                     })}
                   </tbody>
+                  {/* Total of the fees listed, per currency (never added across currencies) */}
+                  {feeTotals.count > 0 && (
+                    <tfoot className="sticky bottom-0 bg-gray-100 text-sm font-semibold text-gray-900">
+                      <tr>
+                        <td className="px-5 py-3" colSpan={2}>
+                          Total <span className="font-normal text-gray-500">({feeTotals.count} fee{feeTotals.count === 1 ? '' : 's'})</span>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-3 text-right">
+                          {feeTotals.amounts.map((line) => <div key={line}>{line}</div>)}
+                        </td>
+                        <td className="px-3 py-3" colSpan={3} />
+                      </tr>
+                    </tfoot>
+                  )}
                 </table>
               )}
             </div>
