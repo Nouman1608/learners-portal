@@ -70,14 +70,13 @@ export const getFinancialAnalytics = async (req: Request, res: Response, next: N
     } = await forCampuses(
       campusServices(req),
       async (svc) => {
-        const [r, pm, of, cr, col, prof, tprof, prevR, prevC] = await Promise.all([
+        const [r, pm, of, cr, col, prof, prevR, prevC] = await Promise.all([
           svc.getRevenueOverTime(start, end, validated.groupBy as 'day' | 'week' | 'month' | undefined),
           svc.getPaymentMethodBreakdown(start, end),
           svc.getOutstandingFeesAnalysis(),
           svc.getCourseRevenueBreakdown(start, end),
           svc.getCollectionRate(start, end),
-          svc.getCourseProfitability(start, end),
-          svc.getTeacherProfitability(start, end),
+          svc.getProfitability(start, end),
           svc.getRevenueOverTime(previousStart, previousEnd, 'month'),
           svc.getCollectionRate(previousStart, previousEnd),
         ]);
@@ -87,8 +86,8 @@ export const getFinancialAnalytics = async (req: Request, res: Response, next: N
           outstandingFees: of,
           courseRevenue: cr,
           collectionRate: col,
-          courseProfitability: prof,
-          teacherProfitability: tprof,
+          courseProfitability: prof.courses,
+          teacherProfitability: prof.teachers,
           previousRevenue: prevR,
           previousCollection: prevC,
         };
@@ -106,12 +105,17 @@ export const getFinancialAnalytics = async (req: Request, res: Response, next: N
       })
     );
 
-    const totalRevenuePKR = revenueOverTime.reduce((s, r) => s + r.revenuePKR, 0);
-    const previousRevenuePKR = previousRevenue.reduce((s, r) => s + r.revenuePKR, 0);
-    // Teacher cost is every salary slip in the period (also staff who teach no class), so the
-    // headline profit is revenue less all teacher pay, not only pay tied to a class.
+    // Money that arrived in the period (by payment date): the revenue-over-time chart and its trend
+    const collectedPKR = revenueOverTime.reduce((s, r) => s + r.revenuePKR, 0);
+    const previousCollectedPKR = previousRevenue.reduce((s, r) => s + r.revenuePKR, 0);
+
+    // Headline figures on the same basis as the profitability tables (fees by the month they
+    // are for): revenue = invoiced + not invoiced, invoiced = paid + not received
+    const sumOf = (pick: (c: (typeof courseProfitability)[number]) => number) => courseProfitability.reduce((s, c) => s + pick(c), 0);
+    const totalRevenuePKR = sumOf(c => c.revenuePKR);
+    const totalPaidPKR = sumOf(c => c.paidPKR);
+    // Every teacher's pay in the period, also staff who teach no class
     const totalTeacherCostPKR = teacherProfitability.reduce((s, t) => s + t.teacherCostPKR, 0);
-    const totalProfitPKR = totalRevenuePKR - totalTeacherCostPKR;
 
     res.json({
       revenueOverTime,
@@ -123,8 +127,15 @@ export const getFinancialAnalytics = async (req: Request, res: Response, next: N
       teacherProfitability,
       totals: {
         revenuePKR: totalRevenuePKR,
+        invoicedPKR: sumOf(c => c.invoicedPKR),
+        notInvoicedPKR: sumOf(c => c.notInvoicedPKR),
+        paidPKR: totalPaidPKR,
+        notReceivedPKR: sumOf(c => c.notReceivedPKR),
         teacherCostPKR: totalTeacherCostPKR,
-        profitPKR: totalProfitPKR,
+        estimatedCostPKR: teacherProfitability.reduce((s, t) => s + t.estimatedCostPKR, 0),
+        profitPKR: totalRevenuePKR - totalTeacherCostPKR, // expected profit
+        profitSoFarPKR: totalPaidPKR - totalTeacherCostPKR,
+        collectedPKR,
         transactionCount: revenueOverTime.reduce((s, r) => s + r.transactionCount, 0),
       },
       comparison: {
@@ -137,9 +148,9 @@ export const getFinancialAnalytics = async (req: Request, res: Response, next: N
           end: previousEnd.toISOString().split('T')[0],
         },
         revenuePKR: {
-          current: totalRevenuePKR,
-          previous: previousRevenuePKR,
-          changePercent: percentChange(totalRevenuePKR, previousRevenuePKR),
+          current: collectedPKR,
+          previous: previousCollectedPKR,
+          changePercent: percentChange(collectedPKR, previousCollectedPKR),
         },
         collectionRate: {
           current: collectionRate.collectionRate,
@@ -417,7 +428,7 @@ export const getClassProfit = async (req: Request, res: Response, next: NextFunc
 
     const other = await otherCampus.classProfit(month, year);
     const tag = <T>(rows: T[], which: 'senior' | 'junior') => rows.map((row) => ({ ...row, campus: which }));
-    const junior = { ...other, classes: tag(other.classes, 'junior'), unassigned: tag(other.unassigned, 'junior') };
+    const junior = { ...other, classes: tag(other.classes, 'junior'), teachers: tag(other.teachers, 'junior') };
     if (campus === 'junior') return res.json(junior);
 
     const own = await classProfitService.getReport(month, year);
@@ -425,7 +436,7 @@ export const getClassProfit = async (req: Request, res: Response, next: NextFunc
       month,
       year,
       classes: [...tag(own.classes, 'senior'), ...junior.classes].sort((a, b) => b.expectedProfitPKR - a.expectedProfitPKR),
-      unassigned: [...tag(own.unassigned, 'senior'), ...junior.unassigned],
+      teachers: [...tag(own.teachers, 'senior'), ...junior.teachers],
     });
   } catch (error) {
     next(error);

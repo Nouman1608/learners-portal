@@ -1,31 +1,27 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { ArrowDownTrayIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { analyticsApi, ClassProfit, ClassProfitReport } from '../../api/analytics.api';
 import { exportCsv, stampedFilename } from '../../utils/csv';
-import { useSortableData } from '../../hooks/useSortableData';
+import AnalyticsTable from './AnalyticsTable';
 import { terms } from '../../brand';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const SYMBOLS: Record<string, string> = { PKR: 'PKR', USD: '$', GBP: '£', SAR: 'SR' };
 const pkr = (amount: number) => `PKR ${Math.round(amount).toLocaleString()}`;
-/** Amounts billed in another currency, e.g. "$ 120", shown under the PKR figure */
-const foreign = (amounts: { currency: string; amount: number }[]) => amounts
-  .filter((a) => a.currency !== 'PKR' && a.amount > 0)
-  .map((a) => `${SYMBOLS[a.currency] || a.currency} ${Math.round(a.amount).toLocaleString()}`)
-  .join(' + ');
+
+/** A class, or a salary that belongs to no class (salaried staff who teach none) */
+type Row = ClassProfit & { staffOnly?: boolean };
 
 /**
- * Sudo analytics: for each class in a month, the fees due and received from its students,
- * what its teacher is paid for it, and the profit. Teacher pay is the salary slip's figure,
- * or an estimate by the slip's own rules until the slip is made.
+ * Sudo analytics, one month at a time. The same columns and rules as Course profitability on
+ * the Financial tab: Revenue (when all pay) = Invoiced + Not invoiced, Invoiced = Paid + Not
+ * received, against the expected salary slip.
  */
 export default function ClassProfitPanel({ campus }: { campus: 'senior' | 'junior' | 'both' }) {
   const [data, setData] = useState<ClassProfitReport | null>(null);
   const [loading, setLoading] = useState(true);
   // null = the current month (the server decides, in Pakistan time)
   const [period, setPeriod] = useState<{ month: number; year: number } | null>(null);
-  const [search, setSearch] = useState('');
   const requestSeq = useRef(0);
 
   useEffect(() => {
@@ -45,179 +41,173 @@ export default function ClassProfitPanel({ campus }: { campus: 'senior' | 'junio
     setPeriod({ month: (index % 12) + 1, year: Math.floor(index / 12) });
   };
 
-  const query = search.trim().toLowerCase();
-  const rows = useMemo(() => (data?.classes ?? []).filter((c) =>
-    !query || c.title.toLowerCase().includes(query) || c.teachers.some((t) => t.toLowerCase().includes(query))), [data, query]);
-  const { items: sorted, requestSort, getSortIndicator } = useSortableData(rows);
-
-  const sum = (pick: (c: ClassProfit) => number) => rows.reduce((total, c) => total + pick(c), 0);
-  const unassigned = query ? [] : data?.unassigned ?? [];
-  const otherPay = unassigned.reduce((total, u) => total + u.payPKR, 0);
+  // Salaries tied to no class are listed as rows of their own, so the totals are complete
+  const rows: Row[] = [
+    ...(data?.classes ?? []),
+    ...(data?.teachers ?? []).filter((t) => t.unassignedPKR > 0).map((t): Row => ({
+      courseId: `staff-${t.campus || ''}-${t.teacherId}`, title: `Salary not tied to a ${terms.courseLc}`, teachers: [t.name],
+      oneToOne: false, students: 0, staffOnly: true, campus: t.campus,
+      revenuePKR: 0, invoicedPKR: 0, notInvoicedPKR: 0, paidPKR: 0, notReceivedPKR: 0,
+      teacherPayPKR: t.unassignedPKR, estimatedPayPKR: t.slipCount ? 0 : t.unassignedPKR,
+      expectedProfitPKR: -t.unassignedPKR, profitSoFarPKR: -t.unassignedPKR,
+    })),
+  ];
+  const sum = (pick: (row: Row) => number) => rows.reduce((total, row) => total + pick(row), 0);
   const totals = {
-    due: sum((c) => c.duePKR),
-    received: sum((c) => c.receivedPKR),
-    pay: sum((c) => c.teacherPayPKR) + otherPay,
+    revenue: sum((r) => r.revenuePKR), invoiced: sum((r) => r.invoicedPKR), notInvoiced: sum((r) => r.notInvoicedPKR),
+    paid: sum((r) => r.paidPKR), notReceived: sum((r) => r.notReceivedPKR), pay: sum((r) => r.teacherPayPKR),
   };
-  const anyEstimate = rows.some((c) => c.payEstimated) || unassigned.some((u) => u.estimated);
+  const anyEstimate = rows.some((r) => r.estimatedPayPKR > 0.5);
   const title = data ? `${MONTHS[data.month - 1]} ${data.year}` : 'this month';
+  const profitColor = (n: number) => (n >= 0 ? 'text-green-700' : 'text-red-600');
+  const teacherNames = [...new Set(rows.flatMap((r) => r.teachers))].sort((a, b) => a.localeCompare(b));
 
   const handleExport = () => {
     if (!data || rows.length === 0) return toast.error('Nothing to export for this month');
-    exportCsv(stampedFilename(`class-profit-${data.year}-${String(data.month).padStart(2, '0')}`), sorted, [
-      { header: terms.course, value: (c) => c.title },
-      { header: 'Teacher', value: (c) => c.teachers.join(' / ') },
-      { header: 'Students', value: (c) => c.students },
-      { header: 'Fee due (PKR)', value: (c) => Math.round(c.duePKR) },
-      { header: 'Fee received (PKR)', value: (c) => Math.round(c.receivedPKR) },
-      { header: 'Teacher pay (PKR)', value: (c) => Math.round(c.teacherPayPKR) },
-      { header: 'Teacher pay is', value: (c) => (c.payEstimated ? 'estimate' : 'salary slip') },
-      { header: 'Profit on received (PKR)', value: (c) => Math.round(c.profitPKR) },
-      { header: 'Profit if all pay (PKR)', value: (c) => Math.round(c.expectedProfitPKR) },
+    exportCsv(stampedFilename(`class-profit-${data.year}-${String(data.month).padStart(2, '0')}`), rows, [
+      { header: terms.course, value: (r) => r.title },
+      { header: 'Teacher', value: (r) => r.teachers.join(' / ') },
+      { header: 'Type', value: (r) => (r.staffOnly ? 'Staff' : r.oneToOne ? '1-to-1' : 'Group') },
+      { header: 'Students', value: (r) => r.students },
+      { header: 'Revenue (PKR)', value: (r) => Math.round(r.revenuePKR) },
+      { header: 'Invoiced (PKR)', value: (r) => Math.round(r.invoicedPKR) },
+      { header: 'Not invoiced (PKR)', value: (r) => Math.round(r.notInvoicedPKR) },
+      { header: 'Paid (PKR)', value: (r) => Math.round(r.paidPKR) },
+      { header: 'Not received (PKR)', value: (r) => Math.round(r.notReceivedPKR) },
+      { header: 'Teacher cost (PKR)', value: (r) => Math.round(r.teacherPayPKR) },
+      { header: 'of which estimate (PKR)', value: (r) => Math.round(r.estimatedPayPKR) },
+      { header: 'Expected profit (PKR)', value: (r) => Math.round(r.expectedProfitPKR) },
+      { header: 'Profit so far (PKR)', value: (r) => Math.round(r.profitSoFarPKR) },
     ]);
     toast.success('Exported to CSV');
   };
-
-  const th = (label: string, key: string, align = 'text-right') => (
-    <th onClick={() => requestSort(key)} className={`cursor-pointer px-4 py-3 text-xs font-medium uppercase text-gray-500 hover:bg-gray-100 ${align}`}>
-      {label} {getSortIndicator(key)}
-    </th>
-  );
-  const profitColor = (n: number) => (n >= 0 ? 'text-green-700' : 'text-red-600');
 
   return (
     <div className={`space-y-6 ${loading ? 'opacity-60' : ''}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">{terms.course} profit for {title}</h3>
-          <p className="text-sm text-gray-500">Fees from each {terms.courseLc}'s students, what the teacher is paid for it, and what is left. The date range above does not apply here.</p>
+          <p className="text-sm text-gray-500">One month at a time. The date range above does not apply here.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-1">
-            <button type="button" onClick={() => step(-1)} disabled={!data} aria-label="Previous month" className="rounded-md p-1.5 text-gray-600 hover:bg-gray-100 disabled:opacity-40">
-              <ChevronLeftIcon className="h-4 w-4" />
-            </button>
-            <button type="button" onClick={() => setPeriod(null)} className="rounded-md px-3 py-1 text-sm font-medium text-indigo-600 hover:bg-indigo-50">This month</button>
-            <button type="button" onClick={() => step(1)} disabled={!data} aria-label="Next month" className="rounded-md p-1.5 text-gray-600 hover:bg-gray-100 disabled:opacity-40">
-              <ChevronRightIcon className="h-4 w-4" />
-            </button>
-          </div>
-          <button onClick={handleExport} className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-            <ArrowDownTrayIcon className="mr-2 h-4 w-4" aria-hidden="true" />
-            Export CSV
+        <div className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-1">
+          <button type="button" onClick={() => step(-1)} disabled={!data} aria-label="Previous month" className="rounded-md p-1.5 text-gray-600 hover:bg-gray-100 disabled:opacity-40">
+            <ChevronLeftIcon className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={() => setPeriod(null)} className="rounded-md px-3 py-1 text-sm font-medium text-indigo-600 hover:bg-indigo-50">This month</button>
+          <button type="button" onClick={() => step(1)} disabled={!data} aria-label="Next month" className="rounded-md p-1.5 text-gray-600 hover:bg-gray-100 disabled:opacity-40">
+            <ChevronRightIcon className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      {/* The month in five numbers */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-5">
-        {[
-          ['Fee due', pkr(totals.due), 'text-gray-900'],
-          ['Fee received', pkr(totals.received), 'text-gray-900'],
-          [`Teacher pay${anyEstimate ? ' (part estimate)' : ''}`, pkr(totals.pay), 'text-gray-900'],
-          ['Profit on received', pkr(totals.received - totals.pay), profitColor(totals.received - totals.pay)],
-          ['Profit if all pay', pkr(totals.due - totals.pay), profitColor(totals.due - totals.pay)],
-        ].map(([label, value, color]) => (
-          <div key={label} className="rounded-lg bg-white p-4 shadow">
-            <p className="text-sm font-medium text-gray-600">{label}</p>
-            <p className={`mt-1 text-2xl font-bold ${color}`}>{value}</p>
-          </div>
-        ))}
+      {/* The month in four numbers */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <div className="rounded-lg bg-white p-6 shadow">
+          <p className="text-sm font-medium text-gray-600">Revenue when all pay</p>
+          <p className="mt-2 text-3xl font-bold text-gray-900">{pkr(totals.revenue)}</p>
+          <p className="mt-1 text-xs text-gray-500">Invoiced {pkr(totals.invoiced)} · not invoiced yet {pkr(totals.notInvoiced)}</p>
+        </div>
+        <div className="rounded-lg bg-white p-6 shadow">
+          <p className="text-sm font-medium text-gray-600">Paid</p>
+          <p className="mt-2 text-3xl font-bold text-green-700">{pkr(totals.paid)}</p>
+          <p className="mt-1 text-xs text-gray-500">{totals.invoiced > 0 ? ((totals.paid / totals.invoiced) * 100).toFixed(1) : '0.0'}% of what is invoiced</p>
+        </div>
+        <div className="rounded-lg bg-white p-6 shadow">
+          <p className="text-sm font-medium text-gray-600">Not received</p>
+          <p className="mt-2 text-3xl font-bold text-red-600">{pkr(totals.notReceived)}</p>
+          <p className="mt-1 text-xs text-gray-500">Invoiced, fee date passed, not paid yet</p>
+        </div>
+        <div className="rounded-lg bg-white p-6 shadow">
+          <p className="text-sm font-medium text-gray-600">Expected profit</p>
+          <p className={`mt-2 text-3xl font-bold ${profitColor(totals.revenue - totals.pay)}`}>{pkr(totals.revenue - totals.pay)}</p>
+          <p className="mt-1 text-xs text-gray-500">
+            Teacher cost {pkr(totals.pay)}{anyEstimate ? ' (part estimate)' : ''} · profit so far{' '}
+            <span className={totals.paid - totals.pay >= 0 ? '' : 'text-red-600'}>{pkr(totals.paid - totals.pay)}</span>
+          </p>
+        </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg bg-white shadow">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
-          <p className="text-sm text-gray-500">
-            {rows.length} {rows.length === 1 ? terms.courseLc : terms.coursesLc}. Click a column heading to sort.
-          </p>
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search class or teacher..."
-            className="w-56 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
-        {rows.length === 0 ? (
-          <p className="px-6 py-12 text-center text-gray-500">{loading ? 'Loading...' : `No fees or teacher pay for ${title}`}</p>
-        ) : (
-          <div className="max-h-[70vh] overflow-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="sticky top-0 z-10 bg-gray-50">
-                <tr>
-                  {th(terms.course, 'title', 'text-left')}
-                  {th('Teacher', 'teachers', 'text-left')}
-                  {th('Students', 'students')}
-                  {th('Fee due', 'duePKR')}
-                  {th('Received', 'receivedPKR')}
-                  {th('Teacher pay', 'teacherPayPKR')}
-                  {th('Profit on received', 'profitPKR')}
-                  {th('Profit if all pay', 'expectedProfitPKR')}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white text-sm">
-                {sorted.map((c) => (
-                  <tr key={`${c.campus || ''}-${c.courseId}`} className="hover:bg-indigo-50/30">
-                    <td className="px-4 py-3 text-gray-900">
-                      {c.title}
-                      {c.campus && (
-                        <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${c.campus === 'junior' ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-700'}`}>
-                          {c.campus === 'junior' ? 'Junior' : 'Senior'}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{c.teachers.join(', ') || '-'}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right text-gray-900">{c.students}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right text-gray-900">
-                      {pkr(c.duePKR)}
-                      {foreign(c.due) && <div className="text-xs text-gray-400">{foreign(c.due)}</div>}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right text-gray-900">
-                      {pkr(c.receivedPKR)}
-                      {foreign(c.received) && <div className="text-xs text-gray-400">{foreign(c.received)}</div>}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right text-gray-700">
-                      {pkr(c.teacherPayPKR)}
-                      {c.payEstimated && <div className="text-xs text-amber-600" title="The salary slip for this month is not made yet">estimate</div>}
-                    </td>
-                    <td className={`whitespace-nowrap px-4 py-3 text-right font-medium ${profitColor(c.profitPKR)}`}>{pkr(c.profitPKR)}</td>
-                    <td className={`whitespace-nowrap px-4 py-3 text-right ${profitColor(c.expectedProfitPKR)}`}>{pkr(c.expectedProfitPKR)}</td>
-                  </tr>
-                ))}
-                {unassigned.map((u) => (
-                  <tr key={`staff-${u.campus || ''}-${u.teacherId}`} className="bg-gray-50 text-gray-600">
-                    <td className="px-4 py-3 italic">Salary not tied to a {terms.courseLc}</td>
-                    <td className="px-4 py-3">{u.name}</td>
-                    <td className="px-4 py-3" /><td className="px-4 py-3" /><td className="px-4 py-3" />
-                    <td className="whitespace-nowrap px-4 py-3 text-right">
-                      {pkr(u.payPKR)}
-                      {u.estimated && <div className="text-xs text-amber-600">estimate</div>}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right text-red-600">{pkr(-u.payPKR)}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right text-red-600">{pkr(-u.payPKR)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="sticky bottom-0 bg-gray-100 text-sm font-semibold text-gray-900">
-                <tr>
-                  <td className="px-4 py-3" colSpan={2}>Total</td>
-                  <td className="px-4 py-3 text-right">{sum((c) => c.students)}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right">{pkr(totals.due)}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right">{pkr(totals.received)}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right">{pkr(totals.pay)}</td>
-                  <td className={`whitespace-nowrap px-4 py-3 text-right ${profitColor(totals.received - totals.pay)}`}>{pkr(totals.received - totals.pay)}</td>
-                  <td className={`whitespace-nowrap px-4 py-3 text-right ${profitColor(totals.due - totals.pay)}`}>{pkr(totals.due - totals.pay)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+      <AnalyticsTable<Row>
+        title={`Each ${terms.courseLc} in ${title}`}
+        description="Revenue is what the class brings in when every student has paid: Invoiced (fee date has arrived) plus Not invoiced (fee dated later this month, or 1-to-1 classes not counted yet). Invoiced is Paid plus Not received. Teacher cost is the expected salary slip: the slip itself, or an estimate by the slip's own rules until it is made; a fixed monthly salary is split equally between that teacher's classes. Profit is fees less teacher pay only (other expenses are on the Expenses page). All in PKR."
+        rows={rows}
+        rowKey={(r) => `${r.campus || ''}-${r.courseId}`}
+        searchPlaceholder={`Search ${terms.courseLc} or teacher...`}
+        emptyText={loading ? 'Loading...' : `No fees or teacher pay for ${title}`}
+        defaultSort={{ key: 'profit', direction: 'desc' }}
+        actions={(
+          <button onClick={handleExport} className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            <ArrowDownTrayIcon className="mr-2 h-4 w-4" aria-hidden="true" />
+            Export CSV
+          </button>
         )}
-        <p className="border-t border-gray-200 px-4 py-3 text-xs text-gray-500">
-          Profit here is fees less teacher pay only (rent and other expenses are on the Expenses page). Teacher pay marked "estimate" is worked out
-          by the salary slip's own rules because the slip for the month is not made yet; it becomes exact once the slip exists. A fixed monthly
-          salary is split equally between that teacher's {terms.coursesLc}. Fees in other currencies are converted to PKR at the portal's rates.
-          The students total counts a student once per {terms.courseLc}.
-        </p>
-      </div>
+        filters={[
+          { label: 'All results', options: [
+            { label: 'Expected to make a profit', test: (r) => r.expectedProfitPKR > 0 },
+            { label: 'Expected to make a loss', test: (r) => r.expectedProfitPKR < 0 },
+            { label: 'In loss so far', test: (r) => r.profitSoFarPKR < 0 },
+            { label: 'Has fees not received', test: (r) => r.notReceivedPKR > 0.5 },
+            { label: 'No teacher cost', test: (r) => r.teacherPayPKR === 0 },
+            { label: 'Teacher cost is an estimate', test: (r) => r.estimatedPayPKR > 0.5 },
+          ] },
+          { label: 'Group and 1-to-1', options: [
+            { label: '1-to-1 only', test: (r) => r.oneToOne },
+            { label: 'Group only', test: (r) => !r.oneToOne && !r.staffOnly },
+          ] },
+          { label: 'All teachers', options: teacherNames.map((name) => ({ label: name, test: (r: Row) => r.teachers.includes(name) })) },
+        ]}
+        columns={[
+          {
+            key: 'course', header: terms.course, value: (r) => r.title, className: (r) => (r.staffOnly ? 'italic text-gray-500' : 'text-gray-900'),
+            cell: (r) => (
+              <>
+                {r.title}
+                {r.campus && (
+                  <span className={`ml-2 rounded-full px-2 py-0.5 text-xs not-italic ${r.campus === 'junior' ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-700'}`}>
+                    {r.campus === 'junior' ? 'Junior' : 'Senior'}
+                  </span>
+                )}
+              </>
+            ),
+          },
+          { key: 'teacher', header: 'Teacher', value: (r) => r.teachers.join(', ') || null, className: 'text-gray-600' },
+          { key: 'students', header: 'Students', align: 'right', value: (r) => r.students },
+          { key: 'revenue', header: 'Revenue', align: 'right', value: (r) => r.revenuePKR, cell: (r) => pkr(r.revenuePKR), className: 'font-medium text-gray-900' },
+          { key: 'invoiced', header: 'Invoiced', align: 'right', value: (r) => r.invoicedPKR, cell: (r) => pkr(r.invoicedPKR) },
+          { key: 'notInvoiced', header: 'Not invoiced', align: 'right', value: (r) => r.notInvoicedPKR, cell: (r) => pkr(r.notInvoicedPKR), className: 'text-gray-500' },
+          { key: 'paid', header: 'Paid', align: 'right', value: (r) => r.paidPKR, cell: (r) => pkr(r.paidPKR), className: 'text-green-700' },
+          { key: 'notReceived', header: 'Not received', align: 'right', value: (r) => r.notReceivedPKR, cell: (r) => pkr(r.notReceivedPKR), className: (r) => (r.notReceivedPKR > 0 ? 'text-red-600' : 'text-gray-400') },
+          {
+            key: 'cost', header: 'Teacher cost', align: 'right', value: (r) => r.teacherPayPKR, className: 'text-gray-600',
+            cell: (r) => (
+              <>
+                {pkr(r.teacherPayPKR)}
+                {r.estimatedPayPKR > 0.5 && <div className="text-xs font-normal text-amber-600" title="No salary slip yet for part of this: worked out by the slip's own rules">{pkr(r.estimatedPayPKR)} estimate</div>}
+              </>
+            ),
+          },
+          { key: 'profit', header: 'Expected profit', align: 'right', value: (r) => r.expectedProfitPKR, cell: (r) => pkr(r.expectedProfitPKR), className: (r) => `font-medium ${profitColor(r.expectedProfitPKR)}` },
+          { key: 'soFar', header: 'Profit so far', align: 'right', value: (r) => r.profitSoFarPKR, cell: (r) => pkr(r.profitSoFarPKR), className: (r) => profitColor(r.profitSoFarPKR) },
+        ]}
+        footer={(shown) => {
+          const total = (pick: (r: Row) => number) => pkr(shown.reduce((s, r) => s + pick(r), 0));
+          const cell = 'px-6 py-3 text-right whitespace-nowrap';
+          return (
+            <tr>
+              <td className="px-6 py-3" colSpan={2}>Total ({shown.length})</td>
+              <td className={cell}>{shown.reduce((s, r) => s + r.students, 0)}</td>
+              <td className={cell}>{total((r) => r.revenuePKR)}</td>
+              <td className={cell}>{total((r) => r.invoicedPKR)}</td>
+              <td className={cell}>{total((r) => r.notInvoicedPKR)}</td>
+              <td className={cell}>{total((r) => r.paidPKR)}</td>
+              <td className={cell}>{total((r) => r.notReceivedPKR)}</td>
+              <td className={cell}>{total((r) => r.teacherPayPKR)}</td>
+              <td className={cell}>{total((r) => r.expectedProfitPKR)}</td>
+              <td className={cell}>{total((r) => r.profitSoFarPKR)}</td>
+            </tr>
+          );
+        }}
+      />
     </div>
   );
 }

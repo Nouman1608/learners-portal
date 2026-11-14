@@ -24,20 +24,29 @@ export interface Comparison {
   changePercent: number | null;
 }
 
-/** Class profit (sudo): one class in one month */
-export interface ClassProfit {
+/**
+ * One class's money over a period. Fees are counted by the month they are for, so:
+ * revenue = invoiced + not invoiced, and invoiced = paid + not received.
+ */
+export interface ClassMoney {
+  revenuePKR: number; // what comes in when every student has paid
+  invoicedPKR: number; // fees whose date has arrived
+  notInvoicedPKR: number; // fees dated later, and 1-to-1 classes not counted yet (expected)
+  paidPKR: number;
+  notReceivedPKR: number; // date arrived, not paid yet
+  expectedProfitPKR: number; // revenue - teacher cost
+  profitSoFarPKR: number; // paid - teacher cost
+}
+
+/** Course Profit tab (sudo): one class in one month */
+export interface ClassProfit extends ClassMoney {
   courseId: string;
   title: string;
   teachers: string[];
+  oneToOne: boolean;
   students: number;
-  due: { currency: string; amount: number }[]; // fees for the month, in the billing currency
-  received: { currency: string; amount: number }[];
-  duePKR: number;
-  receivedPKR: number;
-  teacherPayPKR: number;
-  payEstimated: boolean; // the teacher's salary slip is not made yet
-  profitPKR: number; // received - teacher pay
-  expectedProfitPKR: number; // due - teacher pay
+  teacherPayPKR: number; // the expected salary slip's figure for this class
+  estimatedPayPKR: number; // part of it with no slip made yet
   campus?: 'senior' | 'junior';
 }
 
@@ -45,8 +54,8 @@ export interface ClassProfitReport {
   month: number;
   year: number;
   classes: ClassProfit[];
-  /** Salaried staff who teach no class: their pay belongs to no class */
-  unassigned: { teacherId: string; name: string; payPKR: number; estimated: boolean; campus?: 'senior' | 'junior' }[];
+  /** Every teacher's pay for the month; unassignedPKR is salary tied to no class */
+  teachers: { teacherId: string; name: string; payPKR: number; estimatedPKR: number; slipCount: number; unassignedPKR: number; campus?: 'senior' | 'junior' }[];
 }
 
 /**
@@ -103,34 +112,27 @@ export interface CollectionRate {
   paidCount: number;
 }
 
-/** One teacher over the period: fees collected from their classes less what they were paid */
-export interface TeacherProfitability {
+/** One teacher over the period: their classes' money against everything they are paid */
+export interface TeacherProfitability extends ClassMoney {
   teacherId: string | null; // null = classes with no teacher assigned
   teacherName: string;
   classCount: number;
   studentCount: number;
-  revenuePKR: number;
   teacherCostPKR: number;
+  estimatedCostPKR: number; // part of the pay with no slip made yet
   slipCount: number; // salary slips in the period
-  profitPKR: number;
   marginPercent: number;
 }
 
-export interface CourseProfitability {
+export interface CourseProfitability extends ClassMoney {
   courseId: string;
   courseTitle: string;
-  teachers?: string[];
-  oneToOne?: boolean; // 1-to-1 class: revenue is the invoice figure, not money collected
-  expectedRevenuePKR?: number; // part of revenue that is this month's expected invoice (classes not counted yet)
-  expectedCostPKR?: number; // teacher pay expected for those same classes
-  billedPKR?: number; // fees billed for the months of the period, paid or not
-  profitIfAllPaidPKR?: number; // billed - teacher cost
-  revenuePKR: number;
-  teacherCostPKR: number;
-  profitPKR: number;
-  marginPercent: number;
+  teachers: string[];
+  oneToOne: boolean;
   studentCount: number;
-  revenuePerStudentPKR: number;
+  teacherCostPKR: number; // the expected salary slips' figure for this class
+  estimatedCostPKR: number;
+  marginPercent: number; // expected profit as a share of revenue
 }
 
 export interface FinancialAnalytics {
@@ -142,9 +144,16 @@ export interface FinancialAnalytics {
   courseProfitability: CourseProfitability[];
   teacherProfitability: TeacherProfitability[];
   totals: {
-    revenuePKR: number;
-    teacherCostPKR: number;
-    profitPKR: number;
+    revenuePKR: number; // when every student has paid
+    invoicedPKR: number;
+    notInvoicedPKR: number;
+    paidPKR: number;
+    notReceivedPKR: number;
+    teacherCostPKR: number; // every teacher's expected pay in the period
+    estimatedCostPKR: number;
+    profitPKR: number; // expected profit: revenue - teacher cost
+    profitSoFarPKR: number; // paid - teacher cost
+    collectedPKR: number; // money that arrived in the period, by payment date (the chart)
     transactionCount: number;
   };
   comparison: {

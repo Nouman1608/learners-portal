@@ -100,16 +100,19 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
       courseProfitability,
       [
         { header: terms.course, value: c => c.courseTitle },
+        { header: 'Teacher', value: c => c.teachers.join(' / ') },
+        { header: 'Type', value: c => (c.oneToOne ? '1-to-1' : 'Group') },
         { header: 'Students', value: c => c.studentCount },
-        { header: 'Teacher', value: c => (c.teachers ?? []).join(' / ') },
-        { header: 'Type', value: c => (c.oneToOne ? '1-to-1 (invoice figure)' : 'Group (collected)') },
         { header: 'Revenue (PKR)', value: c => Math.round(c.revenuePKR) },
+        { header: 'Invoiced (PKR)', value: c => Math.round(c.invoicedPKR) },
+        { header: 'Not invoiced (PKR)', value: c => Math.round(c.notInvoicedPKR) },
+        { header: 'Paid (PKR)', value: c => Math.round(c.paidPKR) },
+        { header: 'Not received (PKR)', value: c => Math.round(c.notReceivedPKR) },
         { header: 'Teacher cost (PKR)', value: c => Math.round(c.teacherCostPKR) },
-        { header: 'Profit (PKR)', value: c => Math.round(c.profitPKR) },
-        { header: 'Billed (PKR)', value: c => Math.round(c.billedPKR ?? c.revenuePKR) },
-        { header: 'Profit if all paid (PKR)', value: c => Math.round(c.profitIfAllPaidPKR ?? c.profitPKR) },
+        { header: 'of which estimate (PKR)', value: c => Math.round(c.estimatedCostPKR) },
+        { header: 'Expected profit (PKR)', value: c => Math.round(c.expectedProfitPKR) },
+        { header: 'Profit so far (PKR)', value: c => Math.round(c.profitSoFarPKR) },
         { header: 'Margin %', value: c => c.marginPercent.toFixed(1) },
-        { header: 'Revenue per student (PKR)', value: c => Math.round(c.revenuePerStudentPKR) },
       ]
     );
     toast.success('Exported to CSV');
@@ -133,38 +136,44 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
         </button>
       </div>
 
-      {/* Key Metrics */}
+      {/* Key figures, on the same basis as the profitability tables below:
+          revenue = invoiced + not invoiced, and invoiced = paid + not received */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-sm font-medium text-gray-600">Revenue collected</p>
+          <p className="text-sm font-medium text-gray-600">Revenue when all pay</p>
           <p className="mt-2 text-3xl font-bold text-gray-900">{pkr(totals.revenuePKR)}</p>
-          <DeltaBadge changePercent={comparison.revenuePKR.changePercent} />
-        </div>
-        <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-sm font-medium text-gray-600">Collection rate</p>
-          <p className="mt-2 text-3xl font-bold text-gray-900">
-            {collectionRate.collectionRate.toFixed(1)}%
-          </p>
           <p className="mt-1 text-xs text-gray-500">
-            {collectionRate.paidCount} of {collectionRate.feeCount} fees paid
+            Invoiced {pkr(totals.invoicedPKR)} · not invoiced yet {pkr(totals.notInvoicedPKR)}
           </p>
-          <DeltaBadge changePercent={comparison.collectionRate.changePercent} />
         </div>
         <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-sm font-medium text-gray-600">Profit after teacher cost</p>
+          <p className="text-sm font-medium text-gray-600">Paid</p>
+          <p className="mt-2 text-3xl font-bold text-green-700">{pkr(totals.paidPKR)}</p>
+          <p className="mt-1 text-xs text-gray-500">
+            {totals.invoicedPKR > 0 ? ((totals.paidPKR / totals.invoicedPKR) * 100).toFixed(1) : '0.0'}% of what is invoiced
+          </p>
+        </div>
+        <div className="bg-white rounded-lg shadow p-6">
+          <p className="text-sm font-medium text-gray-600">Not received</p>
+          <p className="mt-2 text-3xl font-bold text-red-600">{pkr(totals.notReceivedPKR)}</p>
+          <p className="mt-1 text-xs text-gray-500">Invoiced, fee date passed, not paid yet</p>
+        </div>
+        <div className="bg-white rounded-lg shadow p-6">
+          <p className="text-sm font-medium text-gray-600">Expected profit</p>
           <p className={`mt-2 text-3xl font-bold ${totals.profitPKR >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
             {pkr(totals.profitPKR)}
           </p>
           <p className="mt-1 text-xs text-gray-500">
-            Teacher cost {pkr(totals.teacherCostPKR)}
+            Teacher cost {pkr(totals.teacherCostPKR)} · profit so far{' '}
+            <span className={totals.profitSoFarPKR >= 0 ? '' : 'text-red-600'}>{pkr(totals.profitSoFarPKR)}</span>
           </p>
         </div>
-        <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-sm font-medium text-gray-600">Outstanding fees</p>
-          <p className="mt-2 text-3xl font-bold text-red-600">{pkr(outstandingPKR)}</p>
-          <p className="mt-1 text-xs text-gray-500">Across all currencies</p>
-        </div>
       </div>
+      <p className="-mt-3 text-xs text-gray-500">
+        These figures count fees by the month they are for, from {comparison.period.start.slice(0, 7)} to {comparison.period.end.slice(0, 7)}.
+        Money that arrived in this period, by the day it was paid: {pkr(totals.collectedPKR)}
+        {comparison.revenuePKR.changePercent !== null && <> (<DeltaBadge changePercent={comparison.revenuePKR.changePercent} /> on the period before)</>}. Outstanding on all fees, any month: {pkr(outstandingPKR)}.
+      </p>
 
       {/* Currency breakdown - the actual amounts, not just the PKR equivalent */}
       {revenueByCurrency.length > 0 && (
@@ -289,96 +298,83 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
       {/* Course profitability: sort by any heading, search a class or teacher, filter */}
       <AnalyticsTable<CourseProfitability>
         title={`${terms.course} profitability`}
-        description="Revenue less teacher pay for the same period, converted to PKR. Group classes count the money collected; 1-to-1 classes count the invoice figure (classes taken x fee per class, or the expected figure for this month until the classes are counted). A fixed monthly salary is split equally between that teacher's classes. 'If all paid' is the profit once every fee billed for these months is received."
+        description="Revenue is what the class brings in when every student has paid: Invoiced (fee date has arrived) plus Not invoiced (fee dated later, or 1-to-1 classes not counted yet). Invoiced is Paid plus Not received. Teacher cost is the expected salary slip; a fixed monthly salary is split equally between that teacher's classes. All in PKR."
         rows={courseProfitability}
         rowKey={(c, i) => `${c.courseId}-${i}`}
         searchPlaceholder={`Search ${terms.courseLc} or teacher...`}
-        emptyText={`No ${terms.courseLc} revenue in this period`}
+        emptyText={`No ${terms.courseLc} fees in this period`}
         defaultSort={{ key: 'profit', direction: 'desc' }}
         filters={[
           { label: 'All results', options: [
-            { label: 'Making a profit', test: c => c.profitPKR > 0 },
-            { label: 'Making a loss', test: c => c.profitPKR < 0 },
-            { label: 'A loss even if all paid', test: c => (c.profitIfAllPaidPKR ?? c.profitPKR) < 0 },
-            { label: 'Has unpaid fees', test: c => (c.billedPKR ?? c.revenuePKR) - c.revenuePKR > 0.5 },
+            { label: 'Expected to make a profit', test: c => c.expectedProfitPKR > 0 },
+            { label: 'Expected to make a loss', test: c => c.expectedProfitPKR < 0 },
+            { label: 'In loss so far', test: c => c.profitSoFarPKR < 0 },
+            { label: 'Has fees not received', test: c => c.notReceivedPKR > 0.5 },
             { label: 'No teacher cost', test: c => c.teacherCostPKR === 0 },
           ] },
           { label: 'Group and 1-to-1', options: [
-            { label: '1-to-1 only', test: c => !!c.oneToOne },
+            { label: '1-to-1 only', test: c => c.oneToOne },
             { label: 'Group only', test: c => !c.oneToOne },
           ] },
-          { label: 'All teachers', options: teacherNames(courseProfitability).map(name => ({ label: name, test: (c: CourseProfitability) => (c.teachers ?? []).includes(name) })) },
+          { label: 'All teachers', options: teacherNames(courseProfitability).map(name => ({ label: name, test: (c: CourseProfitability) => c.teachers.includes(name) })) },
         ]}
         columns={[
           { key: 'course', header: terms.course, value: c => c.courseTitle },
-          { key: 'teacher', header: 'Teacher', value: c => (c.teachers ?? []).join(', ') || null, className: 'text-gray-600' },
+          { key: 'teacher', header: 'Teacher', value: c => c.teachers.join(', ') || null, className: 'text-gray-600' },
           { key: 'students', header: 'Students', align: 'right', value: c => c.studentCount },
-          {
-            key: 'revenue', header: 'Revenue', align: 'right', value: c => c.revenuePKR,
-            cell: c => (
-              <>
-                {pkr(c.revenuePKR)}
-                {c.oneToOne && (
-                  <div className="text-xs font-normal text-gray-400" title="1-to-1: the invoice figure, whether or not it has been paid yet">
-                    {c.expectedRevenuePKR ? `invoice figure, ${pkr(c.expectedRevenuePKR)} expected` : 'invoice figure'}
-                  </div>
-                )}
-              </>
-            ),
-          },
+          { key: 'revenue', header: 'Revenue', align: 'right', value: c => c.revenuePKR, cell: c => pkr(c.revenuePKR), className: 'font-medium text-gray-900' },
+          { key: 'invoiced', header: 'Invoiced', align: 'right', value: c => c.invoicedPKR, cell: c => pkr(c.invoicedPKR) },
+          { key: 'notInvoiced', header: 'Not invoiced', align: 'right', value: c => c.notInvoicedPKR, cell: c => pkr(c.notInvoicedPKR), className: 'text-gray-500' },
+          { key: 'paid', header: 'Paid', align: 'right', value: c => c.paidPKR, cell: c => pkr(c.paidPKR), className: 'text-green-700' },
+          { key: 'notReceived', header: 'Not received', align: 'right', value: c => c.notReceivedPKR, cell: c => pkr(c.notReceivedPKR), className: c => (c.notReceivedPKR > 0 ? 'text-red-600' : 'text-gray-400') },
           {
             key: 'cost', header: 'Teacher cost', align: 'right', value: c => c.teacherCostPKR, className: 'text-gray-600',
             cell: c => (
               <>
                 {pkr(c.teacherCostPKR)}
-                {!!c.expectedCostPKR && <div className="text-xs font-normal text-gray-400">{pkr(c.expectedCostPKR)} expected</div>}
+                {c.estimatedCostPKR > 0.5 && <div className="text-xs font-normal text-amber-600" title="No salary slip yet for part of this: worked out by the slip's own rules">{pkr(c.estimatedCostPKR)} estimate</div>}
               </>
             ),
           },
-          { key: 'profit', header: 'Profit', align: 'right', value: c => c.profitPKR, cell: c => pkr(c.profitPKR), className: c => `font-medium ${c.profitPKR >= 0 ? 'text-green-700' : 'text-red-600'}` },
-          {
-            // The profit once every fee billed for the period is paid
-            key: 'ifAllPaid', header: 'If all paid', align: 'right', value: c => c.profitIfAllPaidPKR ?? c.profitPKR,
-            className: c => ((c.profitIfAllPaidPKR ?? c.profitPKR) >= 0 ? 'text-green-700' : 'text-red-600'),
-            cell: c => {
-              const unpaid = (c.billedPKR ?? c.revenuePKR) - c.revenuePKR;
-              return (
-                <>
-                  {pkr(c.profitIfAllPaidPKR ?? c.profitPKR)}
-                  {unpaid > 0.5 && <div className="text-xs font-normal text-gray-400">{pkr(unpaid)} unpaid</div>}
-                </>
-              );
-            },
-          },
+          { key: 'profit', header: 'Expected profit', align: 'right', value: c => c.expectedProfitPKR, cell: c => pkr(c.expectedProfitPKR), className: c => `font-medium ${c.expectedProfitPKR >= 0 ? 'text-green-700' : 'text-red-600'}` },
+          { key: 'soFar', header: 'Profit so far', align: 'right', value: c => c.profitSoFarPKR, cell: c => pkr(c.profitSoFarPKR), className: c => (c.profitSoFarPKR >= 0 ? 'text-green-700' : 'text-red-600') },
           { key: 'margin', header: 'Margin', align: 'right', value: c => c.marginPercent, cell: c => `${c.marginPercent.toFixed(1)}%`, className: c => (c.marginPercent >= 0 ? 'text-gray-900' : 'text-red-600') },
         ]}
-        footer={shown => (
-          <tr>
-            <td className="px-6 py-3" colSpan={2}>Total ({shown.length})</td>
-            <td className="px-6 py-3 text-right">{shown.reduce((s, c) => s + c.studentCount, 0)}</td>
-            <td className="px-6 py-3 text-right whitespace-nowrap">{pkr(shown.reduce((s, c) => s + c.revenuePKR, 0))}</td>
-            <td className="px-6 py-3 text-right whitespace-nowrap">{pkr(shown.reduce((s, c) => s + c.teacherCostPKR, 0))}</td>
-            <td className="px-6 py-3 text-right whitespace-nowrap">{pkr(shown.reduce((s, c) => s + c.profitPKR, 0))}</td>
-            <td className="px-6 py-3 text-right whitespace-nowrap">{pkr(shown.reduce((s, c) => s + (c.profitIfAllPaidPKR ?? c.profitPKR), 0))}</td>
-            <td className="px-6 py-3" />
-          </tr>
-        )}
+        footer={shown => {
+          const sum = (pick: (c: (typeof shown)[number]) => number) => pkr(shown.reduce((s, c) => s + pick(c), 0));
+          const cell = 'px-6 py-3 text-right whitespace-nowrap';
+          return (
+            <tr>
+              <td className="px-6 py-3" colSpan={2}>Total ({shown.length})</td>
+              <td className={cell}>{shown.reduce((s, c) => s + c.studentCount, 0)}</td>
+              <td className={cell}>{sum(c => c.revenuePKR)}</td>
+              <td className={cell}>{sum(c => c.invoicedPKR)}</td>
+              <td className={cell}>{sum(c => c.notInvoicedPKR)}</td>
+              <td className={cell}>{sum(c => c.paidPKR)}</td>
+              <td className={cell}>{sum(c => c.notReceivedPKR)}</td>
+              <td className={cell}>{sum(c => c.teacherCostPKR)}</td>
+              <td className={cell}>{sum(c => c.expectedProfitPKR)}</td>
+              <td className={cell}>{sum(c => c.profitSoFarPKR)}</td>
+            </tr>
+          );
+        }}
       />
 
-      {/* Teacher profitability */}
+      {/* Teacher profitability: the same columns, per teacher */}
       <AnalyticsTable<TeacherProfitability>
         title="Teacher profitability"
-        description="Fees collected from each teacher's classes in the period, less what the teacher was paid (their salary slips for those months), in PKR. A class with two teachers splits its revenue between them."
+        description="The same figures per teacher: the money from their classes against everything they are paid in the period. A class with two teachers is split equally between them."
         rows={data.teacherProfitability ?? []}
         rowKey={(t, i) => `${t.teacherId ?? 'none'}-${i}`}
         searchPlaceholder="Search teacher..."
-        emptyText="No revenue or teacher pay in this period"
+        emptyText="No fees or teacher pay in this period"
         defaultSort={{ key: 'profit', direction: 'desc' }}
         filters={[
           { label: 'All results', options: [
-            { label: 'Making a profit', test: t => t.profitPKR > 0 },
-            { label: 'Making a loss', test: t => t.profitPKR < 0 },
-            { label: 'Paid, but no revenue', test: t => t.revenuePKR === 0 && t.teacherCostPKR > 0 },
+            { label: 'Expected to make a profit', test: t => t.expectedProfitPKR > 0 },
+            { label: 'Expected to make a loss', test: t => t.expectedProfitPKR < 0 },
+            { label: 'In loss so far', test: t => t.profitSoFarPKR < 0 },
+            { label: 'Paid, but no class revenue', test: t => t.revenuePKR === 0 && t.teacherCostPKR > 0 },
             { label: 'Revenue, but no pay recorded', test: t => t.revenuePKR > 0 && t.teacherCostPKR === 0 },
           ] },
         ]}
@@ -386,24 +382,41 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
           { key: 'teacher', header: 'Teacher', value: t => t.teacherName, className: t => (t.teacherId ? 'text-gray-900' : 'italic text-gray-500') },
           { key: 'classes', header: terms.courses, align: 'right', value: t => t.classCount },
           { key: 'students', header: 'Students', align: 'right', value: t => t.studentCount },
-          { key: 'revenue', header: 'Revenue', align: 'right', value: t => t.revenuePKR, cell: t => pkr(t.revenuePKR) },
-          { key: 'cost', header: 'Teacher pay', align: 'right', value: t => t.teacherCostPKR, cell: t => pkr(t.teacherCostPKR), className: 'text-gray-600' },
+          { key: 'revenue', header: 'Revenue', align: 'right', value: t => t.revenuePKR, cell: t => pkr(t.revenuePKR), className: 'font-medium text-gray-900' },
+          { key: 'invoiced', header: 'Invoiced', align: 'right', value: t => t.invoicedPKR, cell: t => pkr(t.invoicedPKR) },
+          { key: 'notInvoiced', header: 'Not invoiced', align: 'right', value: t => t.notInvoicedPKR, cell: t => pkr(t.notInvoicedPKR), className: 'text-gray-500' },
+          { key: 'paid', header: 'Paid', align: 'right', value: t => t.paidPKR, cell: t => pkr(t.paidPKR), className: 'text-green-700' },
+          { key: 'notReceived', header: 'Not received', align: 'right', value: t => t.notReceivedPKR, cell: t => pkr(t.notReceivedPKR), className: t => (t.notReceivedPKR > 0 ? 'text-red-600' : 'text-gray-400') },
+          {
+            key: 'cost', header: 'Teacher cost', align: 'right', value: t => t.teacherCostPKR, className: 'text-gray-600',
+            cell: t => (
+              <>
+                {pkr(t.teacherCostPKR)}
+                {t.estimatedCostPKR > 0.5 && <div className="text-xs font-normal text-amber-600" title="No salary slip yet for part of this: worked out by the slip's own rules">{pkr(t.estimatedCostPKR)} estimate</div>}
+              </>
+            ),
+          },
+          { key: 'profit', header: 'Expected profit', align: 'right', value: t => t.expectedProfitPKR, cell: t => pkr(t.expectedProfitPKR), className: t => `font-medium ${t.expectedProfitPKR >= 0 ? 'text-green-700' : 'text-red-600'}` },
+          { key: 'soFar', header: 'Profit so far', align: 'right', value: t => t.profitSoFarPKR, cell: t => pkr(t.profitSoFarPKR), className: t => (t.profitSoFarPKR >= 0 ? 'text-green-700' : 'text-red-600') },
           { key: 'slips', header: 'Slips', align: 'right', value: t => t.slipCount, className: 'text-gray-500' },
-          { key: 'profit', header: 'Profit', align: 'right', value: t => t.profitPKR, cell: t => pkr(t.profitPKR), className: t => `font-medium ${t.profitPKR >= 0 ? 'text-green-700' : 'text-red-600'}` },
-          { key: 'margin', header: 'Margin', align: 'right', value: t => (t.revenuePKR > 0 ? t.marginPercent : null), cell: t => (t.revenuePKR > 0 ? `${t.marginPercent.toFixed(1)}%` : '-'), className: t => (t.marginPercent >= 0 ? 'text-gray-900' : 'text-red-600') },
         ]}
-        footer={shown => (
-          <tr>
-            <td className="px-6 py-3">Total ({shown.length})</td>
-            <td className="px-6 py-3" />
-            <td className="px-6 py-3" />
-            <td className="px-6 py-3 text-right whitespace-nowrap">{pkr(shown.reduce((s, t) => s + t.revenuePKR, 0))}</td>
-            <td className="px-6 py-3 text-right whitespace-nowrap">{pkr(shown.reduce((s, t) => s + t.teacherCostPKR, 0))}</td>
-            <td className="px-6 py-3" />
-            <td className="px-6 py-3 text-right whitespace-nowrap">{pkr(shown.reduce((s, t) => s + t.profitPKR, 0))}</td>
-            <td className="px-6 py-3" />
-          </tr>
-        )}
+        footer={shown => {
+          const sum = (pick: (t: (typeof shown)[number]) => number) => pkr(shown.reduce((s, t) => s + pick(t), 0));
+          const cell = 'px-6 py-3 text-right whitespace-nowrap';
+          return (
+            <tr>
+              <td className="px-6 py-3" colSpan={3}>Total ({shown.length})</td>
+              <td className={cell}>{sum(t => t.revenuePKR)}</td>
+              <td className={cell}>{sum(t => t.invoicedPKR)}</td>
+              <td className={cell}>{sum(t => t.notInvoicedPKR)}</td>
+              <td className={cell}>{sum(t => t.paidPKR)}</td>
+              <td className={cell}>{sum(t => t.notReceivedPKR)}</td>
+              <td className={cell}>{sum(t => t.teacherCostPKR)}</td>
+              <td className={cell}>{sum(t => t.expectedProfitPKR)}</td>
+              <td className={cell}>{sum(t => t.profitSoFarPKR)}</td>
+            </tr>
+          );
+        }}
       />
 
       {/* Payment methods table */}

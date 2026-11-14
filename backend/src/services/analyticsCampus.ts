@@ -72,7 +72,7 @@ type Methods = Awaited<ReturnType<Svc['getPaymentMethodBreakdown']>>;
 type Outstanding = Awaited<ReturnType<Svc['getOutstandingFeesAnalysis']>>;
 type CourseRevenue = Awaited<ReturnType<Svc['getCourseRevenueBreakdown']>>;
 type Collection = Awaited<ReturnType<Svc['getCollectionRate']>>;
-type Profitability = Awaited<ReturnType<Svc['getCourseProfitability']>>;
+type Profitability = Awaited<ReturnType<Svc['getProfitability']>>['courses'];
 
 export function mergeRevenue(a: Revenue, b: Revenue): Revenue {
   return mergeBy(a, b, r => r.date, (x, y) => ({
@@ -125,14 +125,14 @@ export function mergeCollection(a: Collection, b: Collection): Collection {
 
 export function mergeProfitability(a: Profitability, b: Profitability): Profitability {
   return [...a, ...b.map(c => ({ ...c, courseTitle: tagJunior(c.courseTitle) as string }))]
-    .sort((x, y) => y.profitPKR - x.profitPKR);
+    .sort((x, y) => y.expectedProfitPKR - x.expectedProfitPKR);
 }
 
-type TeacherProfitability = Awaited<ReturnType<Svc['getTeacherProfitability']>>;
+type TeacherProfitability = Awaited<ReturnType<Svc['getProfitability']>>['teachers'];
 
 export function mergeTeacherProfitability(a: TeacherProfitability, b: TeacherProfitability): TeacherProfitability {
   return [...a, ...b.map(t => ({ ...t, teacherName: tagJunior(t.teacherName) as string }))]
-    .sort((x, y) => y.profitPKR - x.profitPKR);
+    .sort((x, y) => y.expectedProfitPKR - x.expectedProfitPKR);
 }
 
 // ---------- performance ----------
