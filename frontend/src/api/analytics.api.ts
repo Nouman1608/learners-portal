@@ -24,6 +24,31 @@ export interface Comparison {
   changePercent: number | null;
 }
 
+/** Class profit (sudo): one class in one month */
+export interface ClassProfit {
+  courseId: string;
+  title: string;
+  teachers: string[];
+  students: number;
+  due: { currency: string; amount: number }[]; // fees for the month, in the billing currency
+  received: { currency: string; amount: number }[];
+  duePKR: number;
+  receivedPKR: number;
+  teacherPayPKR: number;
+  payEstimated: boolean; // the teacher's salary slip is not made yet
+  profitPKR: number; // received - teacher pay
+  expectedProfitPKR: number; // due - teacher pay
+  campus?: 'senior' | 'junior';
+}
+
+export interface ClassProfitReport {
+  month: number;
+  year: number;
+  classes: ClassProfit[];
+  /** Salaried staff who teach no class: their pay belongs to no class */
+  unassigned: { teacherId: string; name: string; payPKR: number; estimated: boolean; campus?: 'senior' | 'junior' }[];
+}
+
 /**
  * Financial Analytics Interfaces
  */
@@ -287,6 +312,14 @@ export interface AnalyticsQueryParams {
  * Analytics API
  */
 export const analyticsApi = {
+  /** Sudo: fees, teacher pay and profit per class for a month (leave month/year out for this month) */
+  getClassProfit: async (campus: 'senior' | 'junior' | 'both' = 'senior', month?: number, year?: number): Promise<ClassProfitReport> => {
+    const response = await apiClient.get<ClassProfitReport>('/analytics/class-profit', {
+      params: { ...(campus === 'senior' ? {} : { campus }), ...(month && year ? { month, year } : {}) },
+    });
+    return response.data;
+  },
+
   /**
    * Get financial analytics
    */

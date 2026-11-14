@@ -4,6 +4,7 @@ import env from '../config/env';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
 import type { FamilyPeriod, FamilyPart } from './invoices.service';
+import type { ClassProfitReport } from './classProfit.service';
 
 /*
  * Private channel between the two campus portals (Senior <-> Junior), for siblings who study
@@ -85,6 +86,10 @@ export const otherCampus = {
    */
   familyInvoices: (families: FamilyPeriod[], ensure = false) => otherCampus.request<{ families: FamilyPart[] }>(
     'POST', '/family-invoices', { families, ensure }).then((r) => r.families),
+
+  /** The other campus's class profit report for a month, worked out by its own backend */
+  classProfit: (month: number, year: number) => otherCampus.request<ClassProfitReport>(
+    'GET', `/class-profit?month=${month}&year=${year}`),
 
   /** Put a student of the other campus into a family (null takes them out) */
   setFamily: (id: string, familyId: string | null) => otherCampus.request<{ previousFamilyId: string | null }>(

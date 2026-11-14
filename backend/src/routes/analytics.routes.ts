@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
-import { requireAdmin, requireTeacher } from '../middleware/rbac';
+import { requireAdmin, requireSudo, requireTeacher } from '../middleware/rbac';
 import { logActivity } from '../middleware/requestLogger';
 import {
   getFinancialAnalytics,
@@ -9,6 +9,7 @@ import {
   getCourseAnalytics,
   getGrowthAnalytics,
   getTeacherAnalytics,
+  getClassProfit,
 } from '../controllers/analytics.controller';
 
 const router = Router();
@@ -67,6 +68,14 @@ router.get(
   requireAdmin,
   logActivity('view', 'analytics-teachers'),
   getTeacherAnalytics
+);
+
+// Class profit for a month: fees, teacher pay and profit per class (sudo only)
+router.get(
+  '/class-profit',
+  requireSudo,
+  logActivity('view', 'analytics-class-profit'),
+  getClassProfit
 );
 
 export default router;

@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import usersService from '../services/users.service';
 import { invoicesService } from '../services/invoices.service';
+import { classProfitService } from '../services/classProfit.service';
 import { otherCampus } from '../services/otherCampus.service';
 import { AppError } from '../middleware/errorHandler';
 
@@ -57,6 +58,15 @@ router.post('/family-invoices', async (req, res) => {
   const parts = [];
   for (const family of families) parts.push(await invoicesService.familySectionsHere(family, { ensure }));
   res.json({ families: parts });
+});
+
+// Our class profit report for a month (the other campus's sudo analytics, Junior / Both view)
+router.get('/class-profit', async (req, res) => {
+  const { month, year } = z.object({
+    month: z.coerce.number().int().min(1).max(12),
+    year: z.coerce.number().int().min(2020).max(2100),
+  }).parse(req.query);
+  res.json(await classProfitService.getReport(month, year));
 });
 
 export default router;

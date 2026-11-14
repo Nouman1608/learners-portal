@@ -3,6 +3,8 @@ import { z } from 'zod';
 import * as campusMerge from '../services/analyticsCampus';
 import { campusServices, forCampuses } from '../services/analyticsCampus';
 import logger from '../utils/logger';
+import { classProfitService } from '../services/classProfit.service';
+import { otherCampus } from '../services/otherCampus.service';
 
 // Validation schemas
 const analyticsQuerySchema = z.object({
@@ -384,6 +386,39 @@ export const getTeacherAnalytics = async (req: Request, res: Response, next: Nex
 
     res.json({
       teacherWorkload,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/analytics/class-profit?month=&year=&campus= (sudo only)
+ * For each class in a month: fees due and received, what its teacher is paid, and the profit.
+ * The other campus is asked through its own backend, since pay rules belong to each portal.
+ */
+export const getClassProfit = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const [nowYear, nowMonth] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(new Date()).split('-').map(Number);
+    const { month, year, campus } = z.object({
+      month: z.coerce.number().int().min(1).max(12).default(nowMonth),
+      year: z.coerce.number().int().min(2020).max(2100).default(nowYear),
+      campus: z.enum(['senior', 'junior', 'both']).default('senior'),
+    }).parse(req.query);
+
+    if (campus === 'senior') return res.json(await classProfitService.getReport(month, year));
+
+    const other = await otherCampus.classProfit(month, year);
+    const tag = <T>(rows: T[], which: 'senior' | 'junior') => rows.map((row) => ({ ...row, campus: which }));
+    const junior = { ...other, classes: tag(other.classes, 'junior'), unassigned: tag(other.unassigned, 'junior') };
+    if (campus === 'junior') return res.json(junior);
+
+    const own = await classProfitService.getReport(month, year);
+    res.json({
+      month,
+      year,
+      classes: [...tag(own.classes, 'senior'), ...junior.classes].sort((a, b) => b.expectedProfitPKR - a.expectedProfitPKR),
+      unassigned: [...tag(own.unassigned, 'senior'), ...junior.unassigned],
     });
   } catch (error) {
     next(error);

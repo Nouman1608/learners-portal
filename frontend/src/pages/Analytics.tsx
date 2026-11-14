@@ -7,9 +7,10 @@ import AttendanceDashboard from '../components/analytics/AttendanceDashboard';
 import CourseDashboard from '../components/analytics/CourseDashboard';
 import GrowthDashboard from '../components/analytics/GrowthDashboard';
 import TeacherDashboard from '../components/analytics/TeacherDashboard';
+import ClassProfitPanel from '../components/analytics/ClassProfitPanel';
 import { brand, terms } from '../brand';
 
-type TabType = 'financial' | 'performance' | 'attendance' | 'courses' | 'growth' | 'teachers';
+type TabType = 'financial' | 'classProfit' | 'performance' | 'attendance' | 'courses' | 'growth' | 'teachers';
 
 export default function Analytics() {
   const { hasRole } = useAuth();
@@ -30,6 +31,8 @@ export default function Analytics() {
 
   const tabs: { id: TabType; label: string; allowed: boolean }[] = [
     { id: 'financial', label: 'Financial', allowed: isAdmin },
+    // Fees, teacher pay and profit per class for a month: shows teachers' pay, so sudo only
+    { id: 'classProfit', label: `${terms.course} Profit`, allowed: hasRole(['sudo']) },
     { id: 'performance', label: 'Performance', allowed: isTeacher },
     { id: 'attendance', label: 'Attendance', allowed: isTeacher },
     { id: 'courses', label: terms.courses, allowed: isTeacher },
@@ -178,6 +181,9 @@ export default function Analytics() {
           <div className="p-6">
             {activeTab === 'financial' && isAdmin && (
               <FinancialDashboard filters={filters} />
+            )}
+            {activeTab === 'classProfit' && hasRole(['sudo']) && (
+              <ClassProfitPanel campus={filters.campus ?? 'senior'} />
             )}
             {activeTab === 'performance' && isTeacher && (
               <PerformanceDashboard filters={filters} />

@@ -97,6 +97,8 @@ export interface GenerateTeacherInvoiceInput {
   month: number;
   year: number;
   generatedBy?: string;
+  // Work out the slip's lines with the usual rules but save nothing (class profit estimates)
+  preview?: boolean;
 }
 
 export const invoicesService = {
@@ -1491,6 +1493,12 @@ export const invoicesService = {
         courseEarnings += onlineEarning;
         totalAmount += onlineEarning;
       }
+    }
+
+    // Preview: what the slip would say today. Nothing has been written up to this point,
+    // and nothing is written: no invoice, no line items, no PDF.
+    if (input.preview) {
+      return { invoice: null as any, lineItems: lineItemsData as any[] };
     }
 
     if (lineItemsData.length === 0) {
