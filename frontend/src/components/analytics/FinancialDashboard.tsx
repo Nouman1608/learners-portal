@@ -101,6 +101,8 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
       [
         { header: terms.course, value: c => c.courseTitle },
         { header: 'Students', value: c => c.studentCount },
+        { header: 'Teacher', value: c => (c.teachers ?? []).join(' / ') },
+        { header: 'Type', value: c => (c.oneToOne ? '1-to-1 (invoice figure)' : 'Group (collected)') },
         { header: 'Revenue (PKR)', value: c => Math.round(c.revenuePKR) },
         { header: 'Teacher cost (PKR)', value: c => Math.round(c.teacherCostPKR) },
         { header: 'Profit (PKR)', value: c => Math.round(c.profitPKR) },
@@ -285,7 +287,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
       {/* Course profitability: sort by any heading, search a class or teacher, filter */}
       <AnalyticsTable<CourseProfitability>
         title={`${terms.course} profitability`}
-        description="Revenue collected less teacher pay for the same period, converted to PKR. A fixed monthly salary is split equally between that teacher's classes."
+        description="Revenue less teacher pay for the same period, converted to PKR. Group classes count the money collected; 1-to-1 classes count the invoice figure (classes taken x fee per class, or the expected figure for this month until the classes are counted). A fixed monthly salary is split equally between that teacher's classes."
         rows={courseProfitability}
         rowKey={(c, i) => `${c.courseId}-${i}`}
         searchPlaceholder={`Search ${terms.courseLc} or teacher...`}
@@ -297,14 +299,38 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
             { label: 'Making a loss', test: c => c.profitPKR < 0 },
             { label: 'No teacher cost', test: c => c.teacherCostPKR === 0 },
           ] },
+          { label: 'Group and 1-to-1', options: [
+            { label: '1-to-1 only', test: c => !!c.oneToOne },
+            { label: 'Group only', test: c => !c.oneToOne },
+          ] },
           { label: 'All teachers', options: teacherNames(courseProfitability).map(name => ({ label: name, test: (c: CourseProfitability) => (c.teachers ?? []).includes(name) })) },
         ]}
         columns={[
           { key: 'course', header: terms.course, value: c => c.courseTitle },
           { key: 'teacher', header: 'Teacher', value: c => (c.teachers ?? []).join(', ') || null, className: 'text-gray-600' },
           { key: 'students', header: 'Students', align: 'right', value: c => c.studentCount },
-          { key: 'revenue', header: 'Revenue', align: 'right', value: c => c.revenuePKR, cell: c => pkr(c.revenuePKR) },
-          { key: 'cost', header: 'Teacher cost', align: 'right', value: c => c.teacherCostPKR, cell: c => pkr(c.teacherCostPKR), className: 'text-gray-600' },
+          {
+            key: 'revenue', header: 'Revenue', align: 'right', value: c => c.revenuePKR,
+            cell: c => (
+              <>
+                {pkr(c.revenuePKR)}
+                {c.oneToOne && (
+                  <div className="text-xs font-normal text-gray-400" title="1-to-1: the invoice figure, whether or not it has been paid yet">
+                    {c.expectedRevenuePKR ? `invoice figure, ${pkr(c.expectedRevenuePKR)} expected` : 'invoice figure'}
+                  </div>
+                )}
+              </>
+            ),
+          },
+          {
+            key: 'cost', header: 'Teacher cost', align: 'right', value: c => c.teacherCostPKR, className: 'text-gray-600',
+            cell: c => (
+              <>
+                {pkr(c.teacherCostPKR)}
+                {!!c.expectedCostPKR && <div className="text-xs font-normal text-gray-400">{pkr(c.expectedCostPKR)} expected</div>}
+              </>
+            ),
+          },
           { key: 'profit', header: 'Profit', align: 'right', value: c => c.profitPKR, cell: c => pkr(c.profitPKR), className: c => `font-medium ${c.profitPKR >= 0 ? 'text-green-700' : 'text-red-600'}` },
           { key: 'margin', header: 'Margin', align: 'right', value: c => c.marginPercent, cell: c => `${c.marginPercent.toFixed(1)}%`, className: c => (c.marginPercent >= 0 ? 'text-gray-900' : 'text-red-600') },
         ]}

@@ -11,7 +11,8 @@ import { eq, and, gte, lte, sql, desc, SQL } from 'drizzle-orm';
 import { AppError } from '../middleware/errorHandler';
 import { currencyService, CurrencyCode } from './currency.service';
 import logger from '../utils/logger';
-import { feeInBooks } from '../utils/booksStart';
+import { feeInBooks, booksStartDate } from '../utils/booksStart';
+import teacherOneToOneRates from '../config/teacherOneToOneRates.json';
 
 /**
  * Analytics Service
@@ -367,24 +368,7 @@ export const analyticsService = {
    */
   async getCourseProfitability(startDate: Date, endDate: Date) {
     try {
-      const revenueRows = await this.db
-        .select({
-          courseId: fees.courseId,
-          courseTitle: courses.title,
-          revenuePKR: sumInPkr(payments.amount, fees.currency),
-          studentCount: sql<number>`COUNT(DISTINCT ${fees.studentId})::int`,
-        })
-        .from(payments)
-        .innerJoin(fees, eq(payments.feeId, fees.id))
-        .innerJoin(courses, eq(fees.courseId, courses.id))
-        .where(
-          and(
-            gte(payments.paymentDate, startDate),
-            lte(payments.paymentDate, endDate),
-            feeInBooks(this.db)
-          )
-        )
-        .groupBy(fees.courseId, courses.title);
+      const revenueRows = await this.courseRevenueRows(startDate, endDate);
 
       // Only the latest version of each teacher invoice, otherwise regenerated
       // invoices would be counted more than once.
@@ -447,12 +431,16 @@ export const analyticsService = {
 
       return revenueRows
         .map(r => {
-          const teacherCostPKR = costByCourse.get(r.courseId) ?? 0;
+          // 1-to-1, current month not counted yet: the teacher's pay is expected too
+          const teacherCostPKR = (costByCourse.get(r.courseId) ?? 0) + r.expectedCostPKR;
           const profitPKR = r.revenuePKR - teacherCostPKR;
           return {
             courseId: r.courseId,
             courseTitle: r.courseTitle,
             teachers: teaching.filter(t => t.courseId === r.courseId).map(t => t.name),
+            oneToOne: r.oneToOne, // revenue is the invoice figure, not money collected
+            expectedRevenuePKR: r.expectedRevenuePKR, // part of revenue that is this month's expected invoice
+            expectedCostPKR: r.expectedCostPKR,
             revenuePKR: r.revenuePKR,
             teacherCostPKR,
             profitPKR,
@@ -466,6 +454,156 @@ export const analyticsService = {
       logger.error('Error getting course profitability', { error: error.message });
       throw new AppError(500, 'Failed to fetch course profitability');
     }
+  },
+
+  /**
+   * Revenue per class for the profitability tables.
+   *
+   * Group classes: the money collected in the period (by payment date).
+   *
+   * 1-to-1 classes: the INVOICE figure instead (owner's rule). A 1-to-1 student is invoiced
+   * after the month's classes are counted, so money collected lags the teacher's pay and the
+   * class looked loss-making. For each month in the period the revenue is that month's
+   * invoice (classes taken x fee per class), paid or not. For the current month, while the
+   * classes are not counted yet, it is the expected invoice (expected classes x fee per
+   * class), and the teacher's pay for those classes is expected the same way
+   * (expectedCostPKR) unless the month's slip already has the class on it.
+   */
+  async courseRevenueRows(startDate: Date, endDate: Date) {
+    const collected = await this.db
+      .select({
+        courseId: fees.courseId,
+        courseTitle: courses.title,
+        revenuePKR: sumInPkr(payments.amount, fees.currency),
+        studentCount: sql<number>`COUNT(DISTINCT ${fees.studentId})::int`,
+      })
+      .from(payments)
+      .innerJoin(fees, eq(payments.feeId, fees.id))
+      .innerJoin(courses, eq(fees.courseId, courses.id))
+      .where(
+        and(
+          gte(payments.paymentDate, startDate),
+          lte(payments.paymentDate, endDate),
+          feeInBooks(this.db)
+        )
+      )
+      .groupBy(fees.courseId, courses.title);
+
+    const oneToOne = await this.db
+      .select({
+        enrollmentId: enrollments.id,
+        courseId: enrollments.courseId,
+        courseTitle: courses.title,
+        studentId: enrollments.studentId,
+        status: enrollments.status,
+        perSessionFee: enrollments.perSessionFee,
+        expectedClasses: enrollments.expectedClassesPerMonth,
+        currency: enrollments.currency,
+      })
+      .from(enrollments)
+      .innerJoin(courses, eq(enrollments.courseId, courses.id))
+      .where(eq(enrollments.classType, '1-to-1'));
+    const oneToOneCourses = new Set(oneToOne.map(e => e.courseId));
+
+    const rows = new Map<string, {
+      courseId: string; courseTitle: string; revenuePKR: number; studentCount: number;
+      oneToOne: boolean; expectedRevenuePKR: number; expectedCostPKR: number;
+    }>();
+    for (const row of collected) {
+      if (oneToOneCourses.has(row.courseId)) continue; // counted by invoice figure below
+      rows.set(row.courseId, { ...row, oneToOne: false, expectedRevenuePKR: 0, expectedCostPKR: 0 });
+    }
+    if (!oneToOne.length) return [...rows.values()];
+
+    // Months of the period, as year * 12 + month
+    const monthIndex = (date: Date) => date.getFullYear() * 12 + date.getMonth() + 1;
+    const [firstMonth, lastMonth] = [monthIndex(startDate), monthIndex(endDate)];
+    const [nowYear, nowMonth] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(new Date()).split('-').map(Number);
+    const thisMonth = nowYear * 12 + nowMonth;
+
+    // Each 1-to-1 enrolment's invoices in the period (owed fees only)
+    const invoiced = await this.db
+      .select({
+        enrollmentId: fees.enrollmentId,
+        monthIndex: sql<number>`(${fees.year} * 12 + ${fees.month})::int`,
+        amountPKR: sumInPkr(fees.amount, fees.currency),
+      })
+      .from(fees)
+      .innerJoin(enrollments, eq(fees.enrollmentId, enrollments.id))
+      .where(
+        and(
+          eq(enrollments.classType, '1-to-1'),
+          sql`${fees.status} IN ('received', 'pending', 'overdue')`,
+          sql`${fees.amount}::numeric > 0`,
+          sql`(${fees.year} * 12 + ${fees.month}) BETWEEN ${firstMonth} AND ${lastMonth}`,
+          feeInBooks(this.db)
+        )
+      )
+      .groupBy(fees.enrollmentId, sql`(${fees.year} * 12 + ${fees.month})`);
+
+    // Is the current month inside the period (and inside the books)? Then classes not yet
+    // counted are taken at their expected figure.
+    const booksStart = booksStartDate(this.db); // YYYY-MM-01, or null when there is no cut-off
+    const inBooks = !booksStart || `${nowYear}-${String(nowMonth).padStart(2, '0')}-01` >= booksStart;
+    const expectThisMonth = thisMonth >= firstMonth && thisMonth <= lastMonth && inBooks;
+
+    // Classes already on this month's slip, and teachers on a salary (no pay per class)
+    const onSlip = new Set<string>();
+    const salaried = new Set<string>();
+    let teaching: Awaited<ReturnType<typeof this.teachersByCourse>> = [];
+    if (expectThisMonth) {
+      const slipLines = await this.db
+        .selectDistinct({ courseId: invoiceLineItems.courseId })
+        .from(invoiceLineItems)
+        .innerJoin(invoices, eq(invoiceLineItems.invoiceId, invoices.id))
+        .where(and(eq(invoices.type, 'teacher'), eq(invoices.isLatest, true), eq(invoices.year, nowYear), eq(invoices.month, nowMonth)));
+      for (const line of slipLines) if (line.courseId) onSlip.add(line.courseId);
+      const salariedTeachers = await this.db
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.role, 'teacher'), eq(users.teacherPaymentType, 'salaried')));
+      for (const teacher of salariedTeachers) salaried.add(teacher.id);
+      teaching = await this.teachersByCourse();
+    }
+
+    const students = new Map<string, Set<string>>();
+    for (const enrollment of oneToOne) {
+      const months = invoiced.filter(f => f.enrollmentId === enrollment.enrollmentId);
+      let revenue = months.reduce((sum, f) => sum + f.amountPKR, 0);
+      let expectedRevenue = 0;
+      let expectedCost = 0;
+
+      const countedThisMonth = months.some(f => f.monthIndex === thisMonth);
+      const perSession = parseFloat(enrollment.perSessionFee || '0');
+      if (expectThisMonth && !countedThisMonth && enrollment.status === 'active' && perSession > 0 && enrollment.expectedClasses) {
+        expectedRevenue = perSession * enrollment.expectedClasses * (currencyService.getExchangeRate(enrollment.currency as CurrencyCode)?.rateToPKR ?? 1);
+        revenue += expectedRevenue;
+        // The teacher is paid per class taken: expect the same number of classes, unless the
+        // month's slip already has this class, or the teacher is on a fixed salary
+        const teacher = teaching.find(t => t.courseId === enrollment.courseId);
+        if (teacher && !salaried.has(teacher.teacherId) && !onSlip.has(enrollment.courseId)) {
+          const rate = (teacherOneToOneRates as Record<string, number>)[teacher.teacherId] ?? teacherOneToOneRates.default;
+          if (Number.isFinite(rate)) expectedCost = rate * enrollment.expectedClasses;
+        }
+      }
+      if (revenue === 0) continue;
+
+      const row = rows.get(enrollment.courseId) ?? {
+        courseId: enrollment.courseId, courseTitle: enrollment.courseTitle, revenuePKR: 0, studentCount: 0,
+        oneToOne: true, expectedRevenuePKR: 0, expectedCostPKR: 0,
+      };
+      row.oneToOne = true;
+      row.revenuePKR += revenue;
+      row.expectedRevenuePKR += expectedRevenue;
+      row.expectedCostPKR += expectedCost;
+      const seen = students.get(enrollment.courseId) ?? new Set<string>();
+      seen.add(enrollment.studentId);
+      students.set(enrollment.courseId, seen);
+      row.studentCount = seen.size;
+      rows.set(enrollment.courseId, row);
+    }
+
+    return [...rows.values()];
   },
 
   /** Every teacher-class pairing, with the teacher's name */
@@ -491,22 +629,8 @@ export const analyticsService = {
    */
   async getTeacherProfitability(startDate: Date, endDate: Date) {
     try {
-      const revenueRows = await this.db
-        .select({
-          courseId: fees.courseId,
-          revenuePKR: sumInPkr(payments.amount, fees.currency),
-          studentCount: sql<number>`COUNT(DISTINCT ${fees.studentId})::int`,
-        })
-        .from(payments)
-        .innerJoin(fees, eq(payments.feeId, fees.id))
-        .where(
-          and(
-            gte(payments.paymentDate, startDate),
-            lte(payments.paymentDate, endDate),
-            feeInBooks(this.db)
-          )
-        )
-        .groupBy(fees.courseId);
+      // Same revenue as the course table (1-to-1 classes by invoice figure)
+      const revenueRows = await this.courseRevenueRows(startDate, endDate);
 
       // Slip totals (after any absence / late deductions), latest version of each month only
       const payRows = await this.db
@@ -557,6 +681,7 @@ export const analyticsService = {
           row.classCount += 1;
           row.studentCount += revenue.studentCount;
           row.revenuePKR += revenue.revenuePKR / sharers.length;
+          row.teacherCostPKR += revenue.expectedCostPKR / sharers.length; // 1-to-1 classes not on a slip yet
         }
       }
       for (const pay of payRows) {

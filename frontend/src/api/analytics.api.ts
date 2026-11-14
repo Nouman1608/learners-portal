@@ -120,6 +120,9 @@ export interface CourseProfitability {
   courseId: string;
   courseTitle: string;
   teachers?: string[];
+  oneToOne?: boolean; // 1-to-1 class: revenue is the invoice figure, not money collected
+  expectedRevenuePKR?: number; // part of revenue that is this month's expected invoice (classes not counted yet)
+  expectedCostPKR?: number; // teacher pay expected for those same classes
   revenuePKR: number;
   teacherCostPKR: number;
   profitPKR: number;
