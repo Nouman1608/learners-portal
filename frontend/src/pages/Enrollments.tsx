@@ -25,7 +25,8 @@ export default function Enrollments() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCourse, setFilterCourse] = useState<string>(searchParams.get('courseId') || '');
   const [filterTeacher, setFilterTeacher] = useState<string>('');
-  const [filterStudent, setFilterStudent] = useState<string>('');
+  // ?studentId= comes from the dashboard's fee overview (click a student's name there)
+  const [filterStudent, setFilterStudent] = useState<string>(searchParams.get('studentId') || '');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showForm, setShowForm] = useState(false);
   const [enrollmentToDrop, setEnrollmentToDrop] = useState<Enrollment | null>(null);

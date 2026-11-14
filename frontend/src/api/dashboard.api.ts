@@ -67,6 +67,23 @@ export interface TeacherFeeOverview extends Omit<ClassFeeOverview, 'courseId' | 
   classes: ClassFeeOverview[];
 }
 
+/** Which number of the fee overview was clicked */
+export type FeeOverviewStatus = 'total' | 'enrolled' | 'paid' | 'pending' | 'overdue' | 'nofee';
+
+/** One student in one class, behind a number of the fee overview */
+export interface FeeOverviewStudent {
+  studentId: string;
+  firstName: string;
+  lastName: string;
+  courseId: string;
+  classTitle: string;
+  amount: string | null; // null = no fee owed that month
+  currency: string | null;
+  feeStatus: 'received' | 'pending' | 'overdue' | null;
+  dueDate: string | null;
+  campus?: 'senior' | 'junior';
+}
+
 /** Sudo: one month's fees overall and per teacher's class */
 export interface FeeOverview {
   month: number;
@@ -91,7 +108,15 @@ export const dashboardApi = {
     return response.data;
   },
 
-  /** Sudo only. Leave month/year out for the current month. */
+  /** The students behind one number of the fee overview (a teacher's / class's, or one of the four boxes) */
+  async getFeeOverviewStudents(params: {
+    month: number; year: number; status: FeeOverviewStatus; campus: Campus; teacherId?: string; courseId?: string;
+  }): Promise<FeeOverviewStudent[]> {
+    const response = await apiClient.get('/dashboard/fee-overview/students', { params });
+    return response.data.students;
+  },
+
+  /** Admins and sudo. Leave month/year out for the current month. */
   async getFeeOverview(campus: Campus = 'senior', month?: number, year?: number): Promise<FeeOverview> {
     const response = await apiClient.get('/dashboard/fee-overview', {
       params: { ...(campus === 'senior' ? {} : { campus }), ...(month && year ? { month, year } : {}) },

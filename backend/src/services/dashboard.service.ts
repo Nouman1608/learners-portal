@@ -64,6 +64,23 @@ export interface FeeOverview {
   teachers: TeacherFeeOverview[];
 }
 
+/** Which number of the fee overview was clicked */
+export type FeeOverviewStatus = 'total' | 'enrolled' | 'paid' | 'pending' | 'overdue' | 'nofee';
+
+/** One student in one class, behind a number of the fee overview */
+export interface FeeOverviewStudent {
+  studentId: string;
+  firstName: string;
+  lastName: string;
+  courseId: string;
+  classTitle: string;
+  amount: string | null; // null = no fee owed that month
+  currency: string | null;
+  feeStatus: 'received' | 'pending' | 'overdue' | null;
+  dueDate: string | null;
+  campus?: 'senior' | 'junior';
+}
+
 export interface RoleSpecificStats {
   student?: {
     myEnrollments: number;
@@ -365,6 +382,76 @@ export const dashboardService = {
       overdue: group(totals?.overdue || 0, 'overdue'),
       teachers: [...teachers.values()],
     };
+  },
+
+  /**
+   * The students behind one number of the fee overview.
+   *  - With a teacher (and optionally one class): the students enrolled now in that
+   *    teacher's classes, filtered by where their fee for the month stands
+   *    ('enrolled' = all of them, 'nofee' = enrolled but nothing owed that month).
+   *  - Without a teacher (the four boxes at the top): the month's fees of the students in
+   *    that group, using the same once-per-student rule as the counts.
+   * One line per student and class.
+   */
+  async getFeeOverviewStudents(
+    filter: { month: number; year: number; status: FeeOverviewStatus; teacherId?: string; courseId?: string },
+    database: Database = db,
+  ): Promise<FeeOverviewStudent[]> {
+    const { month, year, status } = filter;
+    const owed = sql`f.status IN ('received', 'pending', 'overdue') AND f.amount::numeric > 0
+      AND f.month = ${month} AND f.year = ${year}`;
+    const columns = sql`
+      u.id AS "studentId", u.first_name AS "firstName", u.last_name AS "lastName",
+      c.id AS "courseId", c.title AS "classTitle",
+      f.amount, COALESCE(f.currency, 'PKR') AS currency, f.status AS "feeStatus",
+      to_char(f.due_date, 'YYYY-MM-DD') AS "dueDate"`; // as text, so no time-zone shift on the way out
+
+    if (filter.teacherId) {
+      const wanted = {
+        enrolled: sql`true`,
+        total: sql`true`,
+        paid: sql`f.status = 'received'`,
+        pending: sql`f.status = 'pending'`,
+        overdue: sql`f.status = 'overdue'`,
+        nofee: sql`f.id IS NULL`,
+      }[status];
+      return (await database.execute(sql`
+        SELECT ${columns}
+        FROM course_teachers ct
+        INNER JOIN courses c ON c.id = ct.course_id AND c.is_active = true
+        INNER JOIN enrollments e ON e.course_id = c.id AND e.status = 'active'
+        INNER JOIN users u ON u.id = e.student_id
+        LEFT JOIN fees f ON f.enrollment_id = e.id AND ${owed}
+        WHERE ct.teacher_id = ${filter.teacherId}
+          AND ${filter.courseId ? sql`c.id = ${filter.courseId}` : sql`true`}
+          AND ${wanted}
+        ORDER BY u.first_name, u.last_name, c.title`)).rows as unknown as FeeOverviewStudent[];
+    }
+
+    // The boxes at the top: a student is overdue if any fee is overdue, else pending, else paid
+    const group = {
+      enrolled: sql`true`,
+      total: sql`true`,
+      nofee: sql`false`,
+      overdue: sql`s.has_overdue`,
+      pending: sql`NOT s.has_overdue AND s.has_pending`,
+      paid: sql`NOT s.has_overdue AND NOT s.has_pending`,
+    }[status];
+    return (await database.execute(sql`
+      WITH per_student AS (
+        SELECT f.student_id,
+               bool_or(f.status = 'overdue') AS has_overdue,
+               bool_or(f.status = 'pending') AS has_pending
+        FROM fees f WHERE ${owed}
+        GROUP BY f.student_id
+      )
+      SELECT ${columns}
+      FROM fees f
+      INNER JOIN per_student s ON s.student_id = f.student_id
+      INNER JOIN users u ON u.id = f.student_id
+      INNER JOIN courses c ON c.id = f.course_id
+      WHERE ${owed} AND ${group}
+      ORDER BY u.first_name, u.last_name, c.title`)).rows as unknown as FeeOverviewStudent[];
   },
 
   /**

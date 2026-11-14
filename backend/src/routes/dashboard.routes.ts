@@ -13,5 +13,7 @@ router.get('/stats', dashboardController.getStats);
 
 // One month's fees at a glance, overall and per teacher's class (admins and sudo)
 router.get('/fee-overview', requireAdmin, dashboardController.getFeeOverview);
+// The students behind one number of that overview
+router.get('/fee-overview/students', requireAdmin, dashboardController.getFeeOverviewStudents);
 
 export default router;

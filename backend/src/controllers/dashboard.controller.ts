@@ -1,7 +1,43 @@
 import { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { dashboardService, FeeGroup } from '../services/dashboard.service';
 import { juniorDb } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+
+const feeOverviewStudentsQuery = z.object({
+  month: z.coerce.number().int().min(1).max(12),
+  year: z.coerce.number().int().min(2020).max(2100),
+  status: z.enum(['total', 'enrolled', 'paid', 'pending', 'overdue', 'nofee']),
+  teacherId: z.string().uuid().optional(),
+  courseId: z.string().uuid().optional(),
+  campus: z.enum(['senior', 'junior', 'both']).default('senior'),
+});
+
+/**
+ * GET /api/dashboard/fee-overview/students — the students behind one number of the overview
+ * (admins and sudo; other campuses sudo only). With teacherId (and courseId) it is that
+ * teacher's enrolled students; without, it is one of the month's four boxes.
+ */
+export const getFeeOverviewStudents = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = feeOverviewStudentsQuery.safeParse(req.query);
+    if (!parsed.success) throw new AppError(400, 'Invalid request');
+    const { campus, ...filter } = parsed.data;
+
+    if (campus === 'senior') {
+      return res.json({ students: await dashboardService.getFeeOverviewStudents(filter) });
+    }
+    if (req.user!.role !== 'sudo') throw new AppError(403, 'Only sudo can view other campuses');
+    if (!juniorDb) throw new AppError(400, 'Junior Campus is not connected to this portal');
+
+    const junior = (await dashboardService.getFeeOverviewStudents(filter, juniorDb)).map((s) => ({ ...s, campus: 'junior' as const }));
+    if (campus === 'junior') return res.json({ students: junior });
+    const senior = (await dashboardService.getFeeOverviewStudents(filter)).map((s) => ({ ...s, campus: 'senior' as const }));
+    res.json({ students: [...senior, ...junior] });
+  } catch (error) {
+    next(error);
+  }
+};
 
 /**
  * GET /api/dashboard/fee-overview?month=&year=&campus= (admins and sudo; other campuses sudo only)
