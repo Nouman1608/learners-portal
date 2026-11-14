@@ -1,7 +1,9 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, XMarkIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
+import MarkAsReceivedModal from '../fees/MarkAsReceivedModal';
+import { Fee } from '../../api/enrollments.api';
 import { dashboardApi, Campus, FeeGroup, FeeOverview, FeeOverviewStatus, FeeOverviewStudent } from '../../api/dashboard.api';
 import { terms, isJuniorPortal } from '../../brand';
 
@@ -45,6 +47,9 @@ export default function FeeOverviewPanel({ campus }: { campus: Campus }) {
 
   const [drill, setDrill] = useState<Drill | null>(null);
   const [students, setStudents] = useState<FeeOverviewStudent[] | null>(null);
+  // The fee being marked as paid from the list (same pop-up as the Fees page)
+  const [feeToMark, setFeeToMark] = useState<Fee | null>(null);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     const seq = ++requestSeq.current;
@@ -53,18 +58,46 @@ export default function FeeOverviewPanel({ campus }: { campus: Campus }) {
       .then((result) => { if (seq === requestSeq.current) setData(result); })
       .catch(() => { if (seq === requestSeq.current) toast.error('Failed to load the fee overview'); })
       .finally(() => { if (seq === requestSeq.current) setLoading(false); });
-  }, [campus, period]);
+  }, [campus, period, reload]);
+
+  const loadStudents = (of: Drill) => {
+    if (!data) return;
+    dashboardApi.getFeeOverviewStudents({
+      month: data.month, year: data.year, status: of.status, campus: of.campus,
+      teacherId: of.teacherId, courseId: of.courseId,
+    })
+      .then(setStudents)
+      .catch(() => { toast.error('Failed to load the students'); setDrill(null); });
+  };
 
   const openDrill = (next: Drill) => {
     if (!data) return;
     setDrill(next);
     setStudents(null);
-    dashboardApi.getFeeOverviewStudents({
-      month: data.month, year: data.year, status: next.status, campus: next.campus,
-      teacherId: next.teacherId, courseId: next.courseId,
-    })
-      .then(setStudents)
-      .catch(() => { toast.error('Failed to load the students'); setDrill(null); });
+    loadStudents(next);
+  };
+
+  // "Mark paid" on a pending / overdue line: the Fees page's pop-up asks how it was paid
+  const markPaid = (s: FeeOverviewStudent) => {
+    if (!data || !s.feeId || !s.amount) return;
+    setFeeToMark({
+      id: s.feeId,
+      studentId: s.studentId,
+      courseId: s.courseId,
+      month: data.month,
+      year: data.year,
+      amount: s.amount,
+      currency: s.currency || 'PKR',
+      status: s.feeStatus,
+      student: { id: s.studentId, firstName: s.firstName, lastName: s.lastName },
+      course: { id: s.courseId, title: s.classTitle },
+    } as unknown as Fee);
+  };
+
+  // After a fee is marked paid: refresh the open list and the numbers behind it
+  const afterPaid = () => {
+    if (drill) loadStudents(drill);
+    setReload((n) => n + 1);
   };
 
   const step = (by: number) => {
@@ -266,7 +299,8 @@ export default function FeeOverviewPanel({ campus }: { campus: Campus }) {
                       <th className="px-3 py-2 text-left font-medium">{terms.course}</th>
                       <th className="px-3 py-2 text-right font-medium">Fee</th>
                       <th className="px-3 py-2 text-left font-medium">Due date</th>
-                      <th className="px-5 py-2 text-left font-medium">Status</th>
+                      <th className="px-3 py-2 text-left font-medium">Status</th>
+                      <th className="px-5 py-2 text-right font-medium">Paid?</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -295,13 +329,27 @@ export default function FeeOverviewPanel({ campus }: { campus: Campus }) {
                             {s.amount ? `${SYMBOLS[s.currency || 'PKR'] || s.currency} ${Math.round(parseFloat(s.amount)).toLocaleString()}` : '-'}
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 text-gray-600">{formatDue(s.dueDate)}</td>
-                          <td className="px-5 py-2">
+                          <td className="px-3 py-2">
                             {s.feeStatus ? (
                               <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${FEE_BADGE[s.feeStatus]}`}>
                                 {s.feeStatus === 'received' ? 'paid' : s.feeStatus}
                               </span>
                             ) : (
                               <span className="text-xs text-gray-400">no fee</span>
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-5 py-2 text-right">
+                            {/* Pending / overdue fees of this portal's own students can be marked paid here */}
+                            {(s.feeStatus === 'pending' || s.feeStatus === 'overdue') && s.feeId && !otherPortal && (
+                              <button
+                                type="button"
+                                onClick={() => markPaid(s)}
+                                className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                                title="The student has paid: record how, and mark this fee as received"
+                              >
+                                <CheckCircleIcon className="h-4 w-4" />
+                                Mark paid
+                              </button>
                             )}
                           </td>
                         </tr>
@@ -313,9 +361,21 @@ export default function FeeOverviewPanel({ campus }: { campus: Campus }) {
             </div>
             <p className="border-t px-5 py-3 text-xs text-gray-500">
               Click a student's name to open their enrollment in that class, where you can drop them or change the fee.
+              "Mark paid" records the payment exactly as the Fees page does.
             </p>
           </div>
         </div>
+      )}
+
+      {/* Same pop-up as the Fees page: online or cash, and the serial number for cash */}
+      {feeToMark && (
+        <MarkAsReceivedModal
+          isOpen
+          isBulk={false}
+          fees={[feeToMark]}
+          onClose={() => setFeeToMark(null)}
+          onSuccess={afterPaid}
+        />
       )}
     </div>
   );

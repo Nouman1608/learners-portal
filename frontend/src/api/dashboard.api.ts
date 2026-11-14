@@ -77,6 +77,7 @@ export interface FeeOverviewStudent {
   lastName: string;
   courseId: string;
   classTitle: string;
+  feeId: string | null; // the month's fee, for marking it as received
   amount: string | null; // null = no fee owed that month
   currency: string | null;
   feeStatus: 'received' | 'pending' | 'overdue' | null;

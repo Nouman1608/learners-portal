@@ -74,6 +74,7 @@ export interface FeeOverviewStudent {
   lastName: string;
   courseId: string;
   classTitle: string;
+  feeId: string | null; // the month's fee, for marking it as received
   amount: string | null; // null = no fee owed that month
   currency: string | null;
   feeStatus: 'received' | 'pending' | 'overdue' | null;
@@ -403,7 +404,7 @@ export const dashboardService = {
     const columns = sql`
       u.id AS "studentId", u.first_name AS "firstName", u.last_name AS "lastName",
       c.id AS "courseId", c.title AS "classTitle",
-      f.amount, COALESCE(f.currency, 'PKR') AS currency, f.status AS "feeStatus",
+      f.id AS "feeId", f.amount, COALESCE(f.currency, 'PKR') AS currency, f.status AS "feeStatus",
       to_char(f.due_date, 'YYYY-MM-DD') AS "dueDate"`; // as text, so no time-zone shift on the way out
 
     if (filter.teacherId) {
