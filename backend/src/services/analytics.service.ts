@@ -399,6 +399,8 @@ export const analyticsService = {
           and(
             eq(invoices.type, 'teacher'),
             eq(invoices.isLatest, true),
+            // Fees before the books start are left out, so the slips for those months are too
+            feeInBooks(this.db, invoices.year, invoices.month),
             gte(sql`MAKE_DATE(${invoices.year}, ${invoices.month}, 1)`, sql`${startDate.toISOString().split('T')[0]}::date`),
             lte(sql`MAKE_DATE(${invoices.year}, ${invoices.month}, 1)`, sql`${endDate.toISOString().split('T')[0]}::date`)
           )
@@ -426,6 +428,8 @@ export const analyticsService = {
           and(
             eq(invoices.type, 'teacher'),
             eq(invoices.isLatest, true),
+            // Fees before the books start are left out, so the slips for those months are too
+            feeInBooks(this.db, invoices.year, invoices.month),
             sql`${invoiceLineItems.courseId} IS NULL`,
             gte(sql`MAKE_DATE(${invoices.year}, ${invoices.month}, 1)`, sql`${startDate.toISOString().split('T')[0]}::date`),
             lte(sql`MAKE_DATE(${invoices.year}, ${invoices.month}, 1)`, sql`${endDate.toISOString().split('T')[0]}::date`)
@@ -519,6 +523,8 @@ export const analyticsService = {
           and(
             eq(invoices.type, 'teacher'),
             eq(invoices.isLatest, true),
+            // Fees before the books start are left out, so the slips for those months are too
+            feeInBooks(this.db, invoices.year, invoices.month),
             gte(sql`MAKE_DATE(${invoices.year}, ${invoices.month}, 1)`, sql`${startDate.toISOString().split('T')[0]}::date`),
             lte(sql`MAKE_DATE(${invoices.year}, ${invoices.month}, 1)`, sql`${endDate.toISOString().split('T')[0]}::date`)
           )
