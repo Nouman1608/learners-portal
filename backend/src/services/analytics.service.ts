@@ -441,6 +441,10 @@ export const analyticsService = {
             oneToOne: r.oneToOne, // revenue is the invoice figure, not money collected
             expectedRevenuePKR: r.expectedRevenuePKR, // part of revenue that is this month's expected invoice
             expectedCostPKR: r.expectedCostPKR,
+            // What the class would make if every fee billed for the period were paid.
+            // Money collected for other months can exceed what was billed, so never below profit.
+            billedPKR: Math.max(r.billedPKR, r.revenuePKR),
+            profitIfAllPaidPKR: Math.max(r.billedPKR, r.revenuePKR) - teacherCostPKR,
             revenuePKR: r.revenuePKR,
             teacherCostPKR,
             profitPKR,
@@ -505,19 +509,52 @@ export const analyticsService = {
       .where(eq(enrollments.classType, '1-to-1'));
     const oneToOneCourses = new Set(oneToOne.map(e => e.courseId));
 
-    const rows = new Map<string, {
-      courseId: string; courseTitle: string; revenuePKR: number; studentCount: number;
-      oneToOne: boolean; expectedRevenuePKR: number; expectedCostPKR: number;
-    }>();
-    for (const row of collected) {
-      if (oneToOneCourses.has(row.courseId)) continue; // counted by invoice figure below
-      rows.set(row.courseId, { ...row, oneToOne: false, expectedRevenuePKR: 0, expectedCostPKR: 0 });
-    }
-    if (!oneToOne.length) return [...rows.values()];
-
     // Months of the period, as year * 12 + month
     const monthIndex = (date: Date) => date.getFullYear() * 12 + date.getMonth() + 1;
     const [firstMonth, lastMonth] = [monthIndex(startDate), monthIndex(endDate)];
+
+    // What each class was billed for the months of the period, paid or not ("if all paid").
+    // Dropped / on-leave fees and 0 placeholders are not owed.
+    const billed = await this.db
+      .select({
+        courseId: fees.courseId,
+        courseTitle: courses.title,
+        billedPKR: sumInPkr(fees.amount, fees.currency),
+        studentCount: sql<number>`COUNT(DISTINCT ${fees.studentId})::int`,
+      })
+      .from(fees)
+      .innerJoin(courses, eq(fees.courseId, courses.id))
+      .where(
+        and(
+          sql`${fees.status} IN ('received', 'pending', 'overdue')`,
+          sql`${fees.amount}::numeric > 0`,
+          sql`(${fees.year} * 12 + ${fees.month}) BETWEEN ${firstMonth} AND ${lastMonth}`,
+          feeInBooks(this.db)
+        )
+      )
+      .groupBy(fees.courseId, courses.title);
+
+    const rows = new Map<string, {
+      courseId: string; courseTitle: string; revenuePKR: number; studentCount: number;
+      oneToOne: boolean; expectedRevenuePKR: number; expectedCostPKR: number;
+      billedPKR: number; // group classes: fees billed; 1-to-1: the same invoice figure as revenue
+    }>();
+    for (const row of collected) {
+      if (oneToOneCourses.has(row.courseId)) continue; // counted by invoice figure below
+      rows.set(row.courseId, { ...row, oneToOne: false, expectedRevenuePKR: 0, expectedCostPKR: 0, billedPKR: 0 });
+    }
+    // A group class that was billed but has collected nothing yet still belongs in the table
+    for (const row of billed) {
+      if (oneToOneCourses.has(row.courseId)) continue;
+      const existing = rows.get(row.courseId);
+      if (existing) existing.billedPKR = row.billedPKR;
+      else rows.set(row.courseId, {
+        courseId: row.courseId, courseTitle: row.courseTitle, revenuePKR: 0, studentCount: row.studentCount,
+        oneToOne: false, expectedRevenuePKR: 0, expectedCostPKR: 0, billedPKR: row.billedPKR,
+      });
+    }
+    if (!oneToOne.length) return [...rows.values()];
+
     const [nowYear, nowMonth] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(new Date()).split('-').map(Number);
     const thisMonth = nowYear * 12 + nowMonth;
 
@@ -590,10 +627,11 @@ export const analyticsService = {
 
       const row = rows.get(enrollment.courseId) ?? {
         courseId: enrollment.courseId, courseTitle: enrollment.courseTitle, revenuePKR: 0, studentCount: 0,
-        oneToOne: true, expectedRevenuePKR: 0, expectedCostPKR: 0,
+        oneToOne: true, expectedRevenuePKR: 0, expectedCostPKR: 0, billedPKR: 0,
       };
       row.oneToOne = true;
       row.revenuePKR += revenue;
+      row.billedPKR += revenue; // already the invoice figure, paid or not
       row.expectedRevenuePKR += expectedRevenue;
       row.expectedCostPKR += expectedCost;
       const seen = students.get(enrollment.courseId) ?? new Set<string>();

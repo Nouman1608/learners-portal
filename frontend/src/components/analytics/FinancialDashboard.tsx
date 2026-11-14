@@ -106,6 +106,8 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
         { header: 'Revenue (PKR)', value: c => Math.round(c.revenuePKR) },
         { header: 'Teacher cost (PKR)', value: c => Math.round(c.teacherCostPKR) },
         { header: 'Profit (PKR)', value: c => Math.round(c.profitPKR) },
+        { header: 'Billed (PKR)', value: c => Math.round(c.billedPKR ?? c.revenuePKR) },
+        { header: 'Profit if all paid (PKR)', value: c => Math.round(c.profitIfAllPaidPKR ?? c.profitPKR) },
         { header: 'Margin %', value: c => c.marginPercent.toFixed(1) },
         { header: 'Revenue per student (PKR)', value: c => Math.round(c.revenuePerStudentPKR) },
       ]
@@ -287,7 +289,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
       {/* Course profitability: sort by any heading, search a class or teacher, filter */}
       <AnalyticsTable<CourseProfitability>
         title={`${terms.course} profitability`}
-        description="Revenue less teacher pay for the same period, converted to PKR. Group classes count the money collected; 1-to-1 classes count the invoice figure (classes taken x fee per class, or the expected figure for this month until the classes are counted). A fixed monthly salary is split equally between that teacher's classes."
+        description="Revenue less teacher pay for the same period, converted to PKR. Group classes count the money collected; 1-to-1 classes count the invoice figure (classes taken x fee per class, or the expected figure for this month until the classes are counted). A fixed monthly salary is split equally between that teacher's classes. 'If all paid' is the profit once every fee billed for these months is received."
         rows={courseProfitability}
         rowKey={(c, i) => `${c.courseId}-${i}`}
         searchPlaceholder={`Search ${terms.courseLc} or teacher...`}
@@ -297,6 +299,8 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
           { label: 'All results', options: [
             { label: 'Making a profit', test: c => c.profitPKR > 0 },
             { label: 'Making a loss', test: c => c.profitPKR < 0 },
+            { label: 'A loss even if all paid', test: c => (c.profitIfAllPaidPKR ?? c.profitPKR) < 0 },
+            { label: 'Has unpaid fees', test: c => (c.billedPKR ?? c.revenuePKR) - c.revenuePKR > 0.5 },
             { label: 'No teacher cost', test: c => c.teacherCostPKR === 0 },
           ] },
           { label: 'Group and 1-to-1', options: [
@@ -332,6 +336,20 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
             ),
           },
           { key: 'profit', header: 'Profit', align: 'right', value: c => c.profitPKR, cell: c => pkr(c.profitPKR), className: c => `font-medium ${c.profitPKR >= 0 ? 'text-green-700' : 'text-red-600'}` },
+          {
+            // The profit once every fee billed for the period is paid
+            key: 'ifAllPaid', header: 'If all paid', align: 'right', value: c => c.profitIfAllPaidPKR ?? c.profitPKR,
+            className: c => ((c.profitIfAllPaidPKR ?? c.profitPKR) >= 0 ? 'text-green-700' : 'text-red-600'),
+            cell: c => {
+              const unpaid = (c.billedPKR ?? c.revenuePKR) - c.revenuePKR;
+              return (
+                <>
+                  {pkr(c.profitIfAllPaidPKR ?? c.profitPKR)}
+                  {unpaid > 0.5 && <div className="text-xs font-normal text-gray-400">{pkr(unpaid)} unpaid</div>}
+                </>
+              );
+            },
+          },
           { key: 'margin', header: 'Margin', align: 'right', value: c => c.marginPercent, cell: c => `${c.marginPercent.toFixed(1)}%`, className: c => (c.marginPercent >= 0 ? 'text-gray-900' : 'text-red-600') },
         ]}
         footer={shown => (
@@ -341,6 +359,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
             <td className="px-6 py-3 text-right whitespace-nowrap">{pkr(shown.reduce((s, c) => s + c.revenuePKR, 0))}</td>
             <td className="px-6 py-3 text-right whitespace-nowrap">{pkr(shown.reduce((s, c) => s + c.teacherCostPKR, 0))}</td>
             <td className="px-6 py-3 text-right whitespace-nowrap">{pkr(shown.reduce((s, c) => s + c.profitPKR, 0))}</td>
+            <td className="px-6 py-3 text-right whitespace-nowrap">{pkr(shown.reduce((s, c) => s + (c.profitIfAllPaidPKR ?? c.profitPKR), 0))}</td>
             <td className="px-6 py-3" />
           </tr>
         )}
