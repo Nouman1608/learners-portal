@@ -350,6 +350,8 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
       <AnalyticsTable<CourseProfitability>
         title={`${terms.course} profitability${monthLabel ? ` · ${monthLabel}` : ''}`}
         actions={monthFilter}
+        exportSum={['students', 'revenue', 'invoiced', 'notInvoiced', 'paid', 'notReceived', 'cost', 'profit', 'soFar']}
+        exportNote={monthLabel ? `Month: ${monthLabel}` : `Period: ${comparison.period.start.slice(0, 7)} to ${comparison.period.end.slice(0, 7)}`}
         description="Revenue is what the class brings in when every student has paid: Invoiced (fee date has arrived) plus Not invoiced (fee dated later, or 1-to-1 classes not counted yet). Invoiced is Paid plus Not received. Teacher cost is the expected salary slip; a fixed monthly salary is split equally between that teacher's classes. All in PKR."
         rows={courseProfitability}
         rowKey={(c, i) => `${c.courseId}-${i}`}
@@ -416,6 +418,8 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
       <AnalyticsTable<TeacherProfitability>
         title={`Teacher profitability${monthLabel ? ` · ${monthLabel}` : ''}`}
         actions={monthFilter}
+        exportSum={['classes', 'students', 'revenue', 'invoiced', 'notInvoiced', 'paid', 'notReceived', 'cost', 'profit', 'soFar', 'slips']}
+        exportNote={monthLabel ? `Month: ${monthLabel}` : `Period: ${comparison.period.start.slice(0, 7)} to ${comparison.period.end.slice(0, 7)}`}
         description="The same figures per teacher: the money from their classes against everything they are paid in the period. A class with two teachers is split equally between them."
         rows={teacherProfitability}
         rowKey={(t, i) => `${t.teacherId ?? 'none'}-${i}`}

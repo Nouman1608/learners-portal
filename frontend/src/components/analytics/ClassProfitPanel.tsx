@@ -135,6 +135,8 @@ export default function ClassProfitPanel({ campus }: { campus: 'senior' | 'junio
         searchPlaceholder={`Search ${terms.courseLc} or teacher...`}
         emptyText={loading ? 'Loading...' : `No fees or teacher pay for ${title}`}
         defaultSort={{ key: 'profit', direction: 'desc' }}
+        exportSum={['students', 'revenue', 'invoiced', 'notInvoiced', 'paid', 'notReceived', 'cost', 'profit', 'soFar']}
+        exportNote={`Month: ${title}`}
         actions={(
           <button onClick={handleExport} className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
             <ArrowDownTrayIcon className="mr-2 h-4 w-4" aria-hidden="true" />

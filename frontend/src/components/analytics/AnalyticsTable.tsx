@@ -1,5 +1,7 @@
 import { ReactNode, useMemo, useState } from 'react';
 import { ChevronUpIcon, ChevronDownIcon, ChevronUpDownIcon } from '@heroicons/react/20/solid';
+import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { downloadXlsx } from '../../utils/xlsx';
 
 export interface TableColumn<T> {
   key: string;
@@ -31,6 +33,10 @@ interface AnalyticsTableProps<T> {
   /** A totals row for the rows currently shown */
   footer?: (rows: T[]) => ReactNode;
   defaultSort?: { key: string; direction: 'asc' | 'desc' };
+  /** Column keys to add up in the Excel file's bold totals row */
+  exportSum?: string[];
+  /** A line under the title in the Excel file, e.g. the period */
+  exportNote?: string;
 }
 
 /**
@@ -39,7 +45,7 @@ interface AnalyticsTableProps<T> {
  */
 export default function AnalyticsTable<T>({
   title, description, rows, columns, rowKey, searchPlaceholder = 'Search...', filters = [], emptyText = 'Nothing to show',
-  actions, footer, defaultSort,
+  actions, footer, defaultSort, exportSum, exportNote,
 }: AnalyticsTableProps<T>) {
   const [sort, setSort] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(defaultSort ?? null);
   const [search, setSearch] = useState('');
@@ -84,6 +90,29 @@ export default function AnalyticsTable<T>({
 
   const filtering = search.trim() !== '' || chosen.some((c) => c !== -1);
 
+  // Excel: exactly the rows on screen (after search and filters, in the current order)
+  const exportExcel = () => {
+    const applied = [
+      search.trim() && `search "${search.trim()}"`,
+      ...filters.map((filter, i) => filter.options[chosen[i]]?.label),
+    ].filter(Boolean);
+    const cells = (row: T) => columns.map((column) => {
+      const value = column.value(row);
+      return typeof value === 'number' ? Math.round(value * 100) / 100 : value;
+    });
+    downloadXlsx(`${title.replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim()} ${new Date().toISOString().split('T')[0]}`, {
+      sheetName: title,
+      title: [title, exportNote, applied.length ? `Filtered: ${applied.join(', ')}` : ''].filter((line): line is string => !!line),
+      headers: columns.map((column) => column.header),
+      rows: shown.map(cells),
+      totals: exportSum?.length
+        ? columns.map((column, index) => (exportSum.includes(column.key)
+            ? Math.round(shown.reduce((sum, row) => sum + (Number(column.value(row)) || 0), 0) * 100) / 100
+            : index === 0 ? `Total (${shown.length})` : null))
+        : undefined,
+    });
+  };
+
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-200">
@@ -92,7 +121,21 @@ export default function AnalyticsTable<T>({
             <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
             {description && <p className="mt-1 text-sm text-gray-500">{description}</p>}
           </div>
-          {actions}
+          <div className="flex flex-wrap items-center gap-2">
+            {actions}
+            {rows.length > 0 && (
+              <button
+                type="button"
+                onClick={exportExcel}
+                disabled={shown.length === 0}
+                title="Save the rows shown as an Excel file"
+                className="inline-flex items-center rounded-md border border-green-600 bg-white px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
+              >
+                <ArrowDownTrayIcon className="mr-2 h-4 w-4" aria-hidden="true" />
+                Excel
+              </button>
+            )}
+          </div>
         </div>
         {rows.length > 0 && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
