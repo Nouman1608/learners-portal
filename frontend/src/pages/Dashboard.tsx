@@ -6,6 +6,7 @@ import { brand, terms } from '../brand';
 import { authApi } from '../api/auth.api';
 import toast from 'react-hot-toast';
 import { StatCardSkeleton } from '../components/common/Skeleton';
+import FeeOverviewPanel from '../components/dashboard/FeeOverviewPanel';
 import {
   UserGroupIcon,
   AcademicCapIcon,
@@ -412,6 +413,9 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Sudo: this month's fees (paid / pending / overdue) and each teacher's classes */}
+        {user?.role === 'sudo' && <FeeOverviewPanel campus={juniorAvailable ? campus : 'senior'} />}
       </main>
     </div>
   );

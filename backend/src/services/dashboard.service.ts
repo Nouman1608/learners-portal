@@ -31,6 +31,39 @@ export interface DashboardStats {
   };
 }
 
+/** Students and fees in one state (all / paid / pending / overdue) for a month */
+export interface FeeGroup {
+  students: number;
+  fees: number;
+  amounts: CurrencyAmount[]; // per currency, never added across currencies
+}
+
+export interface ClassFeeOverview {
+  courseId: string;
+  title: string;
+  enrolled: number; // students enrolled in the class now
+  paid: number;
+  pending: number;
+  overdue: number;
+}
+
+export interface TeacherFeeOverview extends Omit<ClassFeeOverview, 'courseId' | 'title'> {
+  teacherId: string;
+  name: string;
+  campus?: 'senior' | 'junior'; // set when both campuses are shown together
+  classes: ClassFeeOverview[];
+}
+
+export interface FeeOverview {
+  month: number;
+  year: number;
+  total: FeeGroup;
+  paid: FeeGroup;
+  pending: FeeGroup;
+  overdue: FeeGroup;
+  teachers: TeacherFeeOverview[];
+}
+
 export interface RoleSpecificStats {
   student?: {
     myEnrollments: number;
@@ -245,6 +278,92 @@ export const dashboardService = {
         recentEnrollments: (senior.recentActivity?.recentEnrollments || 0) + (junior.recentActivity?.recentEnrollments || 0),
         recentFees: (senior.recentActivity?.recentFees || 0) + (junior.recentActivity?.recentFees || 0),
       },
+    };
+  },
+
+  /**
+   * Sudo overview of one month's fees:
+   *  - summary: how many students and fees there are that month, and how many are paid,
+   *    pending and overdue. A student counts as overdue if any of their fees is overdue,
+   *    else pending if any is pending, else paid.
+   *  - teachers: for each teacher's class, the students enrolled now and where each one's
+   *    fee for the month stands.
+   * Dropped / on-leave fees and zero-amount placeholders are not owed, so they are left out.
+   */
+  async getFeeOverview(month: number, year: number, database: Database = db): Promise<FeeOverview> {
+    const owed = sql`f.status IN ('received', 'pending', 'overdue') AND f.amount::numeric > 0
+      AND f.month = ${month} AND f.year = ${year}`;
+
+    const [totals] = (await database.execute(sql`
+      WITH per_student AS (
+        SELECT f.student_id,
+               bool_or(f.status = 'overdue') AS has_overdue,
+               bool_or(f.status = 'pending') AS has_pending
+        FROM fees f WHERE ${owed}
+        GROUP BY f.student_id
+      )
+      SELECT count(*)::int AS total,
+             count(*) FILTER (WHERE has_overdue)::int AS overdue,
+             count(*) FILTER (WHERE NOT has_overdue AND has_pending)::int AS pending,
+             count(*) FILTER (WHERE NOT has_overdue AND NOT has_pending)::int AS paid
+      FROM per_student`)).rows as any[];
+
+    const byStatus = (await database.execute(sql`
+      SELECT f.status, COALESCE(f.currency, 'PKR') AS currency,
+             count(*)::int AS fees, COALESCE(SUM(f.amount::numeric), 0)::text AS amount
+      FROM fees f WHERE ${owed}
+      GROUP BY f.status, COALESCE(f.currency, 'PKR')`)).rows as any[];
+
+    const feeCount = (status?: string) => byStatus
+      .filter((row) => !status || row.status === status)
+      .reduce((sum, row) => sum + row.fees, 0);
+    const amounts = (status?: string): CurrencyAmount[] => {
+      const perCurrency = new Map<string, number>();
+      for (const row of byStatus) {
+        if (!status || row.status === status) perCurrency.set(row.currency, (perCurrency.get(row.currency) || 0) + parseFloat(row.amount));
+      }
+      return [...perCurrency].map(([currency, amount]) => ({ currency, amount: amount.toFixed(2) }));
+    };
+    const group = (students: number, status?: string): FeeGroup => ({ students, fees: feeCount(status), amounts: amounts(status) });
+
+    // One row per teacher and class: students enrolled now, and each one's fee for the month
+    const classRows = (await database.execute(sql`
+      SELECT ct.teacher_id AS "teacherId", u.first_name AS "firstName", u.last_name AS "lastName",
+             c.id AS "courseId", c.title,
+             count(e.id)::int AS enrolled,
+             count(f.id) FILTER (WHERE f.status = 'received')::int AS paid,
+             count(f.id) FILTER (WHERE f.status = 'pending')::int AS pending,
+             count(f.id) FILTER (WHERE f.status = 'overdue')::int AS overdue
+      FROM course_teachers ct
+      INNER JOIN users u ON u.id = ct.teacher_id AND u.is_active = true
+      INNER JOIN courses c ON c.id = ct.course_id AND c.is_active = true
+      INNER JOIN enrollments e ON e.course_id = c.id AND e.status = 'active'
+      LEFT JOIN fees f ON f.enrollment_id = e.id AND ${owed}
+      GROUP BY ct.teacher_id, u.first_name, u.last_name, c.id, c.title
+      ORDER BY u.first_name, u.last_name, c.title`)).rows as any[];
+
+    const teachers = new Map<string, TeacherFeeOverview>();
+    for (const row of classRows) {
+      let teacher = teachers.get(row.teacherId);
+      if (!teacher) {
+        teacher = { teacherId: row.teacherId, name: `${row.firstName} ${row.lastName}`, enrolled: 0, paid: 0, pending: 0, overdue: 0, classes: [] };
+        teachers.set(row.teacherId, teacher);
+      }
+      teacher.classes.push({ courseId: row.courseId, title: row.title, enrolled: row.enrolled, paid: row.paid, pending: row.pending, overdue: row.overdue });
+      teacher.enrolled += row.enrolled;
+      teacher.paid += row.paid;
+      teacher.pending += row.pending;
+      teacher.overdue += row.overdue;
+    }
+
+    return {
+      month,
+      year,
+      total: group(totals?.total || 0),
+      paid: group(totals?.paid || 0, 'received'),
+      pending: group(totals?.pending || 0, 'pending'),
+      overdue: group(totals?.overdue || 0, 'overdue'),
+      teachers: [...teachers.values()],
     };
   },
 

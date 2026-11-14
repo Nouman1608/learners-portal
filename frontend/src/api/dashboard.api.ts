@@ -44,6 +44,40 @@ export interface DashboardStats {
 
 export type Campus = 'senior' | 'junior' | 'both';
 
+/** Students and fees in one state (all / paid / pending / overdue) for a month */
+export interface FeeGroup {
+  students: number;
+  fees: number;
+  amounts: CurrencyAmount[];
+}
+
+export interface ClassFeeOverview {
+  courseId: string;
+  title: string;
+  enrolled: number; // students enrolled in the class now
+  paid: number;
+  pending: number;
+  overdue: number;
+}
+
+export interface TeacherFeeOverview extends Omit<ClassFeeOverview, 'courseId' | 'title'> {
+  teacherId: string;
+  name: string;
+  campus?: 'senior' | 'junior';
+  classes: ClassFeeOverview[];
+}
+
+/** Sudo: one month's fees overall and per teacher's class */
+export interface FeeOverview {
+  month: number;
+  year: number;
+  total: FeeGroup;
+  paid: FeeGroup;
+  pending: FeeGroup;
+  overdue: FeeGroup;
+  teachers: TeacherFeeOverview[];
+}
+
 /**
  * Dashboard API Methods
  */
@@ -54,6 +88,14 @@ export const dashboardApi = {
    */
   async getStats(campus: Campus = 'senior'): Promise<DashboardStats> {
     const response = await apiClient.get('/dashboard/stats', { params: campus === 'senior' ? {} : { campus } });
+    return response.data;
+  },
+
+  /** Sudo only. Leave month/year out for the current month. */
+  async getFeeOverview(campus: Campus = 'senior', month?: number, year?: number): Promise<FeeOverview> {
+    const response = await apiClient.get('/dashboard/fee-overview', {
+      params: { ...(campus === 'senior' ? {} : { campus }), ...(month && year ? { month, year } : {}) },
+    });
     return response.data;
   },
 };
