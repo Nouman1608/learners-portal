@@ -4,7 +4,7 @@ import { juniorDb } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 
 /**
- * GET /api/dashboard/fee-overview?month=&year=&campus= (sudo only)
+ * GET /api/dashboard/fee-overview?month=&year=&campus= (admins and sudo; other campuses sudo only)
  * One month's fees: students / fees paid, pending and overdue, and the same per teacher's class.
  */
 export const getFeeOverview = async (req: Request, res: Response, next: NextFunction) => {
@@ -21,6 +21,8 @@ export const getFeeOverview = async (req: Request, res: Response, next: NextFunc
     if (campus !== 'junior' && campus !== 'both') {
       return res.json(await dashboardService.getFeeOverview(month, year));
     }
+    // Admins see their own campus only; the other campus is for sudo
+    if (req.user!.role !== 'sudo') throw new AppError(403, 'Only sudo can view other campuses');
     if (!juniorDb) throw new AppError(400, 'Junior Campus is not connected to this portal');
 
     const junior = await dashboardService.getFeeOverview(month, year, juniorDb);

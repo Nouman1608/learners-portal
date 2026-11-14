@@ -414,8 +414,8 @@ const Dashboard: React.FC = () => {
           </div>
         )}
 
-        {/* Sudo: this month's fees (paid / pending / overdue) and each teacher's classes */}
-        {user?.role === 'sudo' && <FeeOverviewPanel campus={juniorAvailable ? campus : 'senior'} />}
+        {/* Admins and sudo: this month's fees (paid / pending / overdue) and each teacher's classes */}
+        {(user?.role === 'sudo' || user?.role === 'admin') && <FeeOverviewPanel campus={juniorAvailable ? campus : 'senior'} />}
       </main>
     </div>
   );

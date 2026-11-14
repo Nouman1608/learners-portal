@@ -13,7 +13,7 @@ const money = (group: FeeGroup) => group.amounts
   .join(' + ');
 
 /**
- * Sudo dashboard: one month's fees at a glance (students and fees: total, paid, pending,
+ * Admin / sudo dashboard: one month's fees at a glance (students and fees: total, paid, pending,
  * overdue), then each teacher's classes with the students enrolled and how many have paid.
  */
 export default function FeeOverviewPanel({ campus }: { campus: Campus }) {
