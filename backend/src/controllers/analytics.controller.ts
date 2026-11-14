@@ -411,6 +411,29 @@ export const getTeacherAnalytics = async (req: Request, res: Response, next: Nex
 };
 
 /**
+ * GET /api/analytics/profitability?startDate=&endDate=&campus= (admins and sudo)
+ * Course and teacher profitability for a period: the Financial tab's month filter asks for
+ * one month at a time (first to last day of the month).
+ */
+export const getProfitability = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const validated = analyticsQuerySchema.parse(req.query);
+    const { start, end } = resolveDateRange(validated.startDate, validated.endDate);
+    const result = await forCampuses(
+      campusServices(req),
+      (svc) => svc.getProfitability(start, end),
+      (a, b) => ({
+        courses: campusMerge.mergeProfitability(a.courses, b.courses),
+        teachers: campusMerge.mergeTeacherProfitability(a.teachers, b.teachers),
+      })
+    );
+    res.json({ courseProfitability: result.courses, teacherProfitability: result.teachers });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * GET /api/analytics/class-profit?month=&year=&campus= (sudo only)
  * For each class in a month: fees due and received, what its teacher is paid, and the profit.
  * The other campus is asked through its own backend, since pay rules belong to each portal.

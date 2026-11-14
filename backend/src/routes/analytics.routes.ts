@@ -10,6 +10,7 @@ import {
   getGrowthAnalytics,
   getTeacherAnalytics,
   getClassProfit,
+  getProfitability,
 } from '../controllers/analytics.controller';
 
 const router = Router();
@@ -68,6 +69,14 @@ router.get(
   requireAdmin,
   logActivity('view', 'analytics-teachers'),
   getTeacherAnalytics
+);
+
+// Course and teacher profitability for a period (the Financial tab's month filter)
+router.get(
+  '/profitability',
+  requireAdmin,
+  logActivity('view', 'analytics-profitability'),
+  getProfitability
 );
 
 // Class profit for a month: fees, teacher pay and profit per class (sudo only)

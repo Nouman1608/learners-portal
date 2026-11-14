@@ -49,10 +49,31 @@ function mergeCurrencies(
 export default function FinancialDashboard({ filters }: FinancialDashboardProps) {
   const [data, setData] = useState<FinancialAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
+  // Month filter on the two profitability tables: '' = the whole period above, or 'YYYY-MM'
+  const [tableMonth, setTableMonth] = useState('');
+  const [monthRows, setMonthRows] = useState<Pick<FinancialAnalytics, 'courseProfitability' | 'teacherProfitability'> | null>(null);
+  const [monthLoading, setMonthLoading] = useState(false);
 
   useEffect(() => {
     fetchData();
+    setTableMonth(''); // a new period or campus starts from the whole period again
   }, [filters]);
+
+  useEffect(() => {
+    if (!tableMonth) {
+      setMonthRows(null);
+      return;
+    }
+    let current = true;
+    const [year, month] = tableMonth.split('-').map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    setMonthLoading(true);
+    analyticsApi.getProfitability({ startDate: `${tableMonth}-01`, endDate: `${tableMonth}-${String(lastDay).padStart(2, '0')}`, campus: filters.campus })
+      .then((rows) => { if (current) setMonthRows(rows); })
+      .catch(() => { if (current) { toast.error('Failed to load that month'); setTableMonth(''); } })
+      .finally(() => { if (current) setMonthLoading(false); });
+    return () => { current = false; };
+  }, [tableMonth, filters.campus]);
 
   const fetchData = async () => {
     try {
@@ -84,7 +105,37 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
     );
   }
 
-  const { totals, comparison, collectionRate, courseProfitability } = data;
+  const { totals, comparison, collectionRate } = data;
+  // The tables show the chosen month, or the whole period when no month is picked
+  const courseProfitability = (tableMonth && monthRows ? monthRows : data).courseProfitability;
+  const teacherProfitability = (tableMonth && monthRows ? monthRows : data).teacherProfitability ?? [];
+
+  // Every month of the period, newest first, for the month filter
+  const monthOptions: { value: string; label: string }[] = [];
+  {
+    const [startYear, startMonth] = comparison.period.start.split('-').map(Number);
+    const [endYear, endMonth] = comparison.period.end.split('-').map(Number);
+    for (let index = endYear * 12 + endMonth - 1; index >= startYear * 12 + startMonth - 1; index--) {
+      const year = Math.floor(index / 12);
+      const month = (index % 12) + 1;
+      monthOptions.push({
+        value: `${year}-${String(month).padStart(2, '0')}`,
+        label: new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      });
+    }
+  }
+  const monthLabel = monthOptions.find(option => option.value === tableMonth)?.label;
+  const monthFilter = (
+    <select
+      value={tableMonth}
+      onChange={(e) => setTableMonth(e.target.value)}
+      aria-label="Month"
+      className={`rounded-md border px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 ${tableMonth ? 'border-indigo-500 bg-indigo-50 text-indigo-800' : 'border-gray-300'} ${monthLoading ? 'opacity-60' : ''}`}
+    >
+      <option value="">Whole period ({comparison.period.start.slice(0, 7)} to {comparison.period.end.slice(0, 7)})</option>
+      {monthOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+    </select>
+  );
   const revenueByCurrency = mergeCurrencies(data.revenueOverTime.map(r => r.byCurrency));
   const outstandingByCurrency = mergeCurrencies(data.outstandingFees.map(r => r.byCurrency));
   const outstandingPKR = data.outstandingFees.reduce((sum, r) => sum + r.amountPKR, 0);
@@ -96,7 +147,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
       return;
     }
     exportCsv(
-      stampedFilename('course-profitability'),
+      stampedFilename(`course-profitability${tableMonth ? `-${tableMonth}` : ''}`),
       courseProfitability,
       [
         { header: terms.course, value: c => c.courseTitle },
@@ -297,7 +348,8 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
 
       {/* Course profitability: sort by any heading, search a class or teacher, filter */}
       <AnalyticsTable<CourseProfitability>
-        title={`${terms.course} profitability`}
+        title={`${terms.course} profitability${monthLabel ? ` · ${monthLabel}` : ''}`}
+        actions={monthFilter}
         description="Revenue is what the class brings in when every student has paid: Invoiced (fee date has arrived) plus Not invoiced (fee dated later, or 1-to-1 classes not counted yet). Invoiced is Paid plus Not received. Teacher cost is the expected salary slip; a fixed monthly salary is split equally between that teacher's classes. All in PKR."
         rows={courseProfitability}
         rowKey={(c, i) => `${c.courseId}-${i}`}
@@ -362,9 +414,10 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
 
       {/* Teacher profitability: the same columns, per teacher */}
       <AnalyticsTable<TeacherProfitability>
-        title="Teacher profitability"
+        title={`Teacher profitability${monthLabel ? ` · ${monthLabel}` : ''}`}
+        actions={monthFilter}
         description="The same figures per teacher: the money from their classes against everything they are paid in the period. A class with two teachers is split equally between them."
-        rows={data.teacherProfitability ?? []}
+        rows={teacherProfitability}
         rowKey={(t, i) => `${t.teacherId ?? 'none'}-${i}`}
         searchPlaceholder="Search teacher..."
         emptyText="No fees or teacher pay in this period"

@@ -341,6 +341,12 @@ export interface AnalyticsQueryParams {
  * Analytics API
  */
 export const analyticsApi = {
+  /** Course and teacher profitability for a period (the Financial tab's month filter) */
+  getProfitability: async (params: AnalyticsQueryParams): Promise<Pick<FinancialAnalytics, 'courseProfitability' | 'teacherProfitability'>> => {
+    const response = await apiClient.get('/analytics/profitability', { params });
+    return response.data;
+  },
+
   /** Sudo: fees, teacher pay and profit per class for a month (leave month/year out for this month) */
   getClassProfit: async (campus: 'senior' | 'junior' | 'both' = 'senior', month?: number, year?: number): Promise<ClassProfitReport> => {
     const response = await apiClient.get<ClassProfitReport>('/analytics/class-profit', {
