@@ -253,6 +253,7 @@ const hideNote = <T extends { adminNote?: string | null }>(req: Request, fee: T)
 const campusDatabase = (req: Request) => {
   if (req.query.campus !== 'junior' || req.user?.role !== 'sudo') return undefined;
   if (!juniorDb) throw new AppError(400, 'Junior Campus is not connected to this portal');
+  if (req.res) req.res.locals.fileCampus = 'junior'; // any file links are the Junior portal's
   return juniorDb;
 };
 

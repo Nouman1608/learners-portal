@@ -65,10 +65,10 @@ app.use(globalRateLimiter);
 // Request logging
 app.use(requestLogger);
 
-// Every file link the API hands out is signed
+// Every file link the API hands out is signed (res.locals.fileCampus: another campus's files)
 app.use((req, res, next) => {
   const json = res.json.bind(res);
-  res.json = (body?: unknown) => json(signFileLinks(body));
+  res.json = (body?: unknown) => json(signFileLinks(body, res.locals.fileCampus));
   next();
 });
 

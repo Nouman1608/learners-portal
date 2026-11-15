@@ -11,7 +11,14 @@ import logger from './logger';
  *
  * FILE_LINK_SECRET must be the same on both campus portals (.env and .env.junior): the
  * Senior portal shows Junior files to sudo, and those links are opened on the Junior portal.
+ * The campus is part of what is signed: both campuses name their files the same way
+ * (INV-2026-11-STU-001.pdf exists on each), so a Senior link must not open the Junior file.
  */
+export type FileCampus = 'senior' | 'junior';
+const ownCampus: FileCampus = /preschool|junior/i.test(env.SCHOOL_NAME) ? 'junior' : 'senior';
+const otherCampus: FileCampus = ownCampus === 'junior' ? 'senior' : 'junior';
+// The other portal's address (HANDOFF_TARGET_URL, set on the Senior instance only)
+const otherOrigin = (() => { try { return new URL(env.HANDOFF_TARGET_URL || '').origin; } catch { return ''; } })();
 let warned = false;
 const secret = (): string => {
   if (env.FILE_LINK_SECRET) return env.FILE_LINK_SECRET;
@@ -33,19 +40,19 @@ const normalise = (pathname: string): string => {
   return path.posix.normalize(decoded);
 };
 
-const signature = (pathname: string): string =>
-  crypto.createHmac('sha256', secret()).update(normalise(pathname)).digest('base64url').slice(0, 32);
+const signature = (pathname: string, campus: FileCampus = ownCampus): string =>
+  crypto.createHmac('sha256', secret()).update(`${campus}:${normalise(pathname)}`).digest('base64url').slice(0, 32);
 
 const hasSig = (link: string): boolean => /[?&]sig=/.test(link);
 
 /** "/uploads/x.pdf" (or "/uploads/x.pdf?v=1") with its signature added */
-export const signFilePath = (link: string): string => {
+export const signFilePath = (link: string, campus: FileCampus = ownCampus): string => {
   if (hasSig(link)) return link;
   const [pathname] = link.split('?');
-  return `${link}${link.includes('?') ? '&' : '?'}sig=${signature(pathname)}`;
+  return `${link}${link.includes('?') ? '&' : '?'}sig=${signature(pathname, campus)}`;
 };
 
-/** True when sig is the signature for this path */
+/** True when sig is the signature for this path on this campus */
 export const verifyFilePath = (pathname: string, sig: unknown): boolean => {
   if (typeof sig !== 'string') return false;
   const expected = Buffer.from(signature(pathname));
@@ -60,14 +67,22 @@ const ownHosts = new Set(
     .filter(Boolean)
 );
 
-/** A file link of ours (relative, or absolute on our hosts) signed; anything else unchanged */
-export const signFileLink = (value: string): string => {
-  if (value.startsWith('/uploads/')) return signFilePath(value);
+/**
+ * A file link of ours (relative, or absolute on our hosts) signed; anything else unchanged.
+ * campus = the campus whose file it is: the other campus's (sudo's read-only Junior tab on
+ * the Senior portal) is signed for that portal and pointed at it.
+ */
+export const signFileLink = (value: string, campus: FileCampus = ownCampus): string => {
+  if (value.startsWith('/uploads/')) {
+    return campus === ownCampus ? signFilePath(value) : `${otherOrigin}${signFilePath(value, campus)}`;
+  }
   if (!/^https?:\/\/[^/]+\/uploads\//.test(value) || hasSig(value)) return value;
   try {
     const url = new URL(value);
     if (!ownHosts.has(url.host)) return value;
-    url.searchParams.set('sig', signature(url.pathname));
+    // An absolute link says which portal holds the file
+    const onOther = !!otherOrigin && url.origin === otherOrigin;
+    url.searchParams.set('sig', signature(url.pathname, onOther ? otherCampus : ownCampus));
     return url.toString();
   } catch {
     return value;
@@ -106,26 +121,38 @@ const isPlain = (value: object): boolean => {
   return proto === Object.prototype || proto === null;
 };
 
-/** The payload with its file links signed; untouched parts are shared, not copied */
-export const signFileLinks = (value: unknown, seen = new WeakSet<object>()): unknown => {
-  if (value === null || typeof value !== 'object' || seen.has(value)) return value;
-  seen.add(value);
+/**
+ * The payload with its file links signed; untouched parts are shared, not copied. campus =
+ * whose files these are (the other campus's for sudo's read-only Junior tab on Senior).
+ * An object that appears twice gets the same signed copy both times (a cycle is left as is).
+ */
+export const signFileLinks = (
+  value: unknown,
+  campus: FileCampus = ownCampus,
+  done = new WeakMap<object, unknown>()
+): unknown => {
+  if (value === null || typeof value !== 'object') return value;
+  if (done.has(value)) return done.get(value);
+  done.set(value, value);
+  let result: unknown = value;
   if (Array.isArray(value)) {
     let out: unknown[] | undefined;
     value.forEach((item, i) => {
-      const signed = signFileLinks(item, seen);
+      const signed = signFileLinks(item, campus, done);
       if (signed !== item) (out ??= value.slice())[i] = signed;
     });
-    return out ?? value;
+    result = out ?? value;
+  } else if (isPlain(value)) { // not Dates, Buffers and the like
+    let out: Record<string, unknown> | undefined;
+    for (const [key, item] of Object.entries(value)) {
+      if (FREE_FORM_KEYS.has(key)) continue;
+      const signed = typeof item === 'string'
+        ? (LINK_KEYS.has(key) ? signFileLink(item, campus) : item)
+        : signFileLinks(item, campus, done);
+      if (signed !== item) (out ??= { ...value })[key] = signed;
+    }
+    result = out ?? value;
   }
-  if (!isPlain(value)) return value; // Dates, Buffers and the like
-  let out: Record<string, unknown> | undefined;
-  for (const [key, item] of Object.entries(value)) {
-    if (FREE_FORM_KEYS.has(key)) continue;
-    const signed = typeof item === 'string'
-      ? (LINK_KEYS.has(key) ? signFileLink(item) : item)
-      : signFileLinks(item, seen);
-    if (signed !== item) (out ??= { ...value })[key] = signed;
-  }
-  return out ?? value;
+  done.set(value, result);
+  return result;
 };

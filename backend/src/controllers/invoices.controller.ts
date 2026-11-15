@@ -160,6 +160,7 @@ export const getInvoices = async (req: Request, res: Response, next: NextFunctio
     if (req.query.campus === 'junior' && req.user?.role === 'sudo') {
       if (!juniorDb) throw new AppError(400, 'Junior Campus is not connected to this portal');
       database = juniorDb;
+      res.locals.fileCampus = 'junior'; // their PDFs are on the Junior portal (utils/fileLinks.ts)
     }
     const invoicesList = await invoicesService.getInvoices(filters, database);
     res.json({ invoices: invoicesList });
