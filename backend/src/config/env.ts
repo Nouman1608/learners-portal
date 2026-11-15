@@ -29,6 +29,9 @@ const envSchema = z.object({
   // The other campus portal's backend, e.g. http://127.0.0.1:5050/api (set on both instances, each
   // pointing at the other). With CAMPUS_HANDOFF_SECRET it lets siblings be linked across campuses.
   OTHER_CAMPUS_API_URL: z.string().url().optional().or(z.literal('')),
+  // Signs the links to stored files (invoices, pay slips) so they cannot be guessed. Must be the
+  // same on both campus portals. Unset = JWT_SECRET is used (with a warning in the log).
+  FILE_LINK_SECRET: z.string().min(32).optional().or(z.literal('')),
   // Name shown in emails; the Junior Campus instance sets "Learners Preschool".
   SCHOOL_NAME: z.string().default('Learners Academy'),
   // First month the portal's books cover (YYYY-MM). Money pages ignore fees for earlier
