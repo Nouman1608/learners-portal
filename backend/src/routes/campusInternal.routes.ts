@@ -73,7 +73,7 @@ router.get('/class-profit', async (req, res) => {
 // Our course and teacher profitability for whole months from..to (YYYY-MM), for the other
 // campus's sudo analytics (Financial tab, Junior / Both view)
 router.get('/profitability', async (req, res) => {
-  const yearMonth = z.string().regex(/^20\d{2}-(0[1-9]|1[0-2])$/);
+  const yearMonth = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
   const { from, to } = z.object({ from: yearMonth, to: yearMonth }).parse(req.query);
   const firstOf = (value: string) => {
     const [year, month] = value.split('-').map(Number);

@@ -101,8 +101,12 @@ export const otherCampus = {
    * The other campus's course and teacher profitability for the whole months from startDate
    * to endDate (Financial tab, Junior / Both view), worked out by its own backend
    */
-  profitability: (startDate: Date, endDate: Date) => otherCampus.request<CampusProfitability>(
-    'GET', `/profitability?from=${yearMonth(startDate)}&to=${yearMonth(endDate)}`, undefined, 30000), // a long period runs a slip preview per teacher and month
+  profitability: async (startDate: Date, endDate: Date) => {
+    // e.g. 2026-13-01 passes the date pattern but is no date: refuse it here, not as "unreachable"
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) throw new AppError(400, 'Invalid date range');
+    return otherCampus.request<CampusProfitability>(
+      'GET', `/profitability?from=${yearMonth(startDate)}&to=${yearMonth(endDate)}`, undefined, 30000); // a long period runs a slip preview per teacher and month
+  },
 
   /** Put a student of the other campus into a family (null takes them out) */
   setFamily: (id: string, familyId: string | null) => otherCampus.request<{ previousFamilyId: string | null }>(
