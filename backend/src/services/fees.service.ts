@@ -444,6 +444,8 @@ export const feesService = {
     // Get active AND dropped enrollments — dropped ones are processed so their
     // fees honor the drop date (fees stop after the drop month; drop month
     // follows the mirror 20th rule via generateRollingFee).
+    // Only active students: an inactive one is not billed any more, and their
+    // existing fees are left as they are (still owed, still go overdue).
     const activeEnrollments = await db
       .select({
         id: enrollments.id,
@@ -465,7 +467,7 @@ export const feesService = {
       .from(enrollments)
       .innerJoin(courses, eq(enrollments.courseId, courses.id))
       .innerJoin(users, eq(enrollments.studentId, users.id))
-      .where(inArray(enrollments.status, ['active', 'dropped']));
+      .where(and(inArray(enrollments.status, ['active', 'dropped']), eq(users.isActive, true)));
 
     let regularFeesCreated = 0;
     let usageFeesCreated = 0;
@@ -741,8 +743,8 @@ export const feesService = {
         .limit(1);
 
       if (existingStudentInvoice) {
-        // Invoices only include billable fees (amount > 0). If none remain in
-        // this period+currency, the invoice is deleted rather than regenerated.
+        // Invoices only include billable fees (amount > 0, not dropped/leave). If none
+        // remain in this period+currency, the invoice is deleted rather than regenerated.
         const [billable] = await db
           .select({ count: sql<number>`count(*)::int` })
           .from(fees)
@@ -752,7 +754,8 @@ export const feesService = {
               eq(fees.month, fee.month),
               eq(fees.year, fee.year),
               eq(fees.currency, currency),
-              sql`${fees.amount}::numeric > 0`
+              sql`${fees.amount}::numeric > 0`,
+              notInArray(fees.status, ['dropped', 'leave'])
             )
           );
 
