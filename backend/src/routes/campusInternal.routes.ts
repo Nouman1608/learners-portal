@@ -3,6 +3,7 @@ import { z } from 'zod';
 import usersService from '../services/users.service';
 import { invoicesService } from '../services/invoices.service';
 import { classProfitService } from '../services/classProfit.service';
+import { analyticsService } from '../services/analytics.service';
 import { otherCampus } from '../services/otherCampus.service';
 import { AppError } from '../middleware/errorHandler';
 
@@ -67,6 +68,18 @@ router.get('/class-profit', async (req, res) => {
     year: z.coerce.number().int().min(2020).max(2100),
   }).parse(req.query);
   res.json(await classProfitService.getReport(month, year));
+});
+
+// Our course and teacher profitability for whole months from..to (YYYY-MM), for the other
+// campus's sudo analytics (Financial tab, Junior / Both view)
+router.get('/profitability', async (req, res) => {
+  const yearMonth = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
+  const { from, to } = z.object({ from: yearMonth, to: yearMonth }).parse(req.query);
+  const firstOf = (value: string) => {
+    const [year, month] = value.split('-').map(Number);
+    return new Date(year, month - 1, 1);
+  };
+  res.json(await analyticsService.getProfitability(firstOf(from), firstOf(to)));
 });
 
 export default router;

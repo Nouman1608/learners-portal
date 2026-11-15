@@ -32,7 +32,8 @@ import teacherOneToOneRates from '../config/teacherOneToOneRates.json';
  *
  * The preview can only run against this portal's own database (pay rules and 1-to-1 rates
  * belong to each instance), so when another campus's database is read from here, months
- * without a slip have no teacher cost; the other campus's own backend gives the full figure.
+ * without a slip would have no teacher cost. The other campus's figures are therefore asked of
+ * its own backend (/internal/campus/class-profit and /internal/campus/profitability).
  */
 
 export interface ClassFinance {

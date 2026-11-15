@@ -3,8 +3,9 @@ import { z } from 'zod';
 import * as campusMerge from '../services/analyticsCampus';
 import { campusServices, forCampuses } from '../services/analyticsCampus';
 import logger from '../utils/logger';
+import { AppError } from '../middleware/errorHandler';
 import { classProfitService } from '../services/classProfit.service';
-import { otherCampus } from '../services/otherCampus.service';
+import { otherCampus, isJuniorInstance, ownCampusLabel } from '../services/otherCampus.service';
 
 // Validation schemas
 const analyticsQuerySchema = z.object({
@@ -447,6 +448,9 @@ export const getClassProfit = async (req: Request, res: Response, next: NextFunc
       campus: z.enum(['senior', 'junior', 'both']).default('senior'),
     }).parse(req.query);
 
+    // 'senior' is this portal's own report. The campus switch is a Senior portal feature: on the
+    // Junior portal the other campus is Senior, and its classes would be labelled as junior.
+    if (campus !== 'senior' && isJuniorInstance) throw new AppError(403, `This portal shows the ${ownCampusLabel} only`);
     if (campus === 'senior') return res.json(await classProfitService.getReport(month, year));
 
     const other = await otherCampus.classProfit(month, year);

@@ -5,6 +5,9 @@ import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
 import type { FamilyPeriod, FamilyPart } from './invoices.service';
 import type { ClassProfitReport } from './classProfit.service';
+import type { analyticsService } from './analytics.service';
+
+export type CampusProfitability = Awaited<ReturnType<typeof analyticsService.getProfitability>>;
 
 /*
  * Private channel between the two campus portals (Senior <-> Junior), for siblings who study
@@ -17,8 +20,11 @@ import type { ClassProfitReport } from './classProfit.service';
  */
 const AUDIENCE = 'campus-internal';
 
+/** A month as YYYY-MM, read the way classProfitService.getFinanceForDates reads a date */
+const yearMonth = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
 // Which campus this instance is: the Junior Campus instance runs as "Learners Preschool"
-const isJuniorInstance = /preschool|junior/i.test(env.SCHOOL_NAME);
+export const isJuniorInstance = /preschool|junior/i.test(env.SCHOOL_NAME);
 export const ownCampusLabel = isJuniorInstance ? 'Junior Campus' : 'Senior Campus';
 export const otherCampusLabel = isJuniorInstance ? 'Senior Campus' : 'Junior Campus';
 
@@ -39,7 +45,7 @@ export const otherCampus = {
     return !!(env.CAMPUS_HANDOFF_SECRET && env.OTHER_CAMPUS_API_URL);
   },
 
-  async request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+  async request<T>(method: 'GET' | 'POST', path: string, body?: unknown, timeout = 8000): Promise<T> {
     if (!this.enabled) throw new AppError(400, 'The other campus is not connected to this portal');
     const pass = jwt.sign({}, env.CAMPUS_HANDOFF_SECRET!, { audience: AUDIENCE, expiresIn: '60s' });
     try {
@@ -48,7 +54,7 @@ export const otherCampus = {
         url: `${env.OTHER_CAMPUS_API_URL!.replace(/\/$/, '')}/internal/campus${path}`,
         data: body,
         headers: { 'x-campus-pass': pass },
-        timeout: 8000,
+        timeout,
       });
       return response.data;
     } catch (error: any) {
@@ -90,6 +96,17 @@ export const otherCampus = {
   /** The other campus's class profit report for a month, worked out by its own backend */
   classProfit: (month: number, year: number) => otherCampus.request<ClassProfitReport>(
     'GET', `/class-profit?month=${month}&year=${year}`),
+
+  /**
+   * The other campus's course and teacher profitability for the whole months from startDate
+   * to endDate (Financial tab, Junior / Both view), worked out by its own backend
+   */
+  profitability: async (startDate: Date, endDate: Date) => {
+    // e.g. 2026-13-01 passes the date pattern but is no date: refuse it here, not as "unreachable"
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) throw new AppError(400, 'Invalid date range');
+    return otherCampus.request<CampusProfitability>(
+      'GET', `/profitability?from=${yearMonth(startDate)}&to=${yearMonth(endDate)}`, undefined, 30000); // a long period runs a slip preview per teacher and month
+  },
 
   /** Put a student of the other campus into a family (null takes them out) */
   setFamily: (id: string, familyId: string | null) => otherCampus.request<{ previousFamilyId: string | null }>(

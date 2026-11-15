@@ -2,6 +2,7 @@ import { Request } from 'express';
 import { juniorDb } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { analyticsService } from './analytics.service';
+import { otherCampus } from './otherCampus.service';
 
 /**
  * Campus selection for analytics. On the Senior Campus portal the sudo user can look at
@@ -18,7 +19,13 @@ export function campusServices(req: Request): AnalyticsService[] {
   if (campus !== 'junior' && campus !== 'both') return [analyticsService];
   if (req.user?.role !== 'sudo') throw new AppError(403, 'Only sudo can view other campuses');
   if (!juniorDb) throw new AppError(400, 'Junior Campus is not connected to this portal');
-  const junior = analyticsService.withDatabase(juniorDb);
+  // Profitability (teacher cost) is asked of the Junior backend itself: estimates for months
+  // with no slip yet need its own pay rules and 1-to-1 rates, which cannot run over the
+  // read-only DB. If it cannot be reached the request fails with that message (no zero cost).
+  const junior: AnalyticsService = {
+    ...analyticsService.withDatabase(juniorDb),
+    getProfitability: (startDate: Date, endDate: Date) => otherCampus.profitability(startDate, endDate),
+  };
   return campus === 'junior' ? [junior] : [analyticsService, junior];
 }
 
