@@ -437,7 +437,8 @@ export const getProfitability = async (req: Request, res: Response, next: NextFu
 
 /**
  * GET /api/analytics/profitability/fees?startDate=&endDate=&group=&teacherId=&campus=
- * The fees behind a teacher's Received / Not received / Not invoiced figure (admins and sudo;
+ * The fees behind a class's (courseId) or a teacher's (teacherId) Received / Not received /
+ * Not invoiced figure (admins and sudo;
  * the Junior Campus from the Senior portal is sudo only). teacherId "none" = classes with no
  * teacher assigned.
  */
@@ -447,13 +448,14 @@ export const getProfitabilityFees = async (req: Request, res: Response, next: Ne
       startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       group: z.enum(['received', 'notReceived', 'notInvoiced']),
-      teacherId: z.string().uuid().or(z.literal('none')),
+      teacherId: z.string().uuid().or(z.literal('none')).optional(),
+      courseId: z.string().uuid().optional(),
       campus: z.enum(['senior', 'junior']).default('senior'),
     }).safeParse(req.query);
-    if (!query.success) throw new AppError(400, 'Invalid request');
-    const { startDate, endDate, group, teacherId, campus } = query.data;
+    if (!query.success || (!query.data.teacherId && !query.data.courseId)) throw new AppError(400, 'Invalid request');
+    const { startDate, endDate, group, teacherId, courseId, campus } = query.data;
     const { start, end } = resolveDateRange(startDate, endDate);
-    const filter = { startDate: start, endDate: end, group, teacherId: teacherId === 'none' ? null : teacherId };
+    const filter = { startDate: start, endDate: end, group, courseId, teacherId: teacherId === 'none' ? null : teacherId };
 
     if (campus === 'junior') {
       if (req.user?.role !== 'sudo') throw new AppError(403, 'Only sudo can view other campuses');

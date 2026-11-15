@@ -57,7 +57,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
   // The fees behind a teacher's Received / Not received figure (click the number)
   const [feeList, setFeeList] = useState<{
     title: string; subtitle: string; rows: FeeListRow[] | null;
-    query: { startDate: string; endDate: string; group: 'received' | 'notReceived'; teacherId: string | null; campus?: 'senior' | 'junior' };
+    query: { startDate: string; endDate: string; group: 'received' | 'notReceived'; teacherId?: string | null; courseId?: string; campus?: 'senior' | 'junior' };
   } | null>(null);
   const loadFeeList = (list: NonNullable<typeof feeList>) => {
     analyticsApi.getProfitabilityFees(list.query)
@@ -159,18 +159,23 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
     const [year, month] = tableMonth.split('-').map(Number);
     return { startDate: `${tableMonth}-01`, endDate: `${tableMonth}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`, label: monthLabel || tableMonth };
   })();
-  /** A teacher's Received / Not received figure: click it for the students and fees behind it */
-  const feeCell = (t: TeacherProfitability, group: 'received' | 'notReceived', amount: number) => (amount > 0.5 ? (
+  /** A Received / Not received figure of a teacher or a class: click it for the students and fees behind it */
+  const feeCell = (
+    t: { name: string; campus?: 'senior' | 'junior'; teacherId?: string | null; courseId?: string },
+    group: 'received' | 'notReceived',
+    amount: number,
+  ) => (amount > 0.5 ? (
     <button
       type="button"
       title="Show these students"
       className="rounded px-1 underline decoration-dotted underline-offset-2 hover:bg-indigo-100"
       onClick={() => openFeeList({
-        title: `${t.teacherName}: ${group === 'received' ? 'received' : 'not received'}`,
+        title: `${t.name}: ${group === 'received' ? 'received' : 'not received'}`,
         subtitle: `${group === 'received' ? 'Fees received' : 'Fee date passed, not paid yet'} · ${tablePeriod.label}`,
         rows: null,
         query: {
-          startDate: tablePeriod.startDate, endDate: tablePeriod.endDate, group, teacherId: t.teacherId,
+          startDate: tablePeriod.startDate, endDate: tablePeriod.endDate, group,
+          ...(t.courseId ? { courseId: t.courseId } : { teacherId: t.teacherId ?? null }),
           campus: t.campus ?? (filters.campus === 'junior' ? 'junior' : 'senior'),
         },
       })}
@@ -405,7 +410,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
         actions={monthFilter}
         exportSum={['students', 'revenue', 'invoiced', 'notInvoiced', 'paid', 'notReceived', 'cost', 'profit', 'soFar']}
         exportNote={monthLabel ? `Month: ${monthLabel}` : `Period: ${comparison.period.start.slice(0, 7)} to ${comparison.period.end.slice(0, 7)}`}
-        description="Revenue is what the class brings in when every student has paid: Invoiced (fee date has arrived) plus Not invoiced (fee dated later, or 1-to-1 classes not counted yet). Invoiced is Received plus Not received. Teacher cost is the expected salary slip; a fixed monthly salary is split equally between that teacher's classes. All in PKR."
+        description="Revenue is what the class brings in when every student has paid: Invoiced (fee date has arrived) plus Not invoiced (fee dated later, or 1-to-1 classes not counted yet). Invoiced is Received plus Not received. Teacher cost is the expected salary slip; a fixed monthly salary is split equally between that teacher's classes. All in PKR. Click a Received or Not received figure to see the students."
         rows={courseProfitability}
         rowKey={(c, i) => `${c.courseId}-${i}`}
         searchPlaceholder={`Search ${terms.courseLc} or teacher...`}
@@ -432,8 +437,8 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
           { key: 'revenue', header: 'Revenue', align: 'right', value: c => c.revenuePKR, cell: c => pkr(c.revenuePKR), className: 'font-medium text-gray-900' },
           { key: 'invoiced', header: 'Invoiced', align: 'right', value: c => c.invoicedPKR, cell: c => pkr(c.invoicedPKR) },
           { key: 'notInvoiced', header: 'Not invoiced', align: 'right', value: c => c.notInvoicedPKR, cell: c => pkr(c.notInvoicedPKR), className: 'text-gray-500' },
-          { key: 'paid', header: 'Received', align: 'right', value: c => c.paidPKR, cell: c => pkr(c.paidPKR), className: 'text-green-700' },
-          { key: 'notReceived', header: 'Not received', align: 'right', value: c => c.notReceivedPKR, cell: c => pkr(c.notReceivedPKR), className: c => (c.notReceivedPKR > 0 ? 'text-red-600' : 'text-gray-400') },
+          { key: 'paid', header: 'Received', align: 'right', value: c => c.paidPKR, cell: c => feeCell({ name: c.courseTitle, campus: c.campus, courseId: c.courseId }, 'received', c.paidPKR), className: 'text-green-700' },
+          { key: 'notReceived', header: 'Not received', align: 'right', value: c => c.notReceivedPKR, cell: c => feeCell({ name: c.courseTitle, campus: c.campus, courseId: c.courseId }, 'notReceived', c.notReceivedPKR), className: c => (c.notReceivedPKR > 0 ? 'text-red-600' : 'text-gray-400') },
           {
             key: 'cost', header: 'Teacher cost', align: 'right', value: c => c.teacherCostPKR, className: 'text-gray-600',
             cell: c => (
@@ -495,8 +500,8 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
           { key: 'revenue', header: 'Revenue', align: 'right', value: t => t.revenuePKR, cell: t => pkr(t.revenuePKR), className: 'font-medium text-gray-900' },
           { key: 'invoiced', header: 'Invoiced', align: 'right', value: t => t.invoicedPKR, cell: t => pkr(t.invoicedPKR) },
           { key: 'notInvoiced', header: 'Not invoiced', align: 'right', value: t => t.notInvoicedPKR, cell: t => pkr(t.notInvoicedPKR), className: 'text-gray-500' },
-          { key: 'paid', header: 'Received', align: 'right', value: t => t.paidPKR, cell: t => feeCell(t, 'received', t.paidPKR), className: 'text-green-700' },
-          { key: 'notReceived', header: 'Not received', align: 'right', value: t => t.notReceivedPKR, cell: t => feeCell(t, 'notReceived', t.notReceivedPKR), className: t => (t.notReceivedPKR > 0 ? 'text-red-600' : 'text-gray-400') },
+          { key: 'paid', header: 'Received', align: 'right', value: t => t.paidPKR, cell: t => feeCell({ name: t.teacherName, campus: t.campus, teacherId: t.teacherId }, 'received', t.paidPKR), className: 'text-green-700' },
+          { key: 'notReceived', header: 'Not received', align: 'right', value: t => t.notReceivedPKR, cell: t => feeCell({ name: t.teacherName, campus: t.campus, teacherId: t.teacherId }, 'notReceived', t.notReceivedPKR), className: t => (t.notReceivedPKR > 0 ? 'text-red-600' : 'text-gray-400') },
           {
             key: 'cost', header: 'Teacher cost', align: 'right', value: t => t.teacherCostPKR, className: 'text-gray-600',
             cell: t => (

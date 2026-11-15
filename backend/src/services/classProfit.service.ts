@@ -119,11 +119,11 @@ export const classProfitService = {
   /**
    * The fees behind one figure of the profitability tables, for the same months and by the
    * same rules as getFinance: 'received' (paid), 'notReceived' (fee date has arrived, not
-   * paid) or 'notInvoiced' (fee dated later). For one teacher's classes, or with teacherId
-   * null for classes that have no teacher. One line per fee.
+   * paid) or 'notInvoiced' (fee dated later). For one class (courseId), one teacher's
+   * classes, or with teacherId null the classes that have no teacher. One line per fee.
    */
   async getFeeList(
-    filter: { startDate: Date; endDate: Date; group: 'received' | 'notReceived' | 'notInvoiced'; teacherId: string | null },
+    filter: { startDate: Date; endDate: Date; group: 'received' | 'notReceived' | 'notInvoiced'; teacherId?: string | null; courseId?: string },
     database: Database = db,
   ): Promise<FinanceFee[]> {
     const today = pakistanToday();
@@ -141,9 +141,12 @@ export const classProfitService = {
       notReceived: sql`f.status <> 'received' AND (f.due_date IS NULL OR f.due_date <= ${today}::date)`,
       notInvoiced: sql`f.status <> 'received' AND f.due_date > ${today}::date`,
     }[filter.group];
-    const teaches = filter.teacherId
-      ? sql`EXISTS (SELECT 1 FROM course_teachers ct WHERE ct.course_id = f.course_id AND ct.teacher_id = ${filter.teacherId})`
-      : sql`NOT EXISTS (SELECT 1 FROM course_teachers ct WHERE ct.course_id = f.course_id)`;
+    // One class, or one teacher's classes (teacherId null = classes with no teacher)
+    const teaches = filter.courseId
+      ? sql`f.course_id = ${filter.courseId}`
+      : filter.teacherId
+        ? sql`EXISTS (SELECT 1 FROM course_teachers ct WHERE ct.course_id = f.course_id AND ct.teacher_id = ${filter.teacherId})`
+        : sql`NOT EXISTS (SELECT 1 FROM course_teachers ct WHERE ct.course_id = f.course_id)`;
 
     return (await database.execute(sql`
       SELECT f.id AS "feeId", u.id AS "studentId", u.first_name AS "firstName", u.last_name AS "lastName",

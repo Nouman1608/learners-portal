@@ -375,6 +375,8 @@ export const analyticsService = {
       const courseRows = finance.classes.map(c => ({
         courseId: c.courseId,
         courseTitle: c.title,
+        // Set when both campuses are shown together, so a class's fees are looked up in the right one
+        campus: undefined as 'senior' | 'junior' | undefined,
         teachers: c.teachers,
         oneToOne: c.oneToOne,
         studentCount: c.students,

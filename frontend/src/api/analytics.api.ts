@@ -135,6 +135,7 @@ export interface CourseProfitability extends ClassMoney {
   teacherCostPKR: number; // the expected salary slips' figure for this class
   estimatedCostPKR: number;
   marginPercent: number; // expected profit as a share of revenue
+  campus?: 'senior' | 'junior'; // set when both campuses are shown together
 }
 
 export interface FinancialAnalytics {
@@ -343,11 +344,16 @@ export interface AnalyticsQueryParams {
  * Analytics API
  */
 export const analyticsApi = {
-  /** The fees behind a teacher's Received / Not received figure (teacherId null = classes with no teacher) */
+  /** The fees behind a class's or a teacher's Received / Not received figure */
   getProfitabilityFees: async (params: {
-    startDate: string; endDate: string; group: 'received' | 'notReceived' | 'notInvoiced'; teacherId: string | null; campus?: 'senior' | 'junior';
+    startDate: string; endDate: string; group: 'received' | 'notReceived' | 'notInvoiced';
+    teacherId?: string | null; courseId?: string; campus?: 'senior' | 'junior';
   }): Promise<FeeListRow[]> => {
-    const response = await apiClient.get('/analytics/profitability/fees', { params: { ...params, teacherId: params.teacherId ?? 'none' } });
+    // One class (courseId), or one teacher's classes (teacherId; null = classes with no teacher)
+    const { teacherId, ...rest } = params;
+    const response = await apiClient.get('/analytics/profitability/fees', {
+      params: params.courseId ? rest : { ...rest, teacherId: teacherId ?? 'none' },
+    });
     return response.data.fees;
   },
 

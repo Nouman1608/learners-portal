@@ -131,8 +131,10 @@ export function mergeCollection(a: Collection, b: Collection): Collection {
 }
 
 export function mergeProfitability(a: Profitability, b: Profitability): Profitability {
-  return [...a, ...b.map(c => ({ ...c, courseTitle: tagJunior(c.courseTitle) as string }))]
-    .sort((x, y) => y.expectedProfitPKR - x.expectedProfitPKR);
+  return [
+    ...a.map(c => ({ ...c, campus: 'senior' as const })),
+    ...b.map(c => ({ ...c, courseTitle: tagJunior(c.courseTitle) as string, campus: 'junior' as const })),
+  ].sort((x, y) => y.expectedProfitPKR - x.expectedProfitPKR);
 }
 
 type TeacherProfitability = Awaited<ReturnType<Svc['getProfitability']>>['teachers'];
