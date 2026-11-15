@@ -1231,7 +1231,11 @@ export const invoicesService = {
 
     // Per-student calculations (only for percentage_based teachers)
     if (!isSalaried) for (const teacherCourse of teacherCourses) {
-      // Get active enrollments for the course with student details
+      // The students the teacher is paid for THIS month: those enrolled now, and those who
+      // have left since but still have a fee for this month. A slip for a past month must not
+      // shrink because a student was dropped afterwards (owner rule, Nov 2026). The drop rules
+      // already remove the unpaid fees of months a leaver does not owe, so a fee that is still
+      // there (and not marked dropped / on leave) means the student counted that month.
       const activeEnrollments = await db
         .select({
           id: enrollments.id,
@@ -1253,7 +1257,14 @@ export const invoicesService = {
         .where(
           and(
             eq(enrollments.courseId, teacherCourse.courseId),
-            eq(enrollments.status, 'active')
+            or(
+              eq(enrollments.status, 'active'),
+              sql`EXISTS (
+                SELECT 1 FROM fees f
+                WHERE f.enrollment_id = ${enrollments.id} AND f.month = ${input.month} AND f.year = ${input.year}
+                  AND f.status NOT IN ('dropped', 'leave')
+              )`
+            )
           )
         );
 
