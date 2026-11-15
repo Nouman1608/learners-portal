@@ -1515,11 +1515,6 @@ export const invoicesService = {
         .map(([enrollmentId, sessionCount]) => ({ enrollmentId, sessionCount }));
     }
 
-    // Keep the previous invoice current when validation produces no earnings.
-    if (existing) {
-      await db.update(invoices).set({ isLatest: false }).where(eq(invoices.id, existing.id));
-    }
-
     // Generate invoice number (append version suffix if regenerated)
     const sequence = await this.getNextSequence('teacher', input.month, input.year);
     let invoiceNumber = this.generateInvoiceNumber('teacher', input.month, input.year, sequence);
@@ -1531,33 +1526,38 @@ export const invoicesService = {
     const deduction = await teacherDeductionsService.summaryFor(input.teacherId, input.month, input.year, totalAmount);
     const netTotal = Math.round((totalAmount - (deduction?.total || 0)) * 100) / 100;
 
-    // Create invoice (teacher invoices are always in PKR)
-    const [newInvoice] = await db
-      .insert(invoices)
-      .values({
-        invoiceNumber,
-        type: 'teacher',
-        recipientId: input.teacherId,
-        month: input.month,
-        year: input.year,
-        version: newVersion,
-        isLatest: true,
-        currency: 'PKR',
-        totalAmount: netTotal.toString(),
-        generatedBy: input.generatedBy || null,
-      })
-      .returning();
+    // Keep the previous invoice current until the new one is written: swap them in one
+    // step, so a failure on the way (no earnings, deductions, insert) never loses it.
+    const { newInvoice, createdLineItems } = await db.transaction(async (tx) => {
+      if (existing) {
+        await tx.update(invoices).set({ isLatest: false }).where(eq(invoices.id, existing.id));
+      }
 
-    // Create line items
-    const lineItemsWithInvoiceId = lineItemsData.map((item) => ({
-      ...item,
-      invoiceId: newInvoice.id,
-    }));
+      // Create invoice (teacher invoices are always in PKR)
+      const [newInvoice] = await tx
+        .insert(invoices)
+        .values({
+          invoiceNumber,
+          type: 'teacher',
+          recipientId: input.teacherId,
+          month: input.month,
+          year: input.year,
+          version: newVersion,
+          isLatest: true,
+          currency: 'PKR',
+          totalAmount: netTotal.toString(),
+          generatedBy: input.generatedBy || null,
+        })
+        .returning();
 
-    const createdLineItems = await db
-      .insert(invoiceLineItems)
-      .values(lineItemsWithInvoiceId)
-      .returning();
+      // Create line items
+      const createdLineItems = await tx
+        .insert(invoiceLineItems)
+        .values(lineItemsData.map((item) => ({ ...item, invoiceId: newInvoice.id })))
+        .returning();
+
+      return { newInvoice, createdLineItems };
+    });
 
     // Generate both detailed and simplified PDFs (with any deductions and salary advances)
     const advance = await teacherAdvancesService.summaryFor(teacher.id, input.month, input.year, netTotal);

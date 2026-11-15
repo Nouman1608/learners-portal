@@ -743,8 +743,8 @@ export const feesService = {
         .limit(1);
 
       if (existingStudentInvoice) {
-        // Invoices only include billable fees (amount > 0). If none remain in
-        // this period+currency, the invoice is deleted rather than regenerated.
+        // Invoices only include billable fees (amount > 0, not dropped/leave). If none
+        // remain in this period+currency, the invoice is deleted rather than regenerated.
         const [billable] = await db
           .select({ count: sql<number>`count(*)::int` })
           .from(fees)
@@ -754,7 +754,8 @@ export const feesService = {
               eq(fees.month, fee.month),
               eq(fees.year, fee.year),
               eq(fees.currency, currency),
-              sql`${fees.amount}::numeric > 0`
+              sql`${fees.amount}::numeric > 0`,
+              notInArray(fees.status, ['dropped', 'leave'])
             )
           );
 
