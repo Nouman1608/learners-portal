@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { analyticsApi, FinancialAnalytics, AnalyticsQueryParams, CurrencyRevenue, CurrencyAmount, CourseProfitability, TeacherProfitability } from '../../api/analytics.api';
+import { analyticsApi, FinancialAnalytics, AnalyticsQueryParams, CurrencyRevenue, CurrencyAmount, CourseProfitability, TeacherProfitability, StudentFinance } from '../../api/analytics.api';
 import AnalyticsTable from './AnalyticsTable';
 import FeeListModal, { FeeListRow } from '../fees/FeeListModal';
+import ClassBreakdownModal, { BreakdownColumn } from './ClassBreakdownModal';
 import { currencyApi } from '../../api/currency.api';
 import { CurrencyCode } from '../../api/enrollments.api';
 import LineChart from './charts/LineChart';
@@ -68,6 +69,11 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
     setFeeList(list);
     loadFeeList(list);
   };
+  // One class student by student (click any other figure in Course profitability)
+  const [breakdown, setBreakdown] = useState<{
+    title: string; subtitle: string; courseId: string; highlight?: BreakdownColumn; rows: StudentFinance[] | null;
+  } | null>(null);
+
   // After "Mark paid": refresh the open list and the figures behind it
   const [refresh, setRefresh] = useState(0);
   const afterPaid = () => {
@@ -159,6 +165,27 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
     const [year, month] = tableMonth.split('-').map(Number);
     return { startDate: `${tableMonth}-01`, endDate: `${tableMonth}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`, label: monthLabel || tableMonth };
   })();
+  /** Any other figure of a class: click it for the class student by student, that column highlighted */
+  const drill = (c: CourseProfitability, highlight: BreakdownColumn | undefined, content: React.ReactNode) => (
+    <button
+      type="button"
+      title="Show student by student"
+      className="rounded px-1 text-right underline decoration-dotted underline-offset-2 hover:bg-indigo-100"
+      onClick={() => {
+        const opened = { title: c.courseTitle, subtitle: tablePeriod.label, courseId: c.courseId, highlight, rows: null };
+        setBreakdown(opened);
+        analyticsApi.getClassBreakdown({
+          startDate: tablePeriod.startDate, endDate: tablePeriod.endDate, courseId: c.courseId,
+          campus: c.campus ?? (filters.campus === 'junior' ? 'junior' : 'senior'),
+        })
+          .then((rows) => setBreakdown((current) => (current && current.courseId === opened.courseId ? { ...current, rows } : current)))
+          .catch(() => { toast.error('Failed to load the students'); setBreakdown(null); });
+      }}
+    >
+      {content}
+    </button>
+  );
+
   /** A Received / Not received figure of a teacher or a class: click it for the students and fees behind it */
   const feeCell = (
     t: { name: string; campus?: 'senior' | 'junior'; teacherId?: string | null; courseId?: string },
@@ -410,7 +437,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
         actions={monthFilter}
         exportSum={['students', 'revenue', 'invoiced', 'notInvoiced', 'paid', 'notReceived', 'cost', 'profit', 'soFar']}
         exportNote={monthLabel ? `Month: ${monthLabel}` : `Period: ${comparison.period.start.slice(0, 7)} to ${comparison.period.end.slice(0, 7)}`}
-        description="Revenue is what the class brings in when every student has paid: Invoiced (fee date has arrived) plus Not invoiced (fee dated later, or 1-to-1 classes not counted yet). Invoiced is Received plus Not received. Teacher cost is the expected salary slip; a fixed monthly salary is split equally between that teacher's classes. All in PKR. Click a Received or Not received figure to see the students."
+        description="Revenue is what the class brings in when every student has paid: Invoiced (fee date has arrived) plus Not invoiced (fee dated later, or 1-to-1 classes not counted yet). Invoiced is Received plus Not received. Teacher cost is the expected salary slip; a fixed monthly salary is split equally between that teacher's classes. All in PKR. Click any figure to see it student by student; Received and Not received open the fees themselves, where you can mark them paid."
         rows={courseProfitability}
         rowKey={(c, i) => `${c.courseId}-${i}`}
         searchPlaceholder={`Search ${terms.courseLc} or teacher...`}
@@ -433,24 +460,24 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
         columns={[
           { key: 'course', header: terms.course, value: c => c.courseTitle },
           { key: 'teacher', header: 'Teacher', value: c => c.teachers.join(', ') || null, className: 'text-gray-600' },
-          { key: 'students', header: 'Students', align: 'right', value: c => c.studentCount },
-          { key: 'revenue', header: 'Revenue', align: 'right', value: c => c.revenuePKR, cell: c => pkr(c.revenuePKR), className: 'font-medium text-gray-900' },
-          { key: 'invoiced', header: 'Invoiced', align: 'right', value: c => c.invoicedPKR, cell: c => pkr(c.invoicedPKR) },
-          { key: 'notInvoiced', header: 'Not invoiced', align: 'right', value: c => c.notInvoicedPKR, cell: c => pkr(c.notInvoicedPKR), className: 'text-gray-500' },
+          { key: 'students', header: 'Students', align: 'right', value: c => c.studentCount, cell: c => drill(c, undefined, c.studentCount) },
+          { key: 'revenue', header: 'Revenue', align: 'right', value: c => c.revenuePKR, cell: c => drill(c, 'revenue', pkr(c.revenuePKR)), className: 'font-medium text-gray-900' },
+          { key: 'invoiced', header: 'Invoiced', align: 'right', value: c => c.invoicedPKR, cell: c => drill(c, 'invoiced', pkr(c.invoicedPKR)) },
+          { key: 'notInvoiced', header: 'Not invoiced', align: 'right', value: c => c.notInvoicedPKR, cell: c => drill(c, 'notInvoiced', pkr(c.notInvoicedPKR)), className: 'text-gray-500' },
           { key: 'paid', header: 'Received', align: 'right', value: c => c.paidPKR, cell: c => feeCell({ name: c.courseTitle, campus: c.campus, courseId: c.courseId }, 'received', c.paidPKR), className: 'text-green-700' },
           { key: 'notReceived', header: 'Not received', align: 'right', value: c => c.notReceivedPKR, cell: c => feeCell({ name: c.courseTitle, campus: c.campus, courseId: c.courseId }, 'notReceived', c.notReceivedPKR), className: c => (c.notReceivedPKR > 0 ? 'text-red-600' : 'text-gray-400') },
           {
             key: 'cost', header: 'Teacher cost', align: 'right', value: c => c.teacherCostPKR, className: 'text-gray-600',
             cell: c => (
               <>
-                {pkr(c.teacherCostPKR)}
+                {drill(c, 'cost', pkr(c.teacherCostPKR))}
                 {c.estimatedCostPKR > 0.5 && <div className="text-xs font-normal text-amber-600" title="No salary slip yet for part of this: worked out by the slip's own rules">{pkr(c.estimatedCostPKR)} estimate</div>}
               </>
             ),
           },
-          { key: 'profit', header: 'Expected profit', align: 'right', value: c => c.expectedProfitPKR, cell: c => pkr(c.expectedProfitPKR), className: c => `font-medium ${c.expectedProfitPKR >= 0 ? 'text-green-700' : 'text-red-600'}` },
-          { key: 'soFar', header: 'Profit so far', align: 'right', value: c => c.profitSoFarPKR, cell: c => pkr(c.profitSoFarPKR), className: c => (c.profitSoFarPKR >= 0 ? 'text-green-700' : 'text-red-600') },
-          { key: 'margin', header: 'Margin', align: 'right', value: c => c.marginPercent, cell: c => `${c.marginPercent.toFixed(1)}%`, className: c => (c.marginPercent >= 0 ? 'text-gray-900' : 'text-red-600') },
+          { key: 'profit', header: 'Expected profit', align: 'right', value: c => c.expectedProfitPKR, cell: c => drill(c, 'profit', pkr(c.expectedProfitPKR)), className: c => `font-medium ${c.expectedProfitPKR >= 0 ? 'text-green-700' : 'text-red-600'}` },
+          { key: 'soFar', header: 'Profit so far', align: 'right', value: c => c.profitSoFarPKR, cell: c => drill(c, 'soFar', pkr(c.profitSoFarPKR)), className: c => (c.profitSoFarPKR >= 0 ? 'text-green-700' : 'text-red-600') },
+          { key: 'margin', header: 'Margin', align: 'right', value: c => c.marginPercent, cell: c => drill(c, 'profit', `${c.marginPercent.toFixed(1)}%`), className: c => (c.marginPercent >= 0 ? 'text-gray-900' : 'text-red-600') },
         ]}
         footer={shown => {
           const sum = (pick: (c: (typeof shown)[number]) => number) => pkr(shown.reduce((s, c) => s + pick(c), 0));
@@ -533,6 +560,18 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
           );
         }}
       />
+
+      {/* One class student by student */}
+      {breakdown && (
+        <ClassBreakdownModal
+          title={breakdown.title}
+          subtitle={breakdown.subtitle}
+          courseId={breakdown.courseId}
+          highlight={breakdown.highlight}
+          rows={breakdown.rows}
+          onClose={() => setBreakdown(null)}
+        />
+      )}
 
       {/* The students behind a Received / Not received figure: the same pop-up as the dashboard */}
       {feeList && (

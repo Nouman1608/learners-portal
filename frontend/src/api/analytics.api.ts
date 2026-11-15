@@ -39,6 +39,17 @@ export interface ClassMoney {
   profitSoFarPKR: number; // paid - teacher cost
 }
 
+/** One student's share of a class's row (Course profitability, click a figure) */
+export interface StudentFinance extends ClassMoney {
+  studentId: string | null; // null = teacher pay that names no student of the class
+  firstName: string;
+  lastName: string;
+  teacherPayPKR: number;
+  estimatedPayPKR: number;
+  sharedPayPKR: number; // pay not paid per student (e.g. a fixed salary's share), split equally
+  campus?: 'senior' | 'junior';
+}
+
 /** Course Profit tab (sudo): one class in one month */
 export interface ClassProfit extends ClassMoney {
   courseId: string;
@@ -344,6 +355,12 @@ export interface AnalyticsQueryParams {
  * Analytics API
  */
 export const analyticsApi = {
+  /** One class of Course profitability, student by student (adds up to the class's row) */
+  getClassBreakdown: async (params: { startDate: string; endDate: string; courseId: string; campus?: 'senior' | 'junior' }): Promise<StudentFinance[]> => {
+    const response = await apiClient.get('/analytics/profitability/class-breakdown', { params });
+    return response.data.students;
+  },
+
   /** The fees behind a class's or a teacher's Received / Not received figure */
   getProfitabilityFees: async (params: {
     startDate: string; endDate: string; group: 'received' | 'notReceived' | 'notInvoiced';

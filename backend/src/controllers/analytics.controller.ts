@@ -470,6 +470,34 @@ export const getProfitabilityFees = async (req: Request, res: Response, next: Ne
 };
 
 /**
+ * GET /api/analytics/profitability/class-breakdown?startDate=&endDate=&courseId=&campus=
+ * One class of Course profitability, student by student (admins and sudo; a Junior Campus
+ * class from the Senior portal is sudo only and is worked out by the Junior backend).
+ */
+export const getClassBreakdown = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const query = z.object({
+      startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      courseId: z.string().uuid(),
+      campus: z.enum(['senior', 'junior']).default('senior'),
+    }).safeParse(req.query);
+    if (!query.success) throw new AppError(400, 'Invalid request');
+    const { startDate, endDate, courseId, campus } = query.data;
+    const { start, end } = resolveDateRange(startDate, endDate);
+
+    if (campus === 'junior') {
+      if (req.user?.role !== 'sudo') throw new AppError(403, 'Only sudo can view other campuses');
+      const students = await otherCampus.classBreakdown(courseId, start, end);
+      return res.json({ students: students.map((student) => ({ ...student, campus: 'junior' as const })) });
+    }
+    res.json({ students: await classProfitService.getClassBreakdown(courseId, start, end) });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * GET /api/analytics/class-profit?month=&year=&campus= (sudo only)
  * For each class in a month: fees due and received, what its teacher is paid, and the profit.
  * The other campus is asked through its own backend, since pay rules belong to each portal.

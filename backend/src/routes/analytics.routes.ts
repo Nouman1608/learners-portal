@@ -12,6 +12,7 @@ import {
   getClassProfit,
   getProfitability,
   getProfitabilityFees,
+  getClassBreakdown,
 } from '../controllers/analytics.controller';
 
 const router = Router();
@@ -82,6 +83,9 @@ router.get(
 
 // The fees behind a teacher's Received / Not received figure (click the number)
 router.get('/profitability/fees', requireAdmin, getProfitabilityFees);
+
+// One class of Course profitability, student by student (click any other number)
+router.get('/profitability/class-breakdown', requireAdmin, getClassBreakdown);
 
 // Class profit for a month: fees, teacher pay and profit per class (sudo only)
 router.get(

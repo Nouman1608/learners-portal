@@ -4,7 +4,7 @@ import env from '../config/env';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
 import type { FamilyPeriod, FamilyPart } from './invoices.service';
-import type { ClassProfitReport } from './classProfit.service';
+import type { ClassProfitReport, StudentFinance } from './classProfit.service';
 import type { analyticsService } from './analytics.service';
 
 export type CampusProfitability = Awaited<ReturnType<typeof analyticsService.getProfitability>>;
@@ -106,6 +106,14 @@ export const otherCampus = {
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) throw new AppError(400, 'Invalid date range');
     return otherCampus.request<CampusProfitability>(
       'GET', `/profitability?from=${yearMonth(startDate)}&to=${yearMonth(endDate)}`, undefined, 30000); // a long period runs a slip preview per teacher and month
+  },
+
+  /** One of the other campus's classes student by student, worked out by its own backend */
+  classBreakdown: async (courseId: string, startDate: Date, endDate: Date) => {
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) throw new AppError(400, 'Invalid date range');
+    const result = await otherCampus.request<{ students: StudentFinance[] }>(
+      'GET', `/class-breakdown?from=${yearMonth(startDate)}&to=${yearMonth(endDate)}&courseId=${courseId}`, undefined, 30000);
+    return result.students;
   },
 
   /** Put a student of the other campus into a family (null takes them out) */
