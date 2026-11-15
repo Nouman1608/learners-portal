@@ -70,7 +70,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
     setMonthLoading(true);
     analyticsApi.getProfitability({ startDate: `${tableMonth}-01`, endDate: `${tableMonth}-${String(lastDay).padStart(2, '0')}`, campus: filters.campus })
       .then((rows) => { if (current) setMonthRows(rows); })
-      .catch(() => { if (current) { toast.error('Failed to load that month'); setTableMonth(''); } })
+      .catch((error: any) => { if (current) { toast.error(error.response?.data?.error || 'Failed to load that month'); setTableMonth(''); } })
       .finally(() => { if (current) setMonthLoading(false); });
     return () => { current = false; };
   }, [tableMonth, filters.campus]);
@@ -80,9 +80,10 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
       setLoading(true);
       const analytics = await analyticsApi.getFinancialAnalytics(filters);
       setData(analytics);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to fetch financial analytics:', error);
-      toast.error('Failed to load financial analytics');
+      // e.g. the Junior portal could not be reached for the Junior / Both view
+      toast.error(error.response?.data?.error || 'Failed to load financial analytics');
     } finally {
       setLoading(false);
     }
