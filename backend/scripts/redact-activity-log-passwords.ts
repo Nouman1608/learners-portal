@@ -19,14 +19,16 @@ if (!envFile) {
   console.error('Usage: npx tsx scripts/redact-activity-log-passwords.ts .env|.env.junior [--apply]');
   process.exit(1);
 }
-dotenv.config({ path: envFile, override: true });
-if (!process.env.DATABASE_URL) {
+// Take DATABASE_URL from the file itself, so a missing file can't fall back to the shell's (other campus)
+const loaded = dotenv.config({ path: envFile, override: true });
+if (loaded.error || !loaded.parsed?.DATABASE_URL) {
   console.error(`No DATABASE_URL in ${envFile}`);
   process.exit(1);
 }
+const databaseUrl = loaded.parsed.DATABASE_URL;
 
 async function main() {
-  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  const client = new Client({ connectionString: databaseUrl });
   await client.connect();
   try {
     // Narrow down in the database; the exact check is done on the parsed JSON below
@@ -54,7 +56,7 @@ async function main() {
       byActionDay.set(key, (byActionDay.get(key) || 0) + 1);
     }
 
-    console.log(`${apply ? 'APPLYING' : 'PREVIEW (nothing changed)'} on ${envFile}`);
+    console.log(`${apply ? 'APPLYING' : 'PREVIEW (nothing changed)'} on ${envFile} (database ${client.database})`);
     console.log(`Rows checked: ${rows.length}; with a readable password/token: ${changes.length}; not valid JSON (skipped): ${notJson}\n`);
     for (const [key, count] of byActionDay) console.log(`  ${key}: ${count}`);
 
