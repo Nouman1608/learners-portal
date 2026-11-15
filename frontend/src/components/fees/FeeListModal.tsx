@@ -2,7 +2,10 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { XMarkIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import MarkAsReceivedModal from './MarkAsReceivedModal';
-import { Fee } from '../../api/enrollments.api';
+import { Fee, feesApi } from '../../api/enrollments.api';
+import ConfirmDialog from '../common/ConfirmDialog';
+import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import toast from 'react-hot-toast';
 import { terms, isJuniorPortal } from '../../brand';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -56,6 +59,40 @@ const formatDue = (date: string | null) => {
 export default function FeeListModal({ title, subtitle, rows, period, onClose, onPaid }: FeeListModalProps) {
   // The fee being marked as paid (same pop-up as the Fees page)
   const [feeToMark, setFeeToMark] = useState<Fee | null>(null);
+  const { confirm, dialogProps } = useConfirmDialog();
+  const [busyFeeId, setBusyFeeId] = useState<string | null>(null);
+
+  // "Dropped" / "On leave": the same actions, wording and confirmation as the ticks on the Fees
+  // page. Either way the fee is no longer owed, so it leaves this list.
+  const markNotOwed = async (row: FeeListRow, kind: 'dropped' | 'leave') => {
+    const { month, year } = monthOf(row);
+    if (!row.feeId || !month || !year) return;
+    const name = `${row.firstName} ${row.lastName}`;
+    const periodName = `${MONTHS[month - 1]} ${year}`;
+    const confirmed = await confirm(kind === 'dropped' ? {
+      title: 'Mark as dropped – not paying',
+      message: `${name} has dropped ${row.classTitle}?\n\nThe ${periodName} fee will no longer be owed and is taken off the student and teacher invoices. The enrollment is marked as dropped, and unpaid fees for later months are removed.\n\nTo undo this, use the Fees page.`,
+      confirmLabel: 'Mark dropped',
+      variant: 'warning',
+    } : {
+      title: 'Mark as on leave',
+      message: `${name} is on leave for ${periodName}?\n\nThe ${row.classTitle} fee for ${periodName} will not be owed and is taken off the student and teacher invoices. ${name} stays enrolled, so next month is billed as normal.\n\nTo undo this, use the Fees page.`,
+      confirmLabel: 'On leave',
+      variant: 'info',
+    });
+    if (!confirmed) return;
+    setBusyFeeId(row.feeId);
+    try {
+      if (kind === 'dropped') await feesApi.setFeeDropped(row.feeId, true);
+      else await feesApi.setFeeOnLeave(row.feeId, true);
+      toast.success(kind === 'dropped' ? 'Marked as dropped – not paying' : 'Marked as on leave');
+      onPaid();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || error.response?.data?.message || 'Failed to update fee');
+    } finally {
+      setBusyFeeId(null);
+    }
+  };
 
   const monthOf = (row: FeeListRow) => ({ month: row.month ?? period?.month, year: row.year ?? period?.year });
   // A Month column only when the list covers more than one month
@@ -94,7 +131,7 @@ export default function FeeListModal({ title, subtitle, rows, period, onClose, o
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-        <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex max-h-[85vh] w-full max-w-4xl flex-col rounded-xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-start justify-between gap-4 border-b px-5 py-4">
             <div>
               <h3 className="text-base font-semibold text-gray-900">{title}</h3>
@@ -122,7 +159,7 @@ export default function FeeListModal({ title, subtitle, rows, period, onClose, o
                     <th className="px-3 py-2 text-right font-medium">Fee</th>
                     <th className="px-3 py-2 text-left font-medium">Due date</th>
                     <th className="px-3 py-2 text-left font-medium">Status</th>
-                    <th className="px-5 py-2 text-right font-medium">Paid?</th>
+                    <th className="px-5 py-2 text-right font-medium">Paid / not owed?</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -165,15 +202,39 @@ export default function FeeListModal({ title, subtitle, rows, period, onClose, o
                         <td className="whitespace-nowrap px-5 py-2 text-right">
                           {/* Pending / overdue fees of this portal's own students can be marked paid here */}
                           {(row.feeStatus === 'pending' || row.feeStatus === 'overdue') && row.feeId && !otherPortal && (
-                            <button
-                              type="button"
-                              onClick={() => markPaid(row)}
-                              className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
-                              title="The student has paid: record how, and mark this fee as received"
-                            >
-                              <CheckCircleIcon className="h-4 w-4" />
-                              Mark paid
-                            </button>
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => markPaid(row)}
+                                disabled={busyFeeId === row.feeId}
+                                className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                                title="The student has paid: record how, and mark this fee as received"
+                              >
+                                <CheckCircleIcon className="h-4 w-4" />
+                                Mark paid
+                              </button>
+                              {/* On leave is a Junior portal feature, as on the Fees page */}
+                              {isJuniorPortal && (
+                                <button
+                                  type="button"
+                                  onClick={() => markNotOwed(row, 'leave')}
+                                  disabled={busyFeeId === row.feeId}
+                                  className="rounded-md bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 hover:bg-sky-100 disabled:opacity-50"
+                                  title="On leave this month: this fee is not owed, the student stays enrolled"
+                                >
+                                  Leave
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => markNotOwed(row, 'dropped')}
+                                disabled={busyFeeId === row.feeId}
+                                className="rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                                title="Dropped – not paying: this fee is not owed and the enrollment is dropped"
+                              >
+                                Dropped
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -198,7 +259,8 @@ export default function FeeListModal({ title, subtitle, rows, period, onClose, o
           </div>
           <p className="border-t px-5 py-3 text-xs text-gray-500">
             Click a student's name to open their enrollment in that class, where you can drop them or change the fee.
-            "Mark paid" records the payment exactly as the Fees page does.
+            "Mark paid" records the payment exactly as the Fees page does. "Dropped"{isJuniorPortal ? ' and "Leave"' : ''} take the fee off
+            what is owed, as the ticks on the Fees page do (undo them there).
           </p>
         </div>
       </div>
@@ -213,6 +275,7 @@ export default function FeeListModal({ title, subtitle, rows, period, onClose, o
           onSuccess={onPaid}
         />
       )}
+      <ConfirmDialog {...dialogProps} />
     </>
   );
 }
