@@ -5,6 +5,7 @@ import { feesService } from '../services/fees.service';
 import { paymentsService } from '../services/payments.service';
 import { juniorDb } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+import { acceptFileLink } from '../utils/fileLinks';
 
 // Validation schemas
 const validDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(
@@ -92,7 +93,15 @@ const createPaymentSchema = z.object({
   paymentMethod: z.enum(['cash', 'bank_transfer', 'jazzcash', 'easypaisa', 'payfast', 'other']),
   transactionId: z.string().max(255).optional(),
   paymentDate: z.string().datetime(),
-  proofUrl: z.string().url().max(500).optional(),
+  // A link the upload endpoint handed out (signed); stored without its signature
+  proofUrl: z.string().max(600).transform((value, ctx) => {
+    const link = acceptFileLink(value);
+    if (!link || link.length > 500) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Proof must be a file uploaded to the portal' });
+      return z.NEVER;
+    }
+    return link;
+  }).optional(),
   notes: z.string().max(1000).optional(),
 });
 
@@ -244,6 +253,7 @@ const hideNote = <T extends { adminNote?: string | null }>(req: Request, fee: T)
 const campusDatabase = (req: Request) => {
   if (req.query.campus !== 'junior' || req.user?.role !== 'sudo') return undefined;
   if (!juniorDb) throw new AppError(400, 'Junior Campus is not connected to this portal');
+  if (req.res) req.res.locals.fileCampus = 'junior'; // any file links are the Junior portal's
   return juniorDb;
 };
 
