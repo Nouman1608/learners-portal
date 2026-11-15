@@ -69,10 +69,10 @@ export const generateStudentInvoice = async (req: Request, res: Response, next: 
   }
 };
 
-/** Salary slips of previous months are locked: only sudo may (re)generate them */
+/** A locked month's salary slips (after the 11th of the next month): only sudo may (re)generate them */
 function sudoForPastSlips(req: Request, month: number, year: number): boolean {
   if (!invoicesService.isPastSlipMonth(month, year)) return false;
-  if (req.user?.role !== 'sudo') throw new AppError(403, 'Salary slips for previous months are locked: only sudo can regenerate them');
+  if (req.user?.role !== 'sudo') throw new AppError(403, 'This salary slip is locked: a month can be regenerated until the 11th of the next month, after that only by sudo');
   return true;
 }
 

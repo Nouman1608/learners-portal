@@ -85,11 +85,14 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
   const juniorView = isJuniorPortal || juniorTab;
   const canAct = isAdmin && !juniorTab;
 
-  // Salary slips of previous months are locked: only sudo can generate or regenerate them
-  const LOCKED_SLIP = 'Previous months are locked: only sudo can regenerate their salary slips';
+  // A month's salary slips stay open until the 11th of the next month; after that only sudo
+  // can generate or regenerate them (the server enforces the same rule)
+  const LOCKED_SLIP = 'Locked: a month can be regenerated until the 11th of the next month, after that only by sudo';
   const slipLocked = (month: number, year: number) => {
+    if (!isSalary || user?.role === 'sudo') return false;
     const now = new Date();
-    return isSalary && user?.role !== 'sudo' && year * 12 + month < now.getFullYear() * 12 + now.getMonth() + 1;
+    const monthsAgo = (now.getFullYear() * 12 + now.getMonth() + 1) - (year * 12 + month);
+    return monthsAgo > 1 || (monthsAgo === 1 && now.getDate() > 11);
   };
 
   useEffect(() => {
@@ -562,7 +565,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
           </button>
           <p className="w-full text-sm text-gray-500">
             {slipLocked(selectedMonth, selectedYear)
-              ? <span className="text-amber-700">{MONTHS[selectedMonth - 1]} {selectedYear} is a previous month. {LOCKED_SLIP}.</span>
+              ? <span className="text-amber-700">{MONTHS[selectedMonth - 1]} {selectedYear}: {LOCKED_SLIP}.</span>
               : <>For {MONTHS[selectedMonth - 1]} {selectedYear}. Review one-to-one classes taken before generating.</>}
           </p>
         </div>
