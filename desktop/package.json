@@ -1,0 +1,38 @@
+{
+  "name": "learners-portal-desktop",
+  "productName": "Learners Portal",
+  "version": "1.0.0",
+  "description": "Learners Portal for Windows: the live portal in its own window.",
+  "author": "Learners Academy",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "pk.com.learnersacademy.portal",
+    "productName": "Learners Portal",
+    "directories": {
+      "buildResources": "assets",
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "assets/icon.png"
+    ],
+    "win": {
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Learners Portal"
+    }
+  },
+  "devDependencies": {
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0"
+  }
+}
