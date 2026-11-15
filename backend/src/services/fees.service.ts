@@ -803,7 +803,8 @@ export const feesService = {
           )
           .limit(1);
 
-        if (existingTeacherInvoice) {
+        // A previous month's slip is locked: a fee change does not rebuild it
+        if (existingTeacherInvoice && !invoicesService.isPastSlipMonth(fee.month, fee.year)) {
           await invoicesService.generateTeacherInvoice({
             teacherId: teacher.teacherId,
             month: fee.month,
@@ -1036,8 +1037,10 @@ export const feesService = {
     }
 
     // If enrollment started in this exact month
+    // Salary slips are made on the 21st: enrolled up to and including the 20th counts for this
+    // month, enrolled after the 20th starts next month (owner rule, Nov 2026)
     if (enrollmentYear === year && enrollmentMonth === month) {
-      return enrollmentDay < 20;
+      return enrollmentDay <= 20;
     }
 
     return false;

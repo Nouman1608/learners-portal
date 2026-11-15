@@ -69,11 +69,20 @@ export const generateStudentInvoice = async (req: Request, res: Response, next: 
   }
 };
 
+/** Salary slips of previous months are locked: only sudo may (re)generate them */
+function sudoForPastSlips(req: Request, month: number, year: number): boolean {
+  if (!invoicesService.isPastSlipMonth(month, year)) return false;
+  if (req.user?.role !== 'sudo') throw new AppError(403, 'Salary slips for previous months are locked: only sudo can regenerate them');
+  return true;
+}
+
 export const generateTeacherInvoice = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const validated = generateTeacherInvoiceSchema.parse(req.body);
+    const allowPastMonth = sudoForPastSlips(req, validated.month, validated.year);
     const result = await invoicesService.generateTeacherInvoice({
       ...validated,
+      allowPastMonth,
       generatedBy: req.user!.id,
     });
     res.status(201).json(result);
@@ -95,7 +104,7 @@ export const generateMonthlyStudentInvoices = async (req: Request, res: Response
 export const generateMonthlyInvoices = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const validated = generateMonthlyInvoicesSchema.parse(req.body);
-    const result = await invoicesService.generateMonthlyInvoices(validated.month, validated.year);
+    const result = await invoicesService.generateMonthlyInvoices(validated.month, validated.year, sudoForPastSlips(req, validated.month, validated.year));
     res.json(result);
   } catch (error) {
     next(error);
@@ -105,7 +114,7 @@ export const generateMonthlyInvoices = async (req: Request, res: Response, next:
 export const generateMonthlyTeacherInvoices = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const validated = generateMonthlyInvoicesSchema.parse(req.body);
-    const result = await invoicesService.generateMonthlyTeacherInvoices(validated.month, validated.year);
+    const result = await invoicesService.generateMonthlyTeacherInvoices(validated.month, validated.year, sudoForPastSlips(req, validated.month, validated.year));
     res.json(result);
   } catch (error) {
     next(error);
@@ -124,7 +133,7 @@ export const generatePreviousMonthInvoices = async (req: Request, res: Response,
       prevYear--;
     }
 
-    const result = await invoicesService.generateMonthlyInvoices(prevMonth, prevYear);
+    const result = await invoicesService.generateMonthlyInvoices(prevMonth, prevYear, sudoForPastSlips(req, prevMonth, prevYear));
     res.json({
       ...result,
       month: prevMonth,

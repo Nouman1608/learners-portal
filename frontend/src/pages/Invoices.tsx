@@ -85,6 +85,13 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
   const juniorView = isJuniorPortal || juniorTab;
   const canAct = isAdmin && !juniorTab;
 
+  // Salary slips of previous months are locked: only sudo can generate or regenerate them
+  const LOCKED_SLIP = 'Previous months are locked: only sudo can regenerate their salary slips';
+  const slipLocked = (month: number, year: number) => {
+    const now = new Date();
+    return isSalary && user?.role !== 'sudo' && year * 12 + month < now.getFullYear() * 12 + now.getMonth() + 1;
+  };
+
   useEffect(() => {
     if (isAdmin) usersApi.getUsersByRole('teacher').then(setTeachers)
       .catch(() => toast.error('Failed to load teachers'));
@@ -549,11 +556,15 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
               {teachers.map(t => <option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>)}
             </select>
           </div>
-          <button disabled={!teacherId || teacherGenerating} className="px-4 py-2 bg-indigo-600 text-white rounded-md disabled:opacity-50"
+          <button disabled={!teacherId || teacherGenerating || slipLocked(selectedMonth, selectedYear)} title={slipLocked(selectedMonth, selectedYear) ? LOCKED_SLIP : undefined} className="px-4 py-2 bg-indigo-600 text-white rounded-md disabled:opacity-50"
             onClick={() => { const teacher = teachers.find(t => t.id === teacherId); if (teacher) startSalarySlip(teacherId, selectedMonth, selectedYear, `${teacher.firstName} ${teacher.lastName}`); }}>
             {teacherGenerating ? 'Loading...' : 'Generate Salary Slip'}
           </button>
-          <p className="w-full text-sm text-gray-500">For {MONTHS[selectedMonth - 1]} {selectedYear}. Review one-to-one classes taken before generating.</p>
+          <p className="w-full text-sm text-gray-500">
+            {slipLocked(selectedMonth, selectedYear)
+              ? <span className="text-amber-700">{MONTHS[selectedMonth - 1]} {selectedYear} is a previous month. {LOCKED_SLIP}.</span>
+              : <>For {MONTHS[selectedMonth - 1]} {selectedYear}. Review one-to-one classes taken before generating.</>}
+          </p>
         </div>
       )}
       {/* Filters and Actions */}
@@ -678,7 +689,9 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
                 {isSalary ? (
                   <button
                     onClick={handleGenerateTeacherInvoices}
-                    className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                    disabled={slipLocked(selectedMonth, selectedYear)}
+                    title={slipLocked(selectedMonth, selectedYear) ? LOCKED_SLIP : undefined}
+                    className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Generate All Salary Slips
                   </button>
@@ -833,9 +846,9 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
                         onClick={() => invoice.members
                           ? setOpenFamilies((open) => new Set(open).add(invoice.invoiceNumber))
                           : handleRegenerateInvoice(invoice)}
-                        disabled={regeneratingId === invoice.id || teacherGenerating}
+                        disabled={regeneratingId === invoice.id || teacherGenerating || (invoice.type === 'teacher' && slipLocked(invoice.month, invoice.year))}
                         className="p-1.5 text-orange-500 hover:text-orange-700 hover:bg-orange-50 rounded-lg transition-colors disabled:opacity-50"
-                        title={invoice.members ? 'Regenerate: choose the child below' : 'Regenerate Invoice'}
+                        title={invoice.type === 'teacher' && slipLocked(invoice.month, invoice.year) ? LOCKED_SLIP : invoice.members ? 'Regenerate: choose the child below' : 'Regenerate Invoice'}
                       >
                         <ArrowPathIcon className={`h-5 w-5 ${regeneratingId === invoice.id ? 'animate-spin' : ''}`} />
                       </button>

@@ -70,8 +70,30 @@ export const weeklyEventGeneration = cron.schedule('10 0 * * 0', async () => {
 });
 
 /**
+ * Teachers' salary slips for the month: made on the 21st, just after the 20th has ended, so
+ * the slip covers every student enrolled up to and including the 20th (owner rule, Nov 2026).
+ */
+export const monthlySalarySlipGeneration = cron.schedule('30 0 21 * *', async () => {
+  try {
+    const now = new Date();
+    const month = now.getMonth() + 1; // 1-12
+    const year = now.getFullYear();
+
+    logger.info(`[CRON] Starting salary slip generation for ${month}/${year}`);
+    const result = await invoicesService.generateMonthlyTeacherInvoices(month, year);
+    logger.info(`[CRON] Salary slip generation completed: ${result.teacherCount} salary slips`);
+  } catch (error: any) {
+    logger.error('[CRON] Salary slip generation failed:', error);
+  }
+}, {
+  scheduled: false,
+  timezone: 'Asia/Karachi',
+});
+
+/**
  * Generate monthly invoices for all students and teachers
- * Runs on the 25th of each month at 23:00 (11 PM)
+ * Runs on the 25th of each month at 23:00 (11 PM). The teachers' slips were made on the 21st;
+ * this run brings them up to date with 1-to-1 classes counted since then.
  */
 export const monthlyInvoiceGeneration = cron.schedule('0 23 25 * *', async () => {
   try {
@@ -107,6 +129,9 @@ export const startCronJobs = () => {
   weeklyEventGeneration.start();
   logger.info('[CRON] ✓ Weekly event generation job started (runs every Sunday at 00:10 PKT)');
 
+  monthlySalarySlipGeneration.start();
+  logger.info('[CRON] ✓ Salary slip generation job started (runs on 21st of each month at 00:30 PKT)');
+
   monthlyInvoiceGeneration.start();
   logger.info('[CRON] ✓ Monthly invoice generation job started (runs on 25th of each month at 23:00 PKT)');
 
@@ -123,6 +148,7 @@ export const stopCronJobs = () => {
   dailyFeeGeneration.stop();
   overdueDetection.stop();
   weeklyEventGeneration.stop();
+  monthlySalarySlipGeneration.stop();
   monthlyInvoiceGeneration.stop();
 
   // Stop WhatsApp marketing cron jobs
@@ -137,5 +163,6 @@ export default {
   dailyFeeGeneration,
   overdueDetection,
   weeklyEventGeneration,
+  monthlySalarySlipGeneration,
   monthlyInvoiceGeneration
 };

@@ -99,6 +99,9 @@ export interface GenerateTeacherInvoiceInput {
   generatedBy?: string;
   // Work out the slip's lines with the usual rules but save nothing (class profit estimates)
   preview?: boolean;
+  // A slip for a month before the current one is locked: only an explicit request by sudo
+  // sets this. Automatic rebuilds (fee / enrollment edits) never do, so past slips stay as they were.
+  allowPastMonth?: boolean;
 }
 
 export const invoicesService = {
@@ -1095,7 +1098,18 @@ export const invoicesService = {
   /**
    * Generate teacher invoice
    */
+  /** True for a month before the current one (Pakistan time): its salary slips are locked */
+  isPastSlipMonth(month: number, year: number): boolean {
+    const [nowYear, nowMonth] = pakistanDay.format(new Date()).split('-').map(Number);
+    return year * 12 + month < nowYear * 12 + nowMonth;
+  },
+
   async generateTeacherInvoice(input: GenerateTeacherInvoiceInput) {
+    // Previous months are locked (owner rule, Nov 2026): a past slip only changes when sudo
+    // asks for it. A preview saves nothing, so it is always allowed.
+    if (!input.preview && !input.allowPastMonth && this.isPastSlipMonth(input.month, input.year)) {
+      throw new AppError(403, 'Salary slips for previous months are locked: only sudo can regenerate them');
+    }
     // Validate all manual counts before changing invoice versions. These are
     // invoice snapshots, not edits to the student's fees or calendar.
     const manualSessions = new Map<string, number>();
@@ -2093,7 +2107,7 @@ export const invoicesService = {
   /**
    * Generate all invoices for a month (for cron job)
    */
-  async generateMonthlyInvoices(month: number, year: number) {
+  async generateMonthlyInvoices(month: number, year: number, allowPastMonth = false) {
     let invoiceCount = 0;
     let teacherCount = 0;
 
@@ -2137,7 +2151,7 @@ export const invoicesService = {
     // Generate teacher invoices
     for (const { teacherId } of allTeachers) {
       try {
-        await this.generateTeacherInvoice({ teacherId, month, year });
+        await this.generateTeacherInvoice({ teacherId, month, year, allowPastMonth });
         teacherCount++;
       } catch (error: any) {
         // Skip if no active enrollments or already exists
@@ -2154,7 +2168,7 @@ export const invoicesService = {
     };
   },
 
-  async generateMonthlyTeacherInvoices(month: number, year: number) {
+  async generateMonthlyTeacherInvoices(month: number, year: number, allowPastMonth = false) {
     let teacherCount = 0;
 
     // Only active teachers: someone who has left (deactivated) gets no more salary slips
@@ -2173,7 +2187,7 @@ export const invoicesService = {
 
     for (const { teacherId } of allTeachers) {
       try {
-        await this.generateTeacherInvoice({ teacherId, month, year });
+        await this.generateTeacherInvoice({ teacherId, month, year, allowPastMonth });
         teacherCount++;
       } catch (error: any) {
         if (error.statusCode !== 404 && error.statusCode !== 400) {

@@ -561,6 +561,8 @@ export const enrollmentsService = {
 
           // Regenerate teacher invoices
           for (const teacher of affectedTeachers) {
+            // A previous month's slip is locked: it is not rebuilt (or deleted) by this change
+            if (invoicesService.isPastSlipMonth(month, year)) continue;
             try {
               // Read the admin's class counts before the old versions are deleted
               const savedSessionCounts = await invoicesService.getSavedTeacherSessionCounts(
@@ -860,7 +862,8 @@ export const enrollmentsService = {
             )
             .limit(1);
 
-          if (existingTeacherInvoice) {
+          // A previous month's slip is locked: a fee edit does not rebuild it
+          if (existingTeacherInvoice && !invoicesService.isPastSlipMonth(month, year)) {
             await invoicesService.generateTeacherInvoice({
               teacherId: teacher.teacherId,
               month,
@@ -1061,6 +1064,8 @@ export const enrollmentsService = {
 
         // Regenerate teacher invoices
         for (const teacher of affectedTeachers) {
+          // A previous month's slip is locked: deleting an enrollment does not rebuild it
+          if (invoicesService.isPastSlipMonth(month, year)) continue;
           try {
             await invoicesService.generateTeacherInvoice({
               teacherId: teacher.teacherId,
@@ -1195,6 +1200,7 @@ export const enrollmentsService = {
       const [teacherInvoice] = await db.select({ id: invoices.id }).from(invoices)
         .where(and(period('teacher', teacherId), eq(invoices.isLatest, true))).limit(1);
       if (!teacherInvoice) continue;
+      if (invoicesService.isPastSlipMonth(month, year)) continue; // a previous month's slip is locked
       try {
         await invoicesService.generateTeacherInvoice({ teacherId, month, year, generatedBy: userId });
       } catch (error: any) {
