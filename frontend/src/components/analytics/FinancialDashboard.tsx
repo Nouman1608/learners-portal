@@ -158,7 +158,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
         { header: 'Revenue (PKR)', value: c => Math.round(c.revenuePKR) },
         { header: 'Invoiced (PKR)', value: c => Math.round(c.invoicedPKR) },
         { header: 'Not invoiced (PKR)', value: c => Math.round(c.notInvoicedPKR) },
-        { header: 'Paid (PKR)', value: c => Math.round(c.paidPKR) },
+        { header: 'Received (PKR)', value: c => Math.round(c.paidPKR) },
         { header: 'Not received (PKR)', value: c => Math.round(c.notReceivedPKR) },
         { header: 'Teacher cost (PKR)', value: c => Math.round(c.teacherCostPKR) },
         { header: 'of which estimate (PKR)', value: c => Math.round(c.estimatedCostPKR) },
@@ -199,7 +199,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
           </p>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-sm font-medium text-gray-600">Paid</p>
+          <p className="text-sm font-medium text-gray-600">Received</p>
           <p className="mt-2 text-3xl font-bold text-green-700">{pkr(totals.paidPKR)}</p>
           <p className="mt-1 text-xs text-gray-500">
             {totals.invoicedPKR > 0 ? ((totals.paidPKR / totals.invoicedPKR) * 100).toFixed(1) : '0.0'}% of what is invoiced
@@ -353,7 +353,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
         actions={monthFilter}
         exportSum={['students', 'revenue', 'invoiced', 'notInvoiced', 'paid', 'notReceived', 'cost', 'profit', 'soFar']}
         exportNote={monthLabel ? `Month: ${monthLabel}` : `Period: ${comparison.period.start.slice(0, 7)} to ${comparison.period.end.slice(0, 7)}`}
-        description="Revenue is what the class brings in when every student has paid: Invoiced (fee date has arrived) plus Not invoiced (fee dated later, or 1-to-1 classes not counted yet). Invoiced is Paid plus Not received. Teacher cost is the expected salary slip; a fixed monthly salary is split equally between that teacher's classes. All in PKR."
+        description="Revenue is what the class brings in when every student has paid: Invoiced (fee date has arrived) plus Not invoiced (fee dated later, or 1-to-1 classes not counted yet). Invoiced is Received plus Not received. Teacher cost is the expected salary slip; a fixed monthly salary is split equally between that teacher's classes. All in PKR."
         rows={courseProfitability}
         rowKey={(c, i) => `${c.courseId}-${i}`}
         searchPlaceholder={`Search ${terms.courseLc} or teacher...`}
@@ -380,7 +380,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
           { key: 'revenue', header: 'Revenue', align: 'right', value: c => c.revenuePKR, cell: c => pkr(c.revenuePKR), className: 'font-medium text-gray-900' },
           { key: 'invoiced', header: 'Invoiced', align: 'right', value: c => c.invoicedPKR, cell: c => pkr(c.invoicedPKR) },
           { key: 'notInvoiced', header: 'Not invoiced', align: 'right', value: c => c.notInvoicedPKR, cell: c => pkr(c.notInvoicedPKR), className: 'text-gray-500' },
-          { key: 'paid', header: 'Paid', align: 'right', value: c => c.paidPKR, cell: c => pkr(c.paidPKR), className: 'text-green-700' },
+          { key: 'paid', header: 'Received', align: 'right', value: c => c.paidPKR, cell: c => pkr(c.paidPKR), className: 'text-green-700' },
           { key: 'notReceived', header: 'Not received', align: 'right', value: c => c.notReceivedPKR, cell: c => pkr(c.notReceivedPKR), className: c => (c.notReceivedPKR > 0 ? 'text-red-600' : 'text-gray-400') },
           {
             key: 'cost', header: 'Teacher cost', align: 'right', value: c => c.teacherCostPKR, className: 'text-gray-600',
@@ -443,7 +443,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
           { key: 'revenue', header: 'Revenue', align: 'right', value: t => t.revenuePKR, cell: t => pkr(t.revenuePKR), className: 'font-medium text-gray-900' },
           { key: 'invoiced', header: 'Invoiced', align: 'right', value: t => t.invoicedPKR, cell: t => pkr(t.invoicedPKR) },
           { key: 'notInvoiced', header: 'Not invoiced', align: 'right', value: t => t.notInvoicedPKR, cell: t => pkr(t.notInvoicedPKR), className: 'text-gray-500' },
-          { key: 'paid', header: 'Paid', align: 'right', value: t => t.paidPKR, cell: t => pkr(t.paidPKR), className: 'text-green-700' },
+          { key: 'paid', header: 'Received', align: 'right', value: t => t.paidPKR, cell: t => pkr(t.paidPKR), className: 'text-green-700' },
           { key: 'notReceived', header: 'Not received', align: 'right', value: t => t.notReceivedPKR, cell: t => pkr(t.notReceivedPKR), className: t => (t.notReceivedPKR > 0 ? 'text-red-600' : 'text-gray-400') },
           {
             key: 'cost', header: 'Teacher cost', align: 'right', value: t => t.teacherCostPKR, className: 'text-gray-600',

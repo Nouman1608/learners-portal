@@ -72,7 +72,7 @@ export default function ClassProfitPanel({ campus }: { campus: 'senior' | 'junio
       { header: 'Revenue (PKR)', value: (r) => Math.round(r.revenuePKR) },
       { header: 'Invoiced (PKR)', value: (r) => Math.round(r.invoicedPKR) },
       { header: 'Not invoiced (PKR)', value: (r) => Math.round(r.notInvoicedPKR) },
-      { header: 'Paid (PKR)', value: (r) => Math.round(r.paidPKR) },
+      { header: 'Received (PKR)', value: (r) => Math.round(r.paidPKR) },
       { header: 'Not received (PKR)', value: (r) => Math.round(r.notReceivedPKR) },
       { header: 'Teacher cost (PKR)', value: (r) => Math.round(r.teacherPayPKR) },
       { header: 'of which estimate (PKR)', value: (r) => Math.round(r.estimatedPayPKR) },
@@ -108,7 +108,7 @@ export default function ClassProfitPanel({ campus }: { campus: 'senior' | 'junio
           <p className="mt-1 text-xs text-gray-500">Invoiced {pkr(totals.invoiced)} · not invoiced yet {pkr(totals.notInvoiced)}</p>
         </div>
         <div className="rounded-lg bg-white p-6 shadow">
-          <p className="text-sm font-medium text-gray-600">Paid</p>
+          <p className="text-sm font-medium text-gray-600">Received</p>
           <p className="mt-2 text-3xl font-bold text-green-700">{pkr(totals.paid)}</p>
           <p className="mt-1 text-xs text-gray-500">{totals.invoiced > 0 ? ((totals.paid / totals.invoiced) * 100).toFixed(1) : '0.0'}% of what is invoiced</p>
         </div>
@@ -129,7 +129,7 @@ export default function ClassProfitPanel({ campus }: { campus: 'senior' | 'junio
 
       <AnalyticsTable<Row>
         title={`Each ${terms.courseLc} in ${title}`}
-        description="Revenue is what the class brings in when every student has paid: Invoiced (fee date has arrived) plus Not invoiced (fee dated later this month, or 1-to-1 classes not counted yet). Invoiced is Paid plus Not received. Teacher cost is the expected salary slip: the slip itself, or an estimate by the slip's own rules until it is made; a fixed monthly salary is split equally between that teacher's classes. Profit is fees less teacher pay only (other expenses are on the Expenses page). All in PKR."
+        description="Revenue is what the class brings in when every student has paid: Invoiced (fee date has arrived) plus Not invoiced (fee dated later this month, or 1-to-1 classes not counted yet). Invoiced is Received plus Not received. Teacher cost is the expected salary slip: the slip itself, or an estimate by the slip's own rules until it is made; a fixed monthly salary is split equally between that teacher's classes. Profit is fees less teacher pay only (other expenses are on the Expenses page). All in PKR."
         rows={rows}
         rowKey={(r) => `${r.campus || ''}-${r.courseId}`}
         searchPlaceholder={`Search ${terms.courseLc} or teacher...`}
@@ -177,7 +177,7 @@ export default function ClassProfitPanel({ campus }: { campus: 'senior' | 'junio
           { key: 'revenue', header: 'Revenue', align: 'right', value: (r) => r.revenuePKR, cell: (r) => pkr(r.revenuePKR), className: 'font-medium text-gray-900' },
           { key: 'invoiced', header: 'Invoiced', align: 'right', value: (r) => r.invoicedPKR, cell: (r) => pkr(r.invoicedPKR) },
           { key: 'notInvoiced', header: 'Not invoiced', align: 'right', value: (r) => r.notInvoicedPKR, cell: (r) => pkr(r.notInvoicedPKR), className: 'text-gray-500' },
-          { key: 'paid', header: 'Paid', align: 'right', value: (r) => r.paidPKR, cell: (r) => pkr(r.paidPKR), className: 'text-green-700' },
+          { key: 'paid', header: 'Received', align: 'right', value: (r) => r.paidPKR, cell: (r) => pkr(r.paidPKR), className: 'text-green-700' },
           { key: 'notReceived', header: 'Not received', align: 'right', value: (r) => r.notReceivedPKR, cell: (r) => pkr(r.notReceivedPKR), className: (r) => (r.notReceivedPKR > 0 ? 'text-red-600' : 'text-gray-400') },
           {
             key: 'cost', header: 'Teacher cost', align: 'right', value: (r) => r.teacherPayPKR, className: 'text-gray-600',
