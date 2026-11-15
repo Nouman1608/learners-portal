@@ -1,4 +1,5 @@
 import apiClient from './client';
+import type { FeeListRow } from '../components/fees/FeeListModal';
 
 /**
  * Money is reported in the currency the student was billed in, alongside a PKR
@@ -122,6 +123,7 @@ export interface TeacherProfitability extends ClassMoney {
   estimatedCostPKR: number; // part of the pay with no slip made yet
   slipCount: number; // salary slips in the period
   marginPercent: number;
+  campus?: 'senior' | 'junior'; // set when both campuses are shown together
 }
 
 export interface CourseProfitability extends ClassMoney {
@@ -341,6 +343,14 @@ export interface AnalyticsQueryParams {
  * Analytics API
  */
 export const analyticsApi = {
+  /** The fees behind a teacher's Received / Not received figure (teacherId null = classes with no teacher) */
+  getProfitabilityFees: async (params: {
+    startDate: string; endDate: string; group: 'received' | 'notReceived' | 'notInvoiced'; teacherId: string | null; campus?: 'senior' | 'junior';
+  }): Promise<FeeListRow[]> => {
+    const response = await apiClient.get('/analytics/profitability/fees', { params: { ...params, teacherId: params.teacherId ?? 'none' } });
+    return response.data.fees;
+  },
+
   /** Course and teacher profitability for a period (the Financial tab's month filter) */
   getProfitability: async (params: AnalyticsQueryParams): Promise<Pick<FinancialAnalytics, 'courseProfitability' | 'teacherProfitability'>> => {
     const response = await apiClient.get('/analytics/profitability', { params });

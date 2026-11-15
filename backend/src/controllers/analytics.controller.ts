@@ -4,6 +4,7 @@ import * as campusMerge from '../services/analyticsCampus';
 import { campusServices, forCampuses } from '../services/analyticsCampus';
 import logger from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
+import { juniorDb } from '../config/database';
 import { classProfitService } from '../services/classProfit.service';
 import { otherCampus, isJuniorInstance, ownCampusLabel } from '../services/otherCampus.service';
 
@@ -429,6 +430,38 @@ export const getProfitability = async (req: Request, res: Response, next: NextFu
       })
     );
     res.json({ courseProfitability: result.courses, teacherProfitability: result.teachers });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/analytics/profitability/fees?startDate=&endDate=&group=&teacherId=&campus=
+ * The fees behind a teacher's Received / Not received / Not invoiced figure (admins and sudo;
+ * the Junior Campus from the Senior portal is sudo only). teacherId "none" = classes with no
+ * teacher assigned.
+ */
+export const getProfitabilityFees = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const query = z.object({
+      startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      group: z.enum(['received', 'notReceived', 'notInvoiced']),
+      teacherId: z.string().uuid().or(z.literal('none')),
+      campus: z.enum(['senior', 'junior']).default('senior'),
+    }).safeParse(req.query);
+    if (!query.success) throw new AppError(400, 'Invalid request');
+    const { startDate, endDate, group, teacherId, campus } = query.data;
+    const { start, end } = resolveDateRange(startDate, endDate);
+    const filter = { startDate: start, endDate: end, group, teacherId: teacherId === 'none' ? null : teacherId };
+
+    if (campus === 'junior') {
+      if (req.user?.role !== 'sudo') throw new AppError(403, 'Only sudo can view other campuses');
+      if (!juniorDb) throw new AppError(400, 'Junior Campus is not connected to this portal');
+      const fees = await classProfitService.getFeeList(filter, juniorDb);
+      return res.json({ fees: fees.map((fee) => ({ ...fee, campus: 'junior' as const })) });
+    }
+    res.json({ fees: await classProfitService.getFeeList(filter) });
   } catch (error) {
     next(error);
   }

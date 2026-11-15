@@ -1,11 +1,9 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, XMarkIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
-import MarkAsReceivedModal from '../fees/MarkAsReceivedModal';
-import { Fee } from '../../api/enrollments.api';
+import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import FeeListModal from '../fees/FeeListModal';
 import { dashboardApi, Campus, FeeGroup, FeeOverview, FeeOverviewStatus, FeeOverviewStudent } from '../../api/dashboard.api';
-import { terms, isJuniorPortal } from '../../brand';
+import { terms } from '../../brand';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const SYMBOLS: Record<string, string> = { PKR: 'PKR', USD: '$', GBP: '£', SAR: 'SR' };
@@ -18,10 +16,6 @@ const money = (group: FeeGroup) => group.amounts
 const STATUS_LABEL: Record<FeeOverviewStatus, string> = {
   total: 'All students', enrolled: 'Enrolled', paid: 'Paid', pending: 'Pending', overdue: 'Overdue', nofee: 'No fee this month',
 };
-const FEE_BADGE: Record<string, string> = {
-  received: 'bg-emerald-100 text-emerald-800', pending: 'bg-orange-100 text-orange-800', overdue: 'bg-red-100 text-red-800',
-};
-
 /** The list opened by clicking a number: which students, and a title saying what was clicked */
 interface Drill {
   title: string;
@@ -47,8 +41,6 @@ export default function FeeOverviewPanel({ campus }: { campus: Campus }) {
 
   const [drill, setDrill] = useState<Drill | null>(null);
   const [students, setStudents] = useState<FeeOverviewStudent[] | null>(null);
-  // The fee being marked as paid from the list (same pop-up as the Fees page)
-  const [feeToMark, setFeeToMark] = useState<Fee | null>(null);
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
@@ -75,23 +67,6 @@ export default function FeeOverviewPanel({ campus }: { campus: Campus }) {
     setDrill(next);
     setStudents(null);
     loadStudents(next);
-  };
-
-  // "Mark paid" on a pending / overdue line: the Fees page's pop-up asks how it was paid
-  const markPaid = (s: FeeOverviewStudent) => {
-    if (!data || !s.feeId || !s.amount) return;
-    setFeeToMark({
-      id: s.feeId,
-      studentId: s.studentId,
-      courseId: s.courseId,
-      month: data.month,
-      year: data.year,
-      amount: s.amount,
-      currency: s.currency || 'PKR',
-      status: s.feeStatus,
-      student: { id: s.studentId, firstName: s.firstName, lastName: s.lastName },
-      course: { id: s.courseId, title: s.classTitle },
-    } as unknown as Fee);
   };
 
   // After a fee is marked paid: refresh the open list and the numbers behind it
@@ -144,29 +119,7 @@ export default function FeeOverviewPanel({ campus }: { campus: Campus }) {
     </td>
   );
 
-  // Total of the fees in the open list, one line per currency
-  const feeTotals = (() => {
-    const perCurrency = new Map<string, number>();
-    let count = 0;
-    for (const s of students ?? []) {
-      if (!s.amount) continue;
-      count++;
-      const currency = s.currency || 'PKR';
-      perCurrency.set(currency, (perCurrency.get(currency) || 0) + parseFloat(s.amount));
-    }
-    const amounts = [...perCurrency]
-      .sort(([a], [b]) => (a === 'PKR' ? -1 : b === 'PKR' ? 1 : a.localeCompare(b)))
-      .map(([currency, amount]) => `${SYMBOLS[currency] || currency} ${Math.round(amount).toLocaleString()}`);
-    return { count, amounts };
-  })();
-
   const period_ = data ? `${MONTHS[data.month - 1]} ${data.year}` : '';
-  const formatDue = (date: string | null) => {
-    if (!date) return '-';
-    const [y, m, d] = date.split('-').map(Number);
-    return `${d} ${MONTHS[m - 1].slice(0, 3)} ${y}`;
-  };
-
   return (
     <div className={`mb-8 ${loading ? 'opacity-60' : ''}`}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -287,124 +240,14 @@ export default function FeeOverviewPanel({ campus }: { campus: Campus }) {
       </div>
 
       {/* The students behind the number that was clicked */}
-      {drill && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setDrill(null)}>
-          <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between gap-4 border-b px-5 py-4">
-              <div>
-                <h3 className="text-base font-semibold text-gray-900">{drill.title}</h3>
-                <p className="text-sm text-gray-500">
-                  {STATUS_LABEL[drill.status]} · {period_}
-                  {students && ` · ${new Set(students.map((s) => `${s.campus}-${s.studentId}`)).size} student(s)`}
-                </p>
-              </div>
-              <button type="button" onClick={() => setDrill(null)} aria-label="Close" className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
-                <XMarkIcon className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-auto">
-              {!students ? (
-                <p className="px-5 py-8 text-center text-sm text-gray-400">Loading...</p>
-              ) : students.length === 0 ? (
-                <p className="px-5 py-8 text-center text-sm text-gray-400">No students</p>
-              ) : (
-                <table className="min-w-full divide-y divide-gray-200 text-sm">
-                  <thead className="sticky top-0 bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
-                    <tr>
-                      <th className="px-5 py-2 text-left font-medium">Student</th>
-                      <th className="px-3 py-2 text-left font-medium">{terms.course}</th>
-                      <th className="px-3 py-2 text-right font-medium">Fee</th>
-                      <th className="px-3 py-2 text-left font-medium">Due date</th>
-                      <th className="px-3 py-2 text-left font-medium">Status</th>
-                      <th className="px-5 py-2 text-right font-medium">Paid?</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {students.map((s, index) => {
-                      // Another campus's students are managed on that campus's own portal
-                      const otherPortal = s.campus === 'junior' && !isJuniorPortal;
-                      return (
-                        <tr key={`${s.campus}-${s.studentId}-${s.courseId}-${index}`} className="hover:bg-indigo-50/30">
-                          <td className="px-5 py-2 font-medium">
-                            {otherPortal ? (
-                              <span className="text-gray-900" title="Open the Junior portal to manage this student">
-                                {s.firstName} {s.lastName} <span className="text-xs font-normal text-amber-700">(Junior portal)</span>
-                              </span>
-                            ) : (
-                              <Link
-                                to={`/enrollments?studentId=${s.studentId}&courseId=${s.courseId}`}
-                                className="text-indigo-600 hover:text-indigo-800 hover:underline"
-                                title="Open this enrollment (to drop the student, change the fee...)"
-                              >
-                                {s.firstName} {s.lastName}
-                              </Link>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-gray-600">{s.classTitle}</td>
-                          <td className="whitespace-nowrap px-3 py-2 text-right text-gray-900">
-                            {s.amount ? `${SYMBOLS[s.currency || 'PKR'] || s.currency} ${Math.round(parseFloat(s.amount)).toLocaleString()}` : '-'}
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-2 text-gray-600">{formatDue(s.dueDate)}</td>
-                          <td className="px-3 py-2">
-                            {s.feeStatus ? (
-                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${FEE_BADGE[s.feeStatus]}`}>
-                                {s.feeStatus === 'received' ? 'paid' : s.feeStatus}
-                              </span>
-                            ) : (
-                              <span className="text-xs text-gray-400">no fee</span>
-                            )}
-                          </td>
-                          <td className="whitespace-nowrap px-5 py-2 text-right">
-                            {/* Pending / overdue fees of this portal's own students can be marked paid here */}
-                            {(s.feeStatus === 'pending' || s.feeStatus === 'overdue') && s.feeId && !otherPortal && (
-                              <button
-                                type="button"
-                                onClick={() => markPaid(s)}
-                                className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
-                                title="The student has paid: record how, and mark this fee as received"
-                              >
-                                <CheckCircleIcon className="h-4 w-4" />
-                                Mark paid
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  {/* Total of the fees listed, per currency (never added across currencies) */}
-                  {feeTotals.count > 0 && (
-                    <tfoot className="sticky bottom-0 bg-gray-100 text-sm font-semibold text-gray-900">
-                      <tr>
-                        <td className="px-5 py-3" colSpan={2}>
-                          Total <span className="font-normal text-gray-500">({feeTotals.count} fee{feeTotals.count === 1 ? '' : 's'})</span>
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-3 text-right">
-                          {feeTotals.amounts.map((line) => <div key={line}>{line}</div>)}
-                        </td>
-                        <td className="px-3 py-3" colSpan={3} />
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              )}
-            </div>
-            <p className="border-t px-5 py-3 text-xs text-gray-500">
-              Click a student's name to open their enrollment in that class, where you can drop them or change the fee.
-              "Mark paid" records the payment exactly as the Fees page does.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Same pop-up as the Fees page: online or cash, and the serial number for cash */}
-      {feeToMark && (
-        <MarkAsReceivedModal
-          isOpen
-          isBulk={false}
-          fees={[feeToMark]}
-          onClose={() => setFeeToMark(null)}
-          onSuccess={afterPaid}
+      {drill && data && (
+        <FeeListModal
+          title={drill.title}
+          subtitle={`${STATUS_LABEL[drill.status]} · ${period_}`}
+          rows={students}
+          period={{ month: data.month, year: data.year }}
+          onClose={() => setDrill(null)}
+          onPaid={afterPaid}
         />
       )}
     </div>

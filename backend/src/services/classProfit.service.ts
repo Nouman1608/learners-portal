@@ -83,6 +83,23 @@ const pakistanToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/K
 const monthIndex = (year: number, month: number) => year * 12 + month;
 const fromIndex = (index: number) => ({ year: Math.floor((index - 1) / 12), month: ((index - 1) % 12) + 1 });
 
+/** One fee behind a figure of the profitability tables */
+export interface FinanceFee {
+  feeId: string;
+  studentId: string;
+  firstName: string;
+  lastName: string;
+  courseId: string;
+  classTitle: string;
+  amount: string;
+  currency: string;
+  feeStatus: 'received' | 'pending' | 'overdue';
+  dueDate: string | null;
+  month: number;
+  year: number;
+  campus?: 'senior' | 'junior';
+}
+
 export const classProfitService = {
   /** One month, for the Course Profit tab */
   async getReport(month: number, year: number): Promise<ClassProfitReport> {
@@ -97,6 +114,49 @@ export const classProfitService = {
       monthIndex(endDate.getFullYear(), endDate.getMonth() + 1),
       database,
     );
+  },
+
+  /**
+   * The fees behind one figure of the profitability tables, for the same months and by the
+   * same rules as getFinance: 'received' (paid), 'notReceived' (fee date has arrived, not
+   * paid) or 'notInvoiced' (fee dated later). For one teacher's classes, or with teacherId
+   * null for classes that have no teacher. One line per fee.
+   */
+  async getFeeList(
+    filter: { startDate: Date; endDate: Date; group: 'received' | 'notReceived' | 'notInvoiced'; teacherId: string | null },
+    database: Database = db,
+  ): Promise<FinanceFee[]> {
+    const today = pakistanToday();
+    let firstMonth = monthIndex(filter.startDate.getFullYear(), filter.startDate.getMonth() + 1);
+    const lastMonth = monthIndex(filter.endDate.getFullYear(), filter.endDate.getMonth() + 1);
+    const booksStart = booksStartDate(database);
+    if (booksStart) {
+      const [y, m] = booksStart.split('-').map(Number);
+      firstMonth = Math.max(firstMonth, monthIndex(y, m));
+    }
+    if (firstMonth > lastMonth) return [];
+
+    const group = {
+      received: sql`f.status = 'received'`,
+      notReceived: sql`f.status <> 'received' AND (f.due_date IS NULL OR f.due_date <= ${today}::date)`,
+      notInvoiced: sql`f.status <> 'received' AND f.due_date > ${today}::date`,
+    }[filter.group];
+    const teaches = filter.teacherId
+      ? sql`EXISTS (SELECT 1 FROM course_teachers ct WHERE ct.course_id = f.course_id AND ct.teacher_id = ${filter.teacherId})`
+      : sql`NOT EXISTS (SELECT 1 FROM course_teachers ct WHERE ct.course_id = f.course_id)`;
+
+    return (await database.execute(sql`
+      SELECT f.id AS "feeId", u.id AS "studentId", u.first_name AS "firstName", u.last_name AS "lastName",
+             c.id AS "courseId", c.title AS "classTitle",
+             f.amount, COALESCE(f.currency, 'PKR') AS currency, f.status AS "feeStatus",
+             to_char(f.due_date, 'YYYY-MM-DD') AS "dueDate", f.month, f.year
+      FROM fees f
+      INNER JOIN users u ON u.id = f.student_id
+      INNER JOIN courses c ON c.id = f.course_id
+      WHERE f.status IN ('received', 'pending', 'overdue') AND f.amount::numeric > 0
+        AND (f.year * 12 + f.month) BETWEEN ${firstMonth} AND ${lastMonth}
+        AND ${group} AND ${teaches}
+      ORDER BY u.first_name, u.last_name, f.year, f.month, c.title`)).rows as unknown as FinanceFee[];
   },
 
   async getFinance(firstMonth: number, lastMonth: number, database: Database = db): Promise<ClassFinanceReport> {

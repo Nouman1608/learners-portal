@@ -396,6 +396,8 @@ export const analyticsService = {
       const NO_TEACHER = 'none';
       const blank = (teacherId: string | null, teacherName: string) => ({
         teacherId, teacherName, classCount: 0, studentCount: 0,
+        // Set when both campuses are shown together, so a teacher's fees are looked up in the right one
+        campus: undefined as 'senior' | 'junior' | undefined,
         revenuePKR: 0, invoicedPKR: 0, notInvoicedPKR: 0, paidPKR: 0, notReceivedPKR: 0,
         teacherCostPKR: 0, estimatedCostPKR: 0, slipCount: 0,
       });

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { analyticsApi, FinancialAnalytics, AnalyticsQueryParams, CurrencyRevenue, CurrencyAmount, CourseProfitability, TeacherProfitability } from '../../api/analytics.api';
 import AnalyticsTable from './AnalyticsTable';
+import FeeListModal, { FeeListRow } from '../fees/FeeListModal';
 import { currencyApi } from '../../api/currency.api';
 import { CurrencyCode } from '../../api/enrollments.api';
 import LineChart from './charts/LineChart';
@@ -53,11 +54,36 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
   const [tableMonth, setTableMonth] = useState('');
   const [monthRows, setMonthRows] = useState<Pick<FinancialAnalytics, 'courseProfitability' | 'teacherProfitability'> | null>(null);
   const [monthLoading, setMonthLoading] = useState(false);
+  // The fees behind a teacher's Received / Not received figure (click the number)
+  const [feeList, setFeeList] = useState<{
+    title: string; subtitle: string; rows: FeeListRow[] | null;
+    query: { startDate: string; endDate: string; group: 'received' | 'notReceived'; teacherId: string | null; campus?: 'senior' | 'junior' };
+  } | null>(null);
+  const loadFeeList = (list: NonNullable<typeof feeList>) => {
+    analyticsApi.getProfitabilityFees(list.query)
+      .then((rows) => setFeeList((current) => (current && current.query === list.query ? { ...current, rows } : current)))
+      .catch(() => { toast.error('Failed to load the students'); setFeeList(null); });
+  };
+  const openFeeList = (list: NonNullable<typeof feeList>) => {
+    setFeeList(list);
+    loadFeeList(list);
+  };
+  // After "Mark paid": refresh the open list and the figures behind it
+  const [refresh, setRefresh] = useState(0);
+  const afterPaid = () => {
+    if (feeList) loadFeeList(feeList);
+    setRefresh((n) => n + 1);
+  };
 
   useEffect(() => {
     fetchData();
     setTableMonth(''); // a new period or campus starts from the whole period again
   }, [filters]);
+
+  // A fee was marked paid from the pop-up: bring the whole-period figures up to date quietly
+  useEffect(() => {
+    if (refresh > 0) analyticsApi.getFinancialAnalytics(filters).then(setData).catch(() => undefined);
+  }, [refresh]);
 
   useEffect(() => {
     if (!tableMonth) {
@@ -73,7 +99,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
       .catch((error: any) => { if (current) { toast.error(error.response?.data?.error || 'Failed to load that month'); setTableMonth(''); } })
       .finally(() => { if (current) setMonthLoading(false); });
     return () => { current = false; };
-  }, [tableMonth, filters.campus]);
+  }, [tableMonth, filters.campus, refresh]);
 
   const fetchData = async () => {
     try {
@@ -126,6 +152,32 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
     }
   }
   const monthLabel = monthOptions.find(option => option.value === tableMonth)?.label;
+
+  // The dates the tables are showing right now: the chosen month, or the whole period
+  const tablePeriod = (() => {
+    if (!tableMonth) return { startDate: comparison.period.start, endDate: comparison.period.end, label: `${comparison.period.start.slice(0, 7)} to ${comparison.period.end.slice(0, 7)}` };
+    const [year, month] = tableMonth.split('-').map(Number);
+    return { startDate: `${tableMonth}-01`, endDate: `${tableMonth}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`, label: monthLabel || tableMonth };
+  })();
+  /** A teacher's Received / Not received figure: click it for the students and fees behind it */
+  const feeCell = (t: TeacherProfitability, group: 'received' | 'notReceived', amount: number) => (amount > 0.5 ? (
+    <button
+      type="button"
+      title="Show these students"
+      className="rounded px-1 underline decoration-dotted underline-offset-2 hover:bg-indigo-100"
+      onClick={() => openFeeList({
+        title: `${t.teacherName}: ${group === 'received' ? 'received' : 'not received'}`,
+        subtitle: `${group === 'received' ? 'Fees received' : 'Fee date passed, not paid yet'} · ${tablePeriod.label}`,
+        rows: null,
+        query: {
+          startDate: tablePeriod.startDate, endDate: tablePeriod.endDate, group, teacherId: t.teacherId,
+          campus: t.campus ?? (filters.campus === 'junior' ? 'junior' : 'senior'),
+        },
+      })}
+    >
+      {pkr(amount)}
+    </button>
+  ) : pkr(amount));
   const monthFilter = (
     <select
       value={tableMonth}
@@ -421,7 +473,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
         actions={monthFilter}
         exportSum={['classes', 'students', 'revenue', 'invoiced', 'notInvoiced', 'paid', 'notReceived', 'cost', 'profit', 'soFar', 'slips']}
         exportNote={monthLabel ? `Month: ${monthLabel}` : `Period: ${comparison.period.start.slice(0, 7)} to ${comparison.period.end.slice(0, 7)}`}
-        description="The same figures per teacher: the money from their classes against everything they are paid in the period. A class with two teachers is split equally between them."
+        description="The same figures per teacher: the money from their classes against everything they are paid in the period. A class with two teachers is split equally between them. Click a Received or Not received figure to see the students."
         rows={teacherProfitability}
         rowKey={(t, i) => `${t.teacherId ?? 'none'}-${i}`}
         searchPlaceholder="Search teacher..."
@@ -443,8 +495,8 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
           { key: 'revenue', header: 'Revenue', align: 'right', value: t => t.revenuePKR, cell: t => pkr(t.revenuePKR), className: 'font-medium text-gray-900' },
           { key: 'invoiced', header: 'Invoiced', align: 'right', value: t => t.invoicedPKR, cell: t => pkr(t.invoicedPKR) },
           { key: 'notInvoiced', header: 'Not invoiced', align: 'right', value: t => t.notInvoicedPKR, cell: t => pkr(t.notInvoicedPKR), className: 'text-gray-500' },
-          { key: 'paid', header: 'Received', align: 'right', value: t => t.paidPKR, cell: t => pkr(t.paidPKR), className: 'text-green-700' },
-          { key: 'notReceived', header: 'Not received', align: 'right', value: t => t.notReceivedPKR, cell: t => pkr(t.notReceivedPKR), className: t => (t.notReceivedPKR > 0 ? 'text-red-600' : 'text-gray-400') },
+          { key: 'paid', header: 'Received', align: 'right', value: t => t.paidPKR, cell: t => feeCell(t, 'received', t.paidPKR), className: 'text-green-700' },
+          { key: 'notReceived', header: 'Not received', align: 'right', value: t => t.notReceivedPKR, cell: t => feeCell(t, 'notReceived', t.notReceivedPKR), className: t => (t.notReceivedPKR > 0 ? 'text-red-600' : 'text-gray-400') },
           {
             key: 'cost', header: 'Teacher cost', align: 'right', value: t => t.teacherCostPKR, className: 'text-gray-600',
             cell: t => (
@@ -476,6 +528,17 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
           );
         }}
       />
+
+      {/* The students behind a Received / Not received figure: the same pop-up as the dashboard */}
+      {feeList && (
+        <FeeListModal
+          title={feeList.title}
+          subtitle={feeList.subtitle}
+          rows={feeList.rows}
+          onClose={() => setFeeList(null)}
+          onPaid={afterPaid}
+        />
+      )}
 
       {/* Payment methods table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
