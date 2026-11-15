@@ -94,4 +94,16 @@ router.get('/class-breakdown', async (req, res) => {
   res.json({ students: await classProfitService.getClassBreakdown(courseId, firstOf(from), firstOf(to)) });
 });
 
+// All our classes student by student for whole months from..to (YYYY-MM): the other campus's
+// student-wise export of Course profitability (Junior / Both view)
+router.get('/student-breakdown', async (req, res) => {
+  const yearMonth = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
+  const { from, to } = z.object({ from: yearMonth, to: yearMonth }).parse(req.query);
+  const firstOf = (value: string) => {
+    const [year, month] = value.split('-').map(Number);
+    return new Date(year, month - 1, 1);
+  };
+  res.json({ rows: await classProfitService.getStudentBreakdown(firstOf(from), firstOf(to)) });
+});
+
 export default router;

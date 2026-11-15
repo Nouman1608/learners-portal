@@ -70,6 +70,8 @@ export interface ClassFinanceReport {
   teachers: TeacherPay[];
   /** Only when a class was asked for: that class, student by student */
   detail?: StudentFinance[];
+  /** Only when every class was asked for ('all'): each class's students, by course id */
+  details?: Record<string, StudentFinance[]>;
 }
 
 /** The month-by-month Course Profit tab */
@@ -101,6 +103,14 @@ export interface StudentFinance {
   expectedProfitPKR: number;
   profitSoFarPKR: number;
   campus?: 'senior' | 'junior';
+}
+
+/** One student in one class: a line of the student-wise export */
+export interface StudentBreakdownRow extends StudentFinance {
+  courseId: string;
+  courseTitle: string;
+  teachers: string[];
+  oneToOne: boolean;
 }
 
 /** One fee behind a figure of the profitability tables */
@@ -197,7 +207,25 @@ export const classProfitService = {
     return report.detail ?? [];
   },
 
+  /**
+   * Every class student by student in one pass: the Course profitability table as one line
+   * per student (the student-wise Excel export). Each class's students add up to its row.
+   */
+  async getStudentBreakdown(startDate: Date, endDate: Date, database: Database = db): Promise<StudentBreakdownRow[]> {
+    const report = await this.getFinance(
+      monthIndex(startDate.getFullYear(), startDate.getMonth() + 1),
+      monthIndex(endDate.getFullYear(), endDate.getMonth() + 1),
+      database,
+      'all',
+    );
+    return report.classes.flatMap((c) => (report.details?.[c.courseId] ?? []).map((student) => ({
+      courseId: c.courseId, courseTitle: c.title, teachers: c.teachers, oneToOne: c.oneToOne, ...student,
+    })));
+  },
+
   async getFinance(firstMonth: number, lastMonth: number, database: Database = db, detailCourseId?: string): Promise<ClassFinanceReport> {
+    // detailCourseId: one class to break down by student, or 'all' for every class
+    const wantsDetail = (courseId: string) => detailCourseId === 'all' || detailCourseId === courseId;
     const today = pakistanToday();
     const [nowYear, nowMonth] = today.split('-').map(Number);
     const thisMonth = monthIndex(nowYear, nowMonth);
@@ -276,7 +304,7 @@ export const classProfitService = {
 
     // enrolment -> expected classes this month, for the teacher's side below
     const expectedByCourse = new Map<string, number>();
-    const detailExpected = new Map<string, number>(); // the asked-for class: student -> expected invoice (PKR)
+    const detailExpected = new Map<string, Map<string, number>>(); // class -> student -> expected invoice (PKR)
     if (thisMonth >= firstMonth && thisMonth <= lastMonth) {
       const counted = new Set(((await database.execute(sql`
         SELECT DISTINCT f.enrollment_id AS id FROM fees f
@@ -290,7 +318,11 @@ export const classProfitService = {
         const expectedPKR = perSession * enrollment.expectedClasses * rateToPKR(enrollment.currency);
         entry.notInvoicedPKR += expectedPKR;
         entry.students += 1;
-        if (enrollment.courseId === detailCourseId) detailExpected.set(enrollment.studentId, (detailExpected.get(enrollment.studentId) || 0) + expectedPKR);
+        if (wantsDetail(enrollment.courseId)) {
+          const byStudent = detailExpected.get(enrollment.courseId) ?? new Map<string, number>();
+          byStudent.set(enrollment.studentId, (byStudent.get(enrollment.studentId) || 0) + expectedPKR);
+          detailExpected.set(enrollment.courseId, byStudent);
+        }
         expectedByCourse.set(enrollment.courseId, (expectedByCourse.get(enrollment.courseId) || 0) + enrollment.expectedClasses);
       }
     }
@@ -325,14 +357,16 @@ export const classProfitService = {
     const teachers: TeacherPay[] = [];
     // The asked-for class: teacher pay per student name as written on the slip lines; '' = pay not
     // per student (salary share, expected 1-to-1 classes)
-    const detailPay = new Map<string, { amount: number; estimated: number }>();
+    const detailPay = new Map<string, Map<string, { amount: number; estimated: number }>>(); // class -> student name -> pay
     const noteDetailPay = (courseId: string, studentName: string, amount: number, estimated: boolean) => {
-      if (courseId !== detailCourseId) return;
+      if (!wantsDetail(courseId)) return;
+      const byName = detailPay.get(courseId) ?? new Map<string, { amount: number; estimated: number }>();
       const key = studentName.trim().toLowerCase();
-      const entry = detailPay.get(key) ?? { amount: 0, estimated: 0 };
+      const entry = byName.get(key) ?? { amount: 0, estimated: 0 };
       entry.amount += amount;
       if (estimated) entry.estimated += amount;
-      detailPay.set(key, entry);
+      byName.set(key, entry);
+      detailPay.set(courseId, byName);
     };
     // Estimates run from the first month to this month: later months have no classes to pay for yet
     const lastPayMonth = Math.min(lastMonth, thisMonth);
@@ -456,90 +490,98 @@ export const classProfitService = {
 
     if (!detailCourseId) return { classes: list, teachers };
 
-    // ---- The asked-for class, student by student ----
+    // ---- The asked-for class(es), student by student ----
     const studentFees = (await database.execute(sql`
-      SELECT u.id AS "studentId", u.first_name AS "firstName", u.last_name AS "lastName", COALESCE(f.currency, 'PKR') AS currency,
+      SELECT f.course_id AS "courseId", u.id AS "studentId", u.first_name AS "firstName", u.last_name AS "lastName", COALESCE(f.currency, 'PKR') AS currency,
              COALESCE(SUM(f.amount::numeric) FILTER (WHERE f.status = 'received'), 0)::float AS paid,
              COALESCE(SUM(f.amount::numeric) FILTER (WHERE f.status <> 'received' AND (f.due_date IS NULL OR f.due_date <= ${today}::date)), 0)::float AS "notReceived",
              COALESCE(SUM(f.amount::numeric) FILTER (WHERE f.status <> 'received' AND f.due_date > ${today}::date), 0)::float AS "notInvoiced"
       FROM fees f
       INNER JOIN users u ON u.id = f.student_id
-      WHERE ${owed} AND f.course_id = ${detailCourseId}
-      GROUP BY u.id, u.first_name, u.last_name, COALESCE(f.currency, 'PKR')`)).rows as any[];
+      WHERE ${owed} AND ${detailCourseId === 'all' ? sql`true` : sql`f.course_id = ${detailCourseId}`}
+      GROUP BY f.course_id, u.id, u.first_name, u.last_name, COALESCE(f.currency, 'PKR')`)).rows as any[];
 
-    const students = new Map<string, StudentFinance>();
-    const studentFor = (studentId: string, firstName: string, lastName: string) => {
-      let row = students.get(studentId);
-      if (!row) {
-        row = {
-          studentId, firstName, lastName, revenuePKR: 0, invoicedPKR: 0, notInvoicedPKR: 0, paidPKR: 0, notReceivedPKR: 0,
-          teacherPayPKR: 0, estimatedPayPKR: 0, sharedPayPKR: 0, expectedProfitPKR: 0, profitSoFarPKR: 0,
-        };
-        students.set(studentId, row);
-      }
-      return row;
-    };
-    for (const fee of studentFees) {
-      const row = studentFor(fee.studentId, fee.firstName, fee.lastName);
-      const rate = rateToPKR(fee.currency);
-      row.paidPKR += fee.paid * rate;
-      row.notReceivedPKR += fee.notReceived * rate;
-      row.notInvoicedPKR += fee.notInvoiced * rate;
-    }
-    if (detailExpected.size) {
-      const expectedStudents = await database
-        .select({ id: users.id, firstName: users.firstName, lastName: users.lastName })
-        .from(users)
-        .where(inArray(users.id, [...detailExpected.keys()]));
-      for (const student of expectedStudents) {
-        studentFor(student.id, student.firstName, student.lastName).notInvoicedPKR += detailExpected.get(student.id) || 0;
-      }
-    }
+    const expectedIds = [...new Set([...detailExpected.values()].flatMap((byStudent) => [...byStudent.keys()]))];
+    const expectedStudents = expectedIds.length
+      ? await database.select({ id: users.id, firstName: users.firstName, lastName: users.lastName }).from(users).where(inArray(users.id, expectedIds))
+      : [];
 
-    // Teacher pay: slip lines name the student; whatever names no student of the class is shared
-    let shared = 0;
-    let sharedEstimated = 0;
-    for (const [name, pay] of detailPay) {
-      const row = name ? [...students.values()].find((s) => `${s.firstName} ${s.lastName}`.trim().toLowerCase() === name) : undefined;
-      if (row) {
-        row.teacherPayPKR += pay.amount;
-        row.estimatedPayPKR += pay.estimated;
-      } else {
-        shared += pay.amount;
-        sharedEstimated += pay.estimated;
-      }
-    }
-    if (shared > 0) {
-      if (students.size === 0) {
-        const row = studentFor('none', 'Teacher pay not tied to a student', '');
-        row.studentId = null;
-      }
-      for (const row of students.values()) {
-        row.teacherPayPKR += shared / students.size;
-        row.estimatedPayPKR += sharedEstimated / students.size;
-        row.sharedPayPKR += shared / students.size;
-      }
-    }
-
-    const detail = [...students.values()].map((s) => {
-      const invoiced = s.paidPKR + s.notReceivedPKR;
-      const revenue = invoiced + s.notInvoicedPKR;
-      return {
-        ...s,
-        revenuePKR: round(revenue),
-        invoicedPKR: round(invoiced),
-        notInvoicedPKR: round(s.notInvoicedPKR),
-        paidPKR: round(s.paidPKR),
-        notReceivedPKR: round(s.notReceivedPKR),
-        teacherPayPKR: round(s.teacherPayPKR),
-        estimatedPayPKR: round(s.estimatedPayPKR),
-        sharedPayPKR: round(s.sharedPayPKR),
-        expectedProfitPKR: round(revenue - s.teacherPayPKR),
-        profitSoFarPKR: round(s.paidPKR - s.teacherPayPKR),
+    const detailFor = (courseId: string): StudentFinance[] => {
+      const students = new Map<string, StudentFinance>();
+      const studentFor = (studentId: string, firstName: string, lastName: string) => {
+        let row = students.get(studentId);
+        if (!row) {
+          row = {
+            studentId, firstName, lastName, revenuePKR: 0, invoicedPKR: 0, notInvoicedPKR: 0, paidPKR: 0, notReceivedPKR: 0,
+            teacherPayPKR: 0, estimatedPayPKR: 0, sharedPayPKR: 0, expectedProfitPKR: 0, profitSoFarPKR: 0,
+          };
+          students.set(studentId, row);
+        }
+        return row;
       };
-    }).sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+      for (const fee of studentFees) {
+        if (fee.courseId !== courseId) continue;
+        const row = studentFor(fee.studentId, fee.firstName, fee.lastName);
+        const rate = rateToPKR(fee.currency);
+        row.paidPKR += fee.paid * rate;
+        row.notReceivedPKR += fee.notReceived * rate;
+        row.notInvoicedPKR += fee.notInvoiced * rate;
+      }
+      for (const [studentId, expectedPKR] of detailExpected.get(courseId) ?? []) {
+        const student = expectedStudents.find((u) => u.id === studentId);
+        if (student) studentFor(student.id, student.firstName, student.lastName).notInvoicedPKR += expectedPKR;
+      }
 
-    return { classes: list, teachers, detail };
+      // Teacher pay: slip lines name the student; whatever names no student of the class is shared
+      let shared = 0;
+      let sharedEstimated = 0;
+      for (const [name, pay] of detailPay.get(courseId) ?? []) {
+        const row = name ? [...students.values()].find((st) => `${st.firstName} ${st.lastName}`.trim().toLowerCase() === name) : undefined;
+        if (row) {
+          row.teacherPayPKR += pay.amount;
+          row.estimatedPayPKR += pay.estimated;
+        } else {
+          shared += pay.amount;
+          sharedEstimated += pay.estimated;
+        }
+      }
+      if (shared > 0) {
+        if (students.size === 0) {
+          const row = studentFor('none', 'Teacher pay not tied to a student', '');
+          row.studentId = null;
+        }
+        for (const row of students.values()) {
+          row.teacherPayPKR += shared / students.size;
+          row.estimatedPayPKR += sharedEstimated / students.size;
+          row.sharedPayPKR += shared / students.size;
+        }
+      }
+
+      return [...students.values()].map((st) => {
+        const invoiced = st.paidPKR + st.notReceivedPKR;
+        const revenue = invoiced + st.notInvoicedPKR;
+        return {
+          ...st,
+          revenuePKR: round(revenue),
+          invoicedPKR: round(invoiced),
+          notInvoicedPKR: round(st.notInvoicedPKR),
+          paidPKR: round(st.paidPKR),
+          notReceivedPKR: round(st.notReceivedPKR),
+          teacherPayPKR: round(st.teacherPayPKR),
+          estimatedPayPKR: round(st.estimatedPayPKR),
+          sharedPayPKR: round(st.sharedPayPKR),
+          expectedProfitPKR: round(revenue - st.teacherPayPKR),
+          profitSoFarPKR: round(st.paidPKR - st.teacherPayPKR),
+        };
+      }).sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+    };
+
+    if (detailCourseId === 'all') {
+      const details: Record<string, StudentFinance[]> = {};
+      for (const c of list) details[c.courseId] = detailFor(c.courseId);
+      return { classes: list, teachers, details };
+    }
+    return { classes: list, teachers, detail: detailFor(detailCourseId) };
   },
 };
 

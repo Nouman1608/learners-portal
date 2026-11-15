@@ -3,6 +3,7 @@ import { analyticsApi, FinancialAnalytics, AnalyticsQueryParams, CurrencyRevenue
 import AnalyticsTable from './AnalyticsTable';
 import FeeListModal, { FeeListRow } from '../fees/FeeListModal';
 import ClassBreakdownModal, { BreakdownColumn } from './ClassBreakdownModal';
+import { downloadXlsx } from '../../utils/xlsx';
 import { currencyApi } from '../../api/currency.api';
 import { CurrencyCode } from '../../api/enrollments.api';
 import LineChart from './charts/LineChart';
@@ -165,6 +166,54 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
     const [year, month] = tableMonth.split('-').map(Number);
     return { startDate: `${tableMonth}-01`, endDate: `${tableMonth}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`, label: monthLabel || tableMonth };
   })();
+  /**
+   * Course profitability as one line per student per class, for the classes on screen (after
+   * search and filters, in the table's order). Each class's students add up to its row.
+   */
+  const exportStudentWise = async (shown: CourseProfitability[], applied: string[]) => {
+    try {
+      const all = await analyticsApi.getStudentBreakdown({ startDate: tablePeriod.startDate, endDate: tablePeriod.endDate, campus: filters.campus });
+      // Campus only tells classes apart when both campuses are shown together
+      const key = (campus: string | undefined, courseId: string) => (filters.campus === 'both' ? `${campus ?? ''}|${courseId}` : courseId);
+      const order = new Map(shown.map((c, index) => [key(c.campus, c.courseId), index]));
+      const titles = new Map(shown.map((c) => [key(c.campus, c.courseId), c.courseTitle]));
+      const lines = all
+        .filter((row) => order.has(key(row.campus, row.courseId)))
+        .sort((a, b) => order.get(key(a.campus, a.courseId))! - order.get(key(b.campus, b.courseId))!);
+      if (lines.length === 0) {
+        toast.error('No students to export for these classes');
+        return;
+      }
+      const money = (pick: (row: (typeof lines)[number]) => number) => Math.round(lines.reduce((sum, row) => sum + pick(row), 0) * 100) / 100;
+      const r2 = (n: number) => Math.round(n * 100) / 100;
+      downloadXlsx(`${terms.course} profitability student-wise ${tableMonth || `${comparison.period.start.slice(0, 7)} to ${comparison.period.end.slice(0, 7)}`}`, {
+        sheetName: 'Student-wise',
+        title: [
+          `${terms.course} profitability, student by student`,
+          monthLabel ? `Month: ${monthLabel}` : `Period: ${comparison.period.start.slice(0, 7)} to ${comparison.period.end.slice(0, 7)}`,
+          applied.length ? `Filtered: ${applied.join(', ')}` : '',
+        ].filter(Boolean),
+        headers: [terms.course, 'Teacher', 'Type', 'Student', 'Revenue', 'Invoiced', 'Not invoiced', 'Received', 'Not received', 'Teacher cost', 'of which estimate', 'of which shared', 'Expected profit', 'Profit so far'],
+        rows: lines.map((row) => [
+          titles.get(key(row.campus, row.courseId)) ?? row.courseTitle,
+          row.teachers.join(' / '),
+          row.oneToOne ? '1-to-1' : 'Group',
+          `${row.firstName} ${row.lastName}`.trim(),
+          r2(row.revenuePKR), r2(row.invoicedPKR), r2(row.notInvoicedPKR), r2(row.paidPKR), r2(row.notReceivedPKR),
+          r2(row.teacherPayPKR), r2(row.estimatedPayPKR), r2(row.sharedPayPKR), r2(row.expectedProfitPKR), r2(row.profitSoFarPKR),
+        ]),
+        totals: [
+          `Total (${lines.length} lines, ${new Set(lines.map((row) => key(row.campus, row.courseId))).size} classes)`, null, null, null,
+          money((row) => row.revenuePKR), money((row) => row.invoicedPKR), money((row) => row.notInvoicedPKR), money((row) => row.paidPKR), money((row) => row.notReceivedPKR),
+          money((row) => row.teacherPayPKR), money((row) => row.estimatedPayPKR), money((row) => row.sharedPayPKR), money((row) => row.expectedProfitPKR), money((row) => row.profitSoFarPKR),
+        ],
+      });
+      toast.success('Exported student-wise to Excel');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to prepare the student-wise export');
+    }
+  };
+
   /** Any other figure of a class: click it for the class student by student, that column highlighted */
   const drill = (c: CourseProfitability, highlight: BreakdownColumn | undefined, content: React.ReactNode) => (
     <button
@@ -439,6 +488,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
         exportNote={monthLabel ? `Month: ${monthLabel}` : `Period: ${comparison.period.start.slice(0, 7)} to ${comparison.period.end.slice(0, 7)}`}
         description="Revenue is what the class brings in when every student has paid: Invoiced (fee date has arrived) plus Not invoiced (fee dated later, or 1-to-1 classes not counted yet). Invoiced is Received plus Not received. Teacher cost is the expected salary slip; a fixed monthly salary is split equally between that teacher's classes. All in PKR. Click any figure to see it student by student; Received and Not received open the fees themselves, where you can mark them paid."
         rows={courseProfitability}
+        extraExport={{ label: 'Excel (student-wise)', title: 'One line per student in each class shown, with the same columns', run: exportStudentWise }}
         rowKey={(c, i) => `${c.courseId}-${i}`}
         searchPlaceholder={`Search ${terms.courseLc} or teacher...`}
         emptyText={`No ${terms.courseLc} fees in this period`}

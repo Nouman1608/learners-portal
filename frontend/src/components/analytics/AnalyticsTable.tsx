@@ -37,6 +37,8 @@ interface AnalyticsTableProps<T> {
   exportSum?: string[];
   /** A line under the title in the Excel file, e.g. the period */
   exportNote?: string;
+  /** A second export button that works from the rows on screen (after search, filters and sorting) */
+  extraExport?: { label: string; title?: string; run: (shown: T[], applied: string[]) => void | Promise<void> };
 }
 
 /**
@@ -45,7 +47,7 @@ interface AnalyticsTableProps<T> {
  */
 export default function AnalyticsTable<T>({
   title, description, rows, columns, rowKey, searchPlaceholder = 'Search...', filters = [], emptyText = 'Nothing to show',
-  actions, footer, defaultSort, exportSum, exportNote,
+  actions, footer, defaultSort, exportSum, exportNote, extraExport,
 }: AnalyticsTableProps<T>) {
   const [sort, setSort] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(defaultSort ?? null);
   const [search, setSearch] = useState('');
@@ -90,12 +92,16 @@ export default function AnalyticsTable<T>({
 
   const filtering = search.trim() !== '' || chosen.some((c) => c !== -1);
 
+  // What the reader has narrowed the table down by, for the top of an export
+  const appliedFilters = (): string[] => [
+    search.trim() && `search "${search.trim()}"`,
+    ...filters.map((filter, i) => filter.options[chosen[i]]?.label),
+  ].filter((label): label is string => !!label);
+  const [extraBusy, setExtraBusy] = useState(false);
+
   // Excel: exactly the rows on screen (after search and filters, in the current order)
   const exportExcel = () => {
-    const applied = [
-      search.trim() && `search "${search.trim()}"`,
-      ...filters.map((filter, i) => filter.options[chosen[i]]?.label),
-    ].filter(Boolean);
+    const applied = appliedFilters();
     const cells = (row: T) => columns.map((column) => {
       const value = column.value(row);
       return typeof value === 'number' ? Math.round(value * 100) / 100 : value;
@@ -133,6 +139,21 @@ export default function AnalyticsTable<T>({
               >
                 <ArrowDownTrayIcon className="mr-2 h-4 w-4" aria-hidden="true" />
                 Excel
+              </button>
+            )}
+            {rows.length > 0 && extraExport && (
+              <button
+                type="button"
+                disabled={shown.length === 0 || extraBusy}
+                title={extraExport.title}
+                onClick={async () => {
+                  setExtraBusy(true);
+                  try { await extraExport.run(shown, appliedFilters()); } finally { setExtraBusy(false); }
+                }}
+                className="inline-flex items-center rounded-md border border-green-600 bg-white px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
+              >
+                <ArrowDownTrayIcon className="mr-2 h-4 w-4" aria-hidden="true" />
+                {extraBusy ? 'Preparing...' : extraExport.label}
               </button>
             )}
           </div>

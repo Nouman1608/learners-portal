@@ -50,6 +50,14 @@ export interface StudentFinance extends ClassMoney {
   campus?: 'senior' | 'junior';
 }
 
+/** One student in one class: a line of the student-wise export */
+export interface StudentBreakdownRow extends StudentFinance {
+  courseId: string;
+  courseTitle: string;
+  teachers: string[];
+  oneToOne: boolean;
+}
+
 /** Course Profit tab (sudo): one class in one month */
 export interface ClassProfit extends ClassMoney {
   courseId: string;
@@ -355,6 +363,12 @@ export interface AnalyticsQueryParams {
  * Analytics API
  */
 export const analyticsApi = {
+  /** Course profitability as one line per student per class (the student-wise Excel export) */
+  getStudentBreakdown: async (params: { startDate: string; endDate: string; campus?: 'senior' | 'junior' | 'both' }): Promise<StudentBreakdownRow[]> => {
+    const response = await apiClient.get('/analytics/profitability/student-breakdown', { params });
+    return response.data.rows;
+  },
+
   /** One class of Course profitability, student by student (adds up to the class's row) */
   getClassBreakdown: async (params: { startDate: string; endDate: string; courseId: string; campus?: 'senior' | 'junior' }): Promise<StudentFinance[]> => {
     const response = await apiClient.get('/analytics/profitability/class-breakdown', { params });
