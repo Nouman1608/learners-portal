@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import logger from '../utils/logger';
 import { db } from '../config/database';
 import { activityLogs } from '../db/schema';
+import { redactSensitive } from '../utils/redact';
 
 export const requestLogger = (
   req: Request,
@@ -40,12 +41,13 @@ export const logActivity = (action: string, resource: string) => {
             action,
             resource,
             resourceId: req.params.id || null,
-            details: JSON.stringify({
+            // Passwords and tokens in the request are saved as [REDACTED]
+            details: JSON.stringify(redactSensitive({
               method: req.method,
               body: req.body,
               query: req.query,
               params: req.params,
-            }),
+            })),
             ipAddress: req.ip,
             userAgent: req.headers['user-agent'] || null,
           })
