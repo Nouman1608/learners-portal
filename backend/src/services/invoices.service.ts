@@ -860,14 +860,10 @@ export const invoicesService = {
       .where(and(...existingInvoiceConditions))
       .limit(1);
 
-    // Versioning: If exists, mark old as not latest and increment version
+    // Versioning: If exists, increment version. The old one is only marked not latest
+    // once the new one is written (below), so a failed regeneration leaves it current.
     let newVersion = 1;
     if (existing) {
-      await db
-        .update(invoices)
-        .set({ isLatest: false })
-        .where(eq(invoices.id, existing.id));
-
       newVersion = (existing.version || 1) + 1;
       logger.info(`[INVOICE] Regenerating student invoice for ${input.studentId} - ${input.month}/${input.year} (version ${newVersion})`);
     }
@@ -1019,23 +1015,6 @@ export const invoicesService = {
       invoiceNumber = `${invoiceNumber}-v${newVersion}`;
     }
 
-    // Create invoice
-    const [newInvoice] = await db
-      .insert(invoices)
-      .values({
-        invoiceNumber,
-        type: 'student',
-        recipientId: input.studentId,
-        month: input.month,
-        year: input.year,
-        version: newVersion,
-        isLatest: true,
-        currency: invoiceCurrency,
-        totalAmount: totalAmount.toString(),
-        generatedBy: input.generatedBy || null,
-      })
-      .returning();
-
     // Create line items with session breakdown for 1-to-1 classes
     const lineItemsData = studentFees.map((fee) => {
       let description = fee.course.title;
@@ -1050,7 +1029,6 @@ export const invoicesService = {
       }
 
       return {
-        invoiceId: newInvoice.id,
         description,
         courseId: fee.course.id,
         feeId: fee.id,
@@ -1060,10 +1038,36 @@ export const invoicesService = {
       };
     });
 
-    const createdLineItems = await db
-      .insert(invoiceLineItems)
-      .values(lineItemsData)
-      .returning();
+    // There is something to bill: swap the old version for the new one in one step,
+    // so the student is never left without a latest invoice.
+    const { newInvoice, createdLineItems } = await db.transaction(async (tx) => {
+      if (existing) {
+        await tx.update(invoices).set({ isLatest: false }).where(eq(invoices.id, existing.id));
+      }
+
+      const [newInvoice] = await tx
+        .insert(invoices)
+        .values({
+          invoiceNumber,
+          type: 'student',
+          recipientId: input.studentId,
+          month: input.month,
+          year: input.year,
+          version: newVersion,
+          isLatest: true,
+          currency: invoiceCurrency,
+          totalAmount: totalAmount.toString(),
+          generatedBy: input.generatedBy || null,
+        })
+        .returning();
+
+      const createdLineItems = await tx
+        .insert(invoiceLineItems)
+        .values(lineItemsData.map((item) => ({ ...item, invoiceId: newInvoice.id })))
+        .returning();
+
+      return { newInvoice, createdLineItems };
+    });
 
     // Compute billing period from enrollment date
     const enrolledAt = studentFees[0]?.enrollment?.enrolledAt;
@@ -2058,12 +2062,14 @@ export const invoicesService = {
 
     // Get all student-currency combinations with fees for the month
     // This handles cases where students have fees in multiple currencies
+    // Only active students: an inactive one is not invoiced any more (their old fees stay owed)
     const studentCurrencyCombinations = await db
       .selectDistinct({
         studentId: fees.studentId,
         currency: sql<string>`COALESCE(${fees.currency}, 'PKR')`,
       })
       .from(fees)
+      .innerJoin(users, and(eq(users.id, fees.studentId), eq(users.isActive, true)))
       .where(and(eq(fees.month, month), eq(fees.year, year)));
 
     logger.info(`[INVOICE] Found ${studentCurrencyCombinations.length} student-currency combinations for ${month}/${year}`);
@@ -2093,12 +2099,14 @@ export const invoicesService = {
 
     // Get all student-currency combinations with fees for the month
     // This handles cases where students have fees in multiple currencies
+    // Only active students: an inactive one is not invoiced any more (their old fees stay owed)
     const studentCurrencyCombinations = await db
       .selectDistinct({
         studentId: fees.studentId,
         currency: sql<string>`COALESCE(${fees.currency}, 'PKR')`,
       })
       .from(fees)
+      .innerJoin(users, and(eq(users.id, fees.studentId), eq(users.isActive, true)))
       .where(and(eq(fees.month, month), eq(fees.year, year)));
 
     logger.info(`[INVOICE] Found ${studentCurrencyCombinations.length} student-currency combinations for ${month}/${year}`);
