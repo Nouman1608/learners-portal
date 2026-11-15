@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { whatsappService } from '../services/whatsapp.service';
 import logger from '../utils/logger';
+import { redactSensitive } from '../utils/redact';
 
 /**
  * Verify webhook request from Meta
@@ -40,7 +41,7 @@ export const verifyWebhook = async (req: Request, res: Response, next: NextFunct
 export const handleWebhook = async (req: Request, res: Response, next: NextFunction) => {
   try {
     logger.info('Webhook event received', {
-      body: JSON.stringify(req.body),
+      body: JSON.stringify(redactSensitive(req.body)),
     });
 
     // Process webhook asynchronously (don't block response)
