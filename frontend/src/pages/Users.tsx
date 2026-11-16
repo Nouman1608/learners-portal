@@ -311,6 +311,7 @@ const Users: React.FC = () => {
           <option value="sudo">Sudo</option>
           <option value="admin">Admin</option>
           <option value="teacher">Teacher</option>
+          <option value="staff">Staff</option>
           <option value="student">Student</option>
         </select>
         <select
@@ -477,6 +478,7 @@ const Users: React.FC = () => {
                         user.role === 'sudo' ? 'bg-purple-100 text-purple-700' :
                         user.role === 'admin' ? 'bg-blue-100 text-blue-700' :
                         user.role === 'teacher' ? 'bg-green-100 text-green-700' :
+                        user.role === 'staff' ? 'bg-amber-100 text-amber-700' :
                         'bg-gray-100 text-gray-700'
                       }`}>
                         {user.role}

@@ -9,7 +9,7 @@ import logger from '../utils/logger';
 const createUserSchema = z.object({
   username: z.string().min(3, 'Username must be at least 3 characters').max(50),
   password: z.string().min(8, 'Password must be at least 8 characters'),
-  role: z.enum(['admin', 'teacher', 'student'], {
+  role: z.enum(['admin', 'teacher', 'student', 'staff'], {
     errorMap: () => ({ message: 'Invalid role' }),
   }),
   firstName: z.string().min(1, 'First name is required').max(100),
@@ -73,7 +73,7 @@ const updateUserSchema = z.object({
   whatsappGroupLink: z.string().url('Must be a valid URL').optional().or(z.literal('')),
   teamsUsername: z.string().max(100).optional().or(z.literal('')),
   isActive: z.boolean().optional(),
-  role: z.enum(['admin', 'teacher', 'student']).optional(),
+  role: z.enum(['admin', 'teacher', 'student', 'staff']).optional(),
   // Teacher fee configuration — null clears a field (e.g. on payment-type switch)
   localStudentFeePercentage: z.number()
     .min(0, 'Fee percentage must be between 0 and 100')
@@ -326,9 +326,9 @@ export const unlinkFamily = async (req: Request, res: Response) => {
 
 export const getUsersByRole = async (req: Request, res: Response) => {
   try {
-    const role = req.params.role as 'admin' | 'teacher' | 'student';
+    const role = req.params.role as 'admin' | 'teacher' | 'student' | 'staff';
 
-    if (!['admin', 'teacher', 'student'].includes(role)) {
+    if (!['admin', 'teacher', 'student', 'staff'].includes(role)) {
       throw new AppError(400, 'Invalid role');
     }
 

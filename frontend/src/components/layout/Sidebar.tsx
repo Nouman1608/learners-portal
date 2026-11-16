@@ -58,12 +58,12 @@ const navigationItems: NavItem[] = [
   { name: 'Fees', path: '/fees', icon: BanknotesIcon, roles: ['sudo', 'admin'] },
   { name: 'My Fees', path: '/my-fees', icon: CreditCardIcon, roles: ['student'] },
   { name: 'Invoices', path: '/invoices', icon: DocumentTextIcon, roles: ['sudo', 'admin'] },
-  { name: 'Salary Slips', path: '/salary-slips', icon: ReceiptPercentIcon, roles: ['sudo', 'admin', 'teacher'] },
+  { name: 'Salary Slips', path: '/salary-slips', icon: ReceiptPercentIcon, roles: ['sudo', 'admin', 'teacher', 'staff'] },
   { name: 'My Invoices', path: '/my-invoices', icon: ReceiptPercentIcon, roles: ['student'] },
   { name: 'Analytics', path: '/analytics', icon: ChartBarIcon, roles: ['sudo', 'admin'] },
   { name: 'Expenses', path: '/expenses', icon: WalletIcon, roles: ['sudo', 'admin'] },
   { name: 'Logs', path: '/logs', icon: ClockIcon, roles: ['sudo', 'admin'] },
-  { name: 'Account Settings', path: '/account-settings', icon: UserCircleIcon, roles: ['student', 'teacher'] },
+  { name: 'Account Settings', path: '/account-settings', icon: UserCircleIcon, roles: ['student', 'teacher', 'staff'] },
   { name: 'Teams Settings', path: '/settings/teams', icon: Cog6ToothIcon, roles: ['sudo', 'admin', 'teacher'] },
 ];
 
@@ -115,7 +115,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   };
 
   const canAccessRoute = (roles?: string[]) => {
-    if (!roles) return true;
+    if (!roles) return user?.role !== 'staff'; // staff only see what is listed for them
     return user?.role && roles.includes(user.role);
   };
 

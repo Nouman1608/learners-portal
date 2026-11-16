@@ -1,4 +1,4 @@
-export type Role = 'sudo' | 'admin' | 'teacher' | 'student';
+export type Role = 'sudo' | 'admin' | 'teacher' | 'student' | 'staff';
 
 export type FeeStatus = 'pending' | 'overdue' | 'submitted' | 'received';
 

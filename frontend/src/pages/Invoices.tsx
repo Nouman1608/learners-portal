@@ -511,7 +511,8 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
     ? [['permanent', 'Permanent teachers'], ['percentage', 'Percentage teachers'], ['oneToOne', "Permanent teachers' 1-to-1"], ['advances', 'Advances']]
     : [['slips', 'Salary Slips'], ['advances', 'Advances']];
   const shownTab: SalaryTab = !isAdmin && onSlipList ? 'slips' : salaryTab;
-  if (isJuniorPortal) tabList.push(['attendance', 'Absences & Lates']);  const campusTabs = canPickCampus && (
+  if (isJuniorPortal && user?.role !== 'staff') tabList.push(['attendance', 'Absences & Lates']);
+  const campusTabs = canPickCampus && (
     <div className="mb-4 inline-flex rounded-lg bg-white p-1 shadow" role="tablist" aria-label="Campus">
       {([['senior', isSalary ? 'Senior Campus Teachers' : 'Senior Campus Students'], ['junior', isSalary ? 'Junior Campus Teachers' : 'Junior Campus Students']] as const).map(([value, label]) => (
         <button key={value} role="tab" aria-selected={campusTab === value} onClick={() => { setCampusTab(value); setSalaryTab('permanent'); setFilterCategory('all'); setFilterSubcategory('all'); }}

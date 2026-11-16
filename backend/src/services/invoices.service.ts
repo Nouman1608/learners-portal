@@ -1182,7 +1182,7 @@ export const invoicesService = {
 
     const isSalaried = teacher.teacherPaymentType === 'salaried';
     // Admins with a salary are paid on a monthly slip like a permanent teacher
-    if (teacher.role !== 'teacher' && !(teacher.role === 'admin' && isSalaried)) {
+    if (teacher.role !== 'teacher' && !((teacher.role === 'admin' || teacher.role === 'staff') && isSalaried)) {
       throw new AppError(400, 'User is not a teacher');
     }
 
@@ -2200,7 +2200,7 @@ export const invoicesService = {
     const salaried = await db
       .select({ teacherId: users.id })
       .from(users)
-      .where(and(inArray(users.role, ['teacher', 'admin']), eq(users.isActive, true), eq(users.teacherPaymentType, 'salaried')));
+      .where(and(inArray(users.role, ['teacher', 'admin', 'staff']), eq(users.isActive, true), eq(users.teacherPaymentType, 'salaried')));
     const allTeachers = [...new Map([...withClasses, ...salaried].map((t) => [t.teacherId, t])).values()];
 
     // Generate teacher invoices
@@ -2235,7 +2235,7 @@ export const invoicesService = {
     const salaried = await db
       .select({ teacherId: users.id })
       .from(users)
-      .where(and(inArray(users.role, ['teacher', 'admin']), eq(users.isActive, true), eq(users.teacherPaymentType, 'salaried')));
+      .where(and(inArray(users.role, ['teacher', 'admin', 'staff']), eq(users.isActive, true), eq(users.teacherPaymentType, 'salaried')));
     const allTeachers = [...new Map([...withClasses, ...salaried].map((t) => [t.teacherId, t])).values()];
 
     logger.info(`[INVOICE] Generating teacher invoices for ${month}/${year}: ${allTeachers.length} teachers found`);

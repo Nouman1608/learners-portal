@@ -5,6 +5,7 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 import Layout from './components/layout/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import { useAuth } from './context/AuthContext';
 import Users from './pages/Users';
 import Courses from './pages/Courses';
 import Enrollments from './pages/Enrollments';
@@ -48,7 +49,7 @@ function App() {
             element={
               <ProtectedRoute>
                 <Layout>
-                  <Dashboard />
+                  <DashboardOrSlips />
                 </Layout>
               </ProtectedRoute>
             }
@@ -266,7 +267,7 @@ function App() {
           <Route
             path="/salary-slips"
             element={
-              <ProtectedRoute allowedRoles={['sudo', 'admin', 'teacher']}>
+              <ProtectedRoute allowedRoles={['sudo', 'admin', 'teacher', 'staff']}>
                 <Layout>
                   <Invoices kind="teacher" />
                 </Layout>
@@ -310,7 +311,7 @@ function App() {
           <Route
             path="/account-settings"
             element={
-              <ProtectedRoute allowedRoles={['student', 'teacher']}>
+              <ProtectedRoute allowedRoles={['student', 'teacher', 'staff']}>
                 <Layout>
                   <AccountSettings />
                 </Layout>
@@ -368,3 +369,9 @@ function App() {
 }
 
 export default App
+
+/** Staff (non-teaching employees) have no dashboard: their home is their salary slips */
+function DashboardOrSlips() {
+  const { user } = useAuth();
+  return user?.role === 'staff' ? <Navigate to="/salary-slips" replace /> : <Dashboard />;
+}

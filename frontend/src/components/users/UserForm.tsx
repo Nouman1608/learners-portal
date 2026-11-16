@@ -67,7 +67,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit, onSiblings
         };
         // Only sudo users can update roles
         if (isSudo) {
-          updateData.role = formData.role as 'admin' | 'teacher' | 'student';
+          updateData.role = formData.role as 'admin' | 'teacher' | 'student' | 'staff';
         }
         // Include student category if role is student
         if (formData.role === 'student') {
@@ -103,7 +103,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit, onSiblings
           }
         }
         // An admin with a salary is paid on a monthly slip like a permanent teacher (sudo sets it)
-        if (formData.role === 'admin' && isSudo) {
+        if (((formData.role === 'admin' && isSudo) || formData.role === 'staff')) {
           const salary = formData.monthlySalary ? parseFloat(formData.monthlySalary as any) : 0;
           updateData.teacherPaymentType = salary > 0 ? 'salaried' : 'percentage_based';
           updateData.monthlySalary = salary > 0 ? salary : null;
@@ -114,7 +114,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit, onSiblings
         const createData: CreateUserInput = {
           username: formData.username,
           password: formData.password,
-          role: formData.role as 'admin' | 'teacher' | 'student',
+          role: formData.role as 'admin' | 'teacher' | 'student' | 'staff',
           firstName: formData.firstName,
           lastName: formData.lastName,
           email: formData.email || undefined,
@@ -149,7 +149,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit, onSiblings
               : undefined;
           }
         }
-        if (formData.role === 'admin' && isSudo && formData.monthlySalary && parseFloat(formData.monthlySalary as any) > 0) {
+        if (((formData.role === 'admin' && isSudo) || formData.role === 'staff') && formData.monthlySalary && parseFloat(formData.monthlySalary as any) > 0) {
           createData.teacherPaymentType = 'salaried';
           createData.monthlySalary = parseFloat(formData.monthlySalary as any);
         }
@@ -255,6 +255,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit, onSiblings
                   <option value="student">Student</option>
                   <option value="teacher">Teacher</option>
                   <option value="admin">Admin</option>
+                  <option value="staff">Staff (non-teaching)</option>
                 </select>
               </div>
             )}
@@ -472,7 +473,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit, onSiblings
             )}
 
             {/* Admin salary: optional fixed monthly salary, paid on a monthly slip (sudo only) */}
-            {formData.role === 'admin' && isSudo && (
+            {((formData.role === 'admin' && isSudo) || formData.role === 'staff') && (
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Salary (PKR)</label>
                 <input
@@ -480,13 +481,13 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit, onSiblings
                   value={formData.monthlySalary}
                   onChange={(e) => setFormData({ ...formData, monthlySalary: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Leave empty if this admin is not paid through the portal"
+                  placeholder="Leave empty if not paid through the portal"
                   min="0"
                   step="0.01"
                   disabled={loading}
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Fixed monthly salary. A salary slip is made for this admin each month with the others; only sudo can see it.
+                  Fixed monthly salary. A salary slip is made each month with the others (an admin's slip is seen by sudo only).
                 </p>
               </div>
             )}

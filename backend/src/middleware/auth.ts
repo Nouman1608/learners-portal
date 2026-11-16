@@ -65,8 +65,19 @@ export const authenticate = async (
       id: user.id,
       userId: user.id,
       username: user.username,
-      role: user.role as 'sudo' | 'admin' | 'teacher' | 'student',
+      role: user.role as 'sudo' | 'admin' | 'teacher' | 'student' | 'staff',
     };
+
+    // Staff (non-teaching employees) reach only their own account and pay: everything else is
+    // closed to them here, so no route can leak by forgetting a role check. Outside /auth,
+    // read-only (own invoices / salary slips and own advances).
+    if (user.role === 'staff') {
+      const path = req.baseUrl + req.path;
+      const own = req.method === 'GET' && /^\/api\/(invoices(\/[0-9a-f-]{36}(\/download)?)?|salary-advances)\/?$/i.test(path);
+      if (!own && !/^\/api\/auth(\/|$)/.test(path)) {
+        return res.status(403).json({ error: 'Insufficient permissions' });
+      }
+    }
 
     next();
   } catch (error) {
@@ -103,7 +114,7 @@ export const optionalAuth = async (
             id: user.id,
             userId: user.id,
             username: user.username,
-            role: user.role as 'sudo' | 'admin' | 'teacher' | 'student',
+            role: user.role as 'sudo' | 'admin' | 'teacher' | 'student' | 'staff',
           };
         }
       }

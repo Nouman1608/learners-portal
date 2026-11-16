@@ -10,7 +10,7 @@ export type { User };
 export interface CreateUserInput {
   username: string;
   password: string;
-  role: 'admin' | 'teacher' | 'student';
+  role: 'admin' | 'teacher' | 'student' | 'staff';
   firstName: string;
   lastName: string;
   email?: string; // optional for students
@@ -59,7 +59,7 @@ export interface UpdateUserInput {
   whatsappGroupLink?: string;
   teamsUsername?: string;
   isActive?: boolean;
-  role?: 'admin' | 'teacher' | 'student';
+  role?: 'admin' | 'teacher' | 'student' | 'staff';
   teacherPaymentType?: 'percentage_based' | 'salaried' | 'per_child';
   // null clears the field (e.g. when switching payment type)
   localStudentFeePercentage?: number | null;
@@ -100,7 +100,7 @@ export const usersApi = {
     return response.data.user;
   },
 
-  getUsersByRole: async (role: 'admin' | 'teacher' | 'student'): Promise<User[]> => {
+  getUsersByRole: async (role: 'admin' | 'teacher' | 'student' | 'staff'): Promise<User[]> => {
     const response = await apiClient.get<{ users: User[] }>(`/users/role/${role}`);
     return response.data.users;
   },
