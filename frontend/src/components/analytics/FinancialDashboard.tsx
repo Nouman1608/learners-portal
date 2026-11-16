@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { analyticsApi, FinancialAnalytics, AnalyticsQueryParams, CurrencyRevenue, CurrencyAmount, CourseProfitability, TeacherProfitability, StudentFinance } from '../../api/analytics.api';
+import { analyticsApi, FinancialAnalytics, AnalyticsQueryParams, CurrencyRevenue, CurrencyAmount, CourseProfitability, TeacherProfitability, StudentFinance, StudentTypeView } from '../../api/analytics.api';
 import AnalyticsTable from './AnalyticsTable';
 import FeeListModal, { FeeListRow } from '../fees/FeeListModal';
 import ClassBreakdownModal, { BreakdownColumn } from './ClassBreakdownModal';
@@ -60,6 +60,9 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
   const [sectionMonth, setSectionMonth] = useState('');
   const [sectionData, setSectionData] = useState<Pick<FinancialAnalytics, 'collectionRate' | 'paymentMethods' | 'outstandingFees'> | null>(null);
   const [sectionLoading, setSectionLoading] = useState(false);
+  // Course / teacher tables for all students, or only the Local or only the Online students (profile Type)
+  const [courseType, setCourseType] = useState<StudentTypeView>('all');
+  const [teacherType, setTeacherType] = useState<StudentTypeView>('all');
   // The fees behind a teacher's Received / Not received figure (click the number)
   const [feeList, setFeeList] = useState<{
     title: string; subtitle: string; rows: FeeListRow[] | null;
@@ -168,6 +171,36 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
   const teacherProfitability = allTeacherRows.filter(t => t.active !== false);
   const leftTeachers = allTeacherRows.filter(t => t.active === false);
 
+  // Local / Online views: the same rows counted for that kind of student only (classes or teachers with none are left out)
+  const courseRowsView: CourseProfitability[] = courseType === 'all'
+    ? courseProfitability
+    : courseProfitability.flatMap(c => {
+        const part = c.byType?.[courseType];
+        return part && part.studentCount > 0 ? [{ ...c, ...part }] : [];
+      });
+  const teacherRowsView: TeacherProfitability[] = teacherType === 'all'
+    ? teacherProfitability
+    : teacherProfitability.flatMap(t => {
+        const part = t.byType?.[teacherType];
+        return part && part.classCount > 0 ? [{ ...t, ...part }] : [];
+      });
+  const typeName = { all: '', local: ' · Local students', online: ' · Online students' };
+  const typeTabs = (current: StudentTypeView, set: (type: StudentTypeView) => void) => (
+    <div className="inline-flex overflow-hidden rounded-md border border-gray-300" role="group" aria-label="Which students">
+      {([['all', 'Overall'], ['local', 'Local'], ['online', 'Online']] as [StudentTypeView, string][]).map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          onClick={() => set(value)}
+          aria-pressed={current === value}
+          className={`px-3 py-2 text-sm ${current === value ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
   // Every month of the period, newest first, for the month filter
   const monthOptions: { value: string; label: string }[] = [];
   {
@@ -202,7 +235,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
       const order = new Map(shown.map((c, index) => [key(c.campus, c.courseId), index]));
       const titles = new Map(shown.map((c) => [key(c.campus, c.courseId), c.courseTitle]));
       const lines = all
-        .filter((row) => order.has(key(row.campus, row.courseId)))
+        .filter((row) => order.has(key(row.campus, row.courseId)) && (courseType === 'all' || row.type === courseType))
         .sort((a, b) => order.get(key(a.campus, a.courseId))! - order.get(key(b.campus, b.courseId))!);
       if (lines.length === 0) {
         toast.error('No students to export for these classes');
@@ -239,7 +272,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
   };
 
   /** Any other figure of a class: click it for the class student by student, that column highlighted */
-  const drill = (c: CourseProfitability, highlight: BreakdownColumn | undefined, content: React.ReactNode) => (
+  const drill = (c: CourseProfitability, highlight: BreakdownColumn | undefined, content: React.ReactNode) => courseType !== 'all' ? content : (
     <button
       type="button"
       title="Show student by student"
@@ -264,7 +297,8 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
     t: { name: string; campus?: 'senior' | 'junior'; teacherId?: string | null; courseId?: string },
     group: 'received' | 'notReceived',
     amount: number,
-  ) => (amount > 0.5 ? (
+    plain = false, // Local / Online views: the fee list would show every student, so no click-through
+  ) => (amount > 0.5 && !plain ? (
     <button
       type="button"
       title="Show these students"
@@ -526,12 +560,12 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
 
       {/* Course profitability: sort by any heading, search a class or teacher, filter */}
       <AnalyticsTable<CourseProfitability>
-        title={`${terms.course} profitability${monthLabel ? ` · ${monthLabel}` : ''}`}
-        actions={monthFilter}
+        title={`${terms.course} profitability${typeName[courseType]}${monthLabel ? ` · ${monthLabel}` : ''}`}
+        actions={<>{typeTabs(courseType, setCourseType)}{monthFilter}</>}
         exportSum={['students', 'revenue', 'invoiced', 'notInvoiced', 'paid', 'notReceived', 'cost', 'profit', 'soFar']}
         exportNote={monthLabel ? `Month: ${monthLabel}` : `Period: ${comparison.period.start.slice(0, 7)} to ${comparison.period.end.slice(0, 7)}`}
         description="Revenue is what the class brings in when every student has paid: Invoiced (fee date has arrived) plus Not invoiced (fee dated later, or 1-to-1 classes not counted yet). Invoiced is Received plus Not received. Teacher cost is the expected salary slip; a fixed monthly salary is split equally between that teacher's classes. All in PKR. Click any figure to see it student by student; Received and Not received open the fees themselves, where you can mark them paid."
-        rows={courseProfitability}
+        rows={courseRowsView}
         extraExport={{ label: 'Excel (student-wise)', title: 'One line per student in each class shown, with the same columns', run: exportStudentWise }}
         rowKey={(c, i) => `${c.courseId}-${i}`}
         searchPlaceholder={`Search ${terms.courseLc} or teacher...`}
@@ -558,8 +592,8 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
           { key: 'revenue', header: 'Revenue', align: 'right', value: c => c.revenuePKR, cell: c => drill(c, 'revenue', pkr(c.revenuePKR)), className: 'font-medium text-gray-900' },
           { key: 'invoiced', header: 'Invoiced', align: 'right', value: c => c.invoicedPKR, cell: c => drill(c, 'invoiced', pkr(c.invoicedPKR)) },
           { key: 'notInvoiced', header: 'Not invoiced', align: 'right', value: c => c.notInvoicedPKR, cell: c => drill(c, 'notInvoiced', pkr(c.notInvoicedPKR)), className: 'text-gray-500' },
-          { key: 'paid', header: 'Received', align: 'right', value: c => c.paidPKR, cell: c => feeCell({ name: c.courseTitle, campus: c.campus, courseId: c.courseId }, 'received', c.paidPKR), className: 'text-green-700' },
-          { key: 'notReceived', header: 'Not received', align: 'right', value: c => c.notReceivedPKR, cell: c => feeCell({ name: c.courseTitle, campus: c.campus, courseId: c.courseId }, 'notReceived', c.notReceivedPKR), className: c => (c.notReceivedPKR > 0 ? 'text-red-600' : 'text-gray-400') },
+          { key: 'paid', header: 'Received', align: 'right', value: c => c.paidPKR, cell: c => feeCell({ name: c.courseTitle, campus: c.campus, courseId: c.courseId }, 'received', c.paidPKR, courseType !== 'all'), className: 'text-green-700' },
+          { key: 'notReceived', header: 'Not received', align: 'right', value: c => c.notReceivedPKR, cell: c => feeCell({ name: c.courseTitle, campus: c.campus, courseId: c.courseId }, 'notReceived', c.notReceivedPKR, courseType !== 'all'), className: c => (c.notReceivedPKR > 0 ? 'text-red-600' : 'text-gray-400') },
           {
             key: 'cost', header: 'Teacher cost', align: 'right', value: c => c.teacherCostPKR, className: 'text-gray-600',
             cell: c => (
@@ -596,12 +630,12 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
 
       {/* Teacher profitability: the same columns, per teacher */}
       <AnalyticsTable<TeacherProfitability>
-        title={`Teacher profitability${monthLabel ? ` · ${monthLabel}` : ''}`}
-        actions={monthFilter}
+        title={`Teacher profitability${typeName[teacherType]}${monthLabel ? ` · ${monthLabel}` : ''}`}
+        actions={<>{typeTabs(teacherType, setTeacherType)}{monthFilter}</>}
         exportSum={['classes', 'students', 'revenue', 'invoiced', 'notInvoiced', 'paid', 'notReceived', 'cost', 'profit', 'soFar', 'slips']}
         exportNote={monthLabel ? `Month: ${monthLabel}` : `Period: ${comparison.period.start.slice(0, 7)} to ${comparison.period.end.slice(0, 7)}`}
         description={`The same figures per teacher: the money from their classes against everything they are paid in the period. A class with two teachers is split equally between them. Click a Received or Not received figure to see the students. Only active teachers are listed${leftTeachers.length ? `; ${leftTeachers.length} teacher${leftTeachers.length === 1 ? "" : "s"} who left (paid ${pkr(leftTeachers.reduce((sum, t) => sum + t.teacherCostPKR, 0))} in this period) are not shown, but their pay is still in the top figures.` : "."}`}
-        rows={teacherProfitability}
+        rows={teacherRowsView}
         rowKey={(t, i) => `${t.teacherId ?? 'none'}-${i}`}
         searchPlaceholder="Search teacher..."
         emptyText="No fees or teacher pay in this period"
@@ -622,8 +656,8 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
           { key: 'revenue', header: 'Revenue', align: 'right', value: t => t.revenuePKR, cell: t => pkr(t.revenuePKR), className: 'font-medium text-gray-900' },
           { key: 'invoiced', header: 'Invoiced', align: 'right', value: t => t.invoicedPKR, cell: t => pkr(t.invoicedPKR) },
           { key: 'notInvoiced', header: 'Not invoiced', align: 'right', value: t => t.notInvoicedPKR, cell: t => pkr(t.notInvoicedPKR), className: 'text-gray-500' },
-          { key: 'paid', header: 'Received', align: 'right', value: t => t.paidPKR, cell: t => feeCell({ name: t.teacherName, campus: t.campus, teacherId: t.teacherId }, 'received', t.paidPKR), className: 'text-green-700' },
-          { key: 'notReceived', header: 'Not received', align: 'right', value: t => t.notReceivedPKR, cell: t => feeCell({ name: t.teacherName, campus: t.campus, teacherId: t.teacherId }, 'notReceived', t.notReceivedPKR), className: t => (t.notReceivedPKR > 0 ? 'text-red-600' : 'text-gray-400') },
+          { key: 'paid', header: 'Received', align: 'right', value: t => t.paidPKR, cell: t => feeCell({ name: t.teacherName, campus: t.campus, teacherId: t.teacherId }, 'received', t.paidPKR, teacherType !== 'all'), className: 'text-green-700' },
+          { key: 'notReceived', header: 'Not received', align: 'right', value: t => t.notReceivedPKR, cell: t => feeCell({ name: t.teacherName, campus: t.campus, teacherId: t.teacherId }, 'notReceived', t.notReceivedPKR, teacherType !== 'all'), className: t => (t.notReceivedPKR > 0 ? 'text-red-600' : 'text-gray-400') },
           {
             key: 'cost', header: 'Teacher cost', align: 'right', value: t => t.teacherCostPKR, className: 'text-gray-600',
             cell: t => (

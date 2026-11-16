@@ -12,7 +12,7 @@ import { AppError } from '../middleware/errorHandler';
 import { currencyService, CurrencyCode } from './currency.service';
 import logger from '../utils/logger';
 import { feeInBooks } from '../utils/booksStart';
-import { classProfitService } from './classProfit.service';
+import { classProfitService, type TypeFinance } from './classProfit.service';
 
 /**
  * Analytics Service
@@ -378,6 +378,21 @@ export const analyticsService = {
     try {
       const finance = await classProfitService.getFinanceForDates(startDate, endDate, this.db);
 
+      const typeRow = (t: TypeFinance) => ({
+        studentCount: t.students,
+        revenuePKR: t.revenuePKR,
+        invoicedPKR: t.invoicedPKR,
+        notInvoicedPKR: t.notInvoicedPKR,
+        paidPKR: t.paidPKR,
+        notReceivedPKR: t.notReceivedPKR,
+        teacherCostPKR: t.teacherPayPKR,
+        estimatedCostPKR: t.estimatedPayPKR,
+        expectedProfitPKR: t.expectedProfitPKR,
+        profitSoFarPKR: t.profitSoFarPKR,
+        marginPercent: t.revenuePKR > 0 ? (t.expectedProfitPKR / t.revenuePKR) * 100 : 0,
+      });
+      type TypeRow = ReturnType<typeof typeRow>;
+
       const courseRows = finance.classes.map(c => ({
         courseId: c.courseId,
         courseTitle: c.title,
@@ -396,6 +411,11 @@ export const analyticsService = {
         expectedProfitPKR: c.expectedProfitPKR,
         profitSoFarPKR: c.profitSoFarPKR,
         marginPercent: c.revenuePKR > 0 ? (c.expectedProfitPKR / c.revenuePKR) * 100 : 0,
+        // The same row for the class's Local / Online students only (the Local and Online views)
+        byType: c.byType ? {
+          local: typeRow(c.byType.local),
+          online: typeRow(c.byType.online),
+        } : undefined,
       }));
 
       // Per teacher: their classes' money (a class with two teachers is split equally between
@@ -410,6 +430,11 @@ export const analyticsService = {
         active: true,
         revenuePKR: 0, invoicedPKR: 0, notInvoicedPKR: 0, paidPKR: 0, notReceivedPKR: 0,
         teacherCostPKR: 0, estimatedCostPKR: 0, slipCount: 0,
+        // This teacher's Local / Online figures: their classes' shares, with the pay of those students
+        byType: {
+          local: { classCount: 0, ...typeRow({ students: 0, revenuePKR: 0, invoicedPKR: 0, notInvoicedPKR: 0, paidPKR: 0, notReceivedPKR: 0, teacherPayPKR: 0, estimatedPayPKR: 0, expectedProfitPKR: 0, profitSoFarPKR: 0 }) },
+          online: { classCount: 0, ...typeRow({ students: 0, revenuePKR: 0, invoicedPKR: 0, notInvoicedPKR: 0, paidPKR: 0, notReceivedPKR: 0, teacherPayPKR: 0, estimatedPayPKR: 0, expectedProfitPKR: 0, profitSoFarPKR: 0 }) },
+        } as Record<'local' | 'online', TypeRow & { classCount: number }>,
       });
       const byTeacher = new Map<string, ReturnType<typeof blank>>();
       for (const pay of finance.teachers) {
@@ -435,6 +460,23 @@ export const analyticsService = {
           row.notInvoicedPKR += c.notInvoicedPKR / sharers.length;
           row.paidPKR += c.paidPKR / sharers.length;
           row.notReceivedPKR += c.notReceivedPKR / sharers.length;
+          for (const type of ['local', 'online'] as const) {
+            const part = c.byType?.[type];
+            if (!part || part.students === 0) continue;
+            const mine = row.byType[type];
+            const share = 1 / sharers.length;
+            mine.classCount += 1;
+            mine.studentCount += part.students;
+            mine.revenuePKR += part.revenuePKR * share;
+            mine.invoicedPKR += part.invoicedPKR * share;
+            mine.notInvoicedPKR += part.notInvoicedPKR * share;
+            mine.paidPKR += part.paidPKR * share;
+            mine.notReceivedPKR += part.notReceivedPKR * share;
+            mine.teacherCostPKR += part.teacherPayPKR * share;
+            mine.estimatedCostPKR += part.estimatedPayPKR * share;
+            mine.expectedProfitPKR += part.expectedProfitPKR * share;
+            mine.profitSoFarPKR += part.profitSoFarPKR * share;
+          }
         }
       }
       const teacherRows = [...byTeacher.values()]
@@ -445,6 +487,10 @@ export const analyticsService = {
             expectedProfitPKR,
             profitSoFarPKR: row.paidPKR - row.teacherCostPKR,
             marginPercent: row.revenuePKR > 0 ? (expectedProfitPKR / row.revenuePKR) * 100 : 0,
+            byType: {
+              local: { ...row.byType.local, marginPercent: row.byType.local.revenuePKR > 0 ? (row.byType.local.expectedProfitPKR / row.byType.local.revenuePKR) * 100 : 0 },
+              online: { ...row.byType.online, marginPercent: row.byType.online.revenuePKR > 0 ? (row.byType.online.expectedProfitPKR / row.byType.online.revenuePKR) * 100 : 0 },
+            },
           };
         })
         .sort((x, y) => y.expectedProfitPKR - x.expectedProfitPKR);

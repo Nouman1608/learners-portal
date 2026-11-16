@@ -47,6 +47,7 @@ export interface StudentFinance extends ClassMoney {
   teacherPayPKR: number;
   estimatedPayPKR: number;
   sharedPayPKR: number; // pay not paid per student (e.g. a fixed salary's share), split equally
+  type?: string | null; // the student's profile Type (local / online / ...)
   campus?: 'senior' | 'junior';
 }
 
@@ -133,7 +134,18 @@ export interface CollectionRate {
 }
 
 /** One teacher over the period: their classes' money against everything they are paid */
+/** The figures of a profitability row counted for Local or Online students only */
+export interface TypeFigures extends ClassMoney {
+  studentCount: number;
+  teacherCostPKR: number;
+  estimatedCostPKR: number;
+  marginPercent: number;
+}
+export type StudentTypeView = 'all' | 'local' | 'online';
+
 export interface TeacherProfitability extends ClassMoney {
+  /** Local / Online views of this row (absent when the other campus is an older version) */
+  byType?: Record<'local' | 'online', TypeFigures & { classCount: number }>;
   teacherId: string | null; // null = classes with no teacher assigned
   teacherName: string;
   classCount: number;
@@ -147,6 +159,8 @@ export interface TeacherProfitability extends ClassMoney {
 }
 
 export interface CourseProfitability extends ClassMoney {
+  /** Local / Online views of this row (absent when the other campus is an older version) */
+  byType?: Record<'local' | 'online', TypeFigures>;
   courseId: string;
   courseTitle: string;
   teachers: string[];

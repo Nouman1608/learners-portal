@@ -52,7 +52,23 @@ export interface ClassFinance {
   estimatedPayPKR: number; // part of teacherPayPKR that is an estimate (no slip yet)
   expectedProfitPKR: number;
   profitSoFarPKR: number;
+  /** The same figures for the class's Local and for its Online students only (by profile Type) */
+  byType?: { local: TypeFinance; online: TypeFinance };
   campus?: 'senior' | 'junior';
+}
+
+/** One class's figures for the students of one Type (Local / Online) */
+export interface TypeFinance {
+  students: number;
+  revenuePKR: number;
+  invoicedPKR: number;
+  notInvoicedPKR: number;
+  paidPKR: number;
+  notReceivedPKR: number;
+  teacherPayPKR: number;
+  estimatedPayPKR: number;
+  expectedProfitPKR: number;
+  profitSoFarPKR: number;
 }
 
 export interface TeacherPay {
@@ -101,6 +117,7 @@ export interface StudentFinance {
   teacherPayPKR: number;
   estimatedPayPKR: number;
   sharedPayPKR: number; // part of the teacher pay not paid per student (e.g. a fixed salary), split equally
+  type?: string | null; // the student's profile Type (local / online / ...)
   expectedProfitPKR: number;
   profitSoFarPKR: number;
   campus?: 'senior' | 'junior';
@@ -226,7 +243,8 @@ export const classProfitService = {
 
   async getFinance(firstMonth: number, lastMonth: number, database: Database = db, detailCourseId?: string): Promise<ClassFinanceReport> {
     // detailCourseId: one class to break down by student, or 'all' for every class
-    const wantsDetail = (courseId: string) => detailCourseId === 'all' || detailCourseId === courseId;
+    // Every class is broken down by student, to split each class's figures into Local and Online
+    const wantsDetail = (courseId: string) => !detailCourseId || detailCourseId === 'all' || detailCourseId === courseId;
     const today = pakistanToday();
     const [nowYear, nowMonth] = today.split('-').map(Number);
     const thisMonth = monthIndex(nowYear, nowMonth);
@@ -503,22 +521,21 @@ export const classProfitService = {
       };
     }).sort((a, b) => b.expectedProfitPKR - a.expectedProfitPKR);
 
-    if (!detailCourseId) return { classes: list, teachers };
-
     // ---- The asked-for class(es), student by student ----
     const studentFees = (await database.execute(sql`
       SELECT f.course_id AS "courseId", u.id AS "studentId", u.first_name AS "firstName", u.last_name AS "lastName", COALESCE(f.currency, 'PKR') AS currency,
              COALESCE(SUM(f.amount::numeric) FILTER (WHERE f.status = 'received'), 0)::float AS paid,
              COALESCE(SUM(f.amount::numeric) FILTER (WHERE f.status <> 'received' AND (f.due_date IS NULL OR f.due_date <= ${today}::date)), 0)::float AS "notReceived",
-             COALESCE(SUM(f.amount::numeric) FILTER (WHERE f.status <> 'received' AND f.due_date > ${today}::date), 0)::float AS "notInvoiced"
+             COALESCE(SUM(f.amount::numeric) FILTER (WHERE f.status <> 'received' AND f.due_date > ${today}::date), 0)::float AS "notInvoiced",
+             u.student_subcategory AS type
       FROM fees f
       INNER JOIN users u ON u.id = f.student_id
-      WHERE ${owed} AND ${detailCourseId === 'all' ? sql`true` : sql`f.course_id = ${detailCourseId}`}
-      GROUP BY f.course_id, u.id, u.first_name, u.last_name, COALESCE(f.currency, 'PKR')`)).rows as any[];
+      WHERE ${owed} AND ${detailCourseId && detailCourseId !== 'all' ? sql`f.course_id = ${detailCourseId}` : sql`true`}
+      GROUP BY f.course_id, u.id, u.first_name, u.last_name, u.student_subcategory, COALESCE(f.currency, 'PKR')`)).rows as any[];
 
     const expectedIds = [...new Set([...detailExpected.values()].flatMap((byStudent) => [...byStudent.keys()]))];
     const expectedStudents = expectedIds.length
-      ? await database.select({ id: users.id, firstName: users.firstName, lastName: users.lastName }).from(users).where(inArray(users.id, expectedIds))
+      ? await database.select({ id: users.id, firstName: users.firstName, lastName: users.lastName, type: users.studentSubcategory }).from(users).where(inArray(users.id, expectedIds))
       : [];
 
     const detailFor = (courseId: string): StudentFinance[] => {
@@ -537,6 +554,7 @@ export const classProfitService = {
       for (const fee of studentFees) {
         if (fee.courseId !== courseId) continue;
         const row = studentFor(fee.studentId, fee.firstName, fee.lastName);
+        row.type = fee.type;
         const rate = rateToPKR(fee.currency);
         row.paidPKR += fee.paid * rate;
         row.notReceivedPKR += fee.notReceived * rate;
@@ -544,7 +562,11 @@ export const classProfitService = {
       }
       for (const [studentId, expectedPKR] of detailExpected.get(courseId) ?? []) {
         const student = expectedStudents.find((u) => u.id === studentId);
-        if (student) studentFor(student.id, student.firstName, student.lastName).notInvoicedPKR += expectedPKR;
+        if (student) {
+          const row = studentFor(student.id, student.firstName, student.lastName);
+          row.type = student.type;
+          row.notInvoicedPKR += expectedPKR;
+        }
       }
 
       // Teacher pay: slip lines name the student; whatever names no student of the class is shared
@@ -591,12 +613,26 @@ export const classProfitService = {
       }).sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
     };
 
-    if (detailCourseId === 'all') {
-      const details: Record<string, StudentFinance[]> = {};
-      for (const c of list) details[c.courseId] = detailFor(c.courseId);
-      return { classes: list, teachers, details };
-    }
-    return { classes: list, teachers, detail: detailFor(detailCourseId) };
+    const details: Record<string, StudentFinance[]> = {};
+    for (const c of list) details[c.courseId] = detailFor(c.courseId);
+
+    // Each class's figures for its Local and its Online students (the students add up to the class row)
+    const forType = (rows: StudentFinance[], type: string): TypeFinance => {
+      const mine = rows.filter((st) => st.studentId && st.type === type);
+      const sum = (pick: (st: StudentFinance) => number) => round(mine.reduce((total, st) => total + pick(st), 0));
+      return {
+        students: mine.length,
+        revenuePKR: sum((st) => st.revenuePKR), invoicedPKR: sum((st) => st.invoicedPKR), notInvoicedPKR: sum((st) => st.notInvoicedPKR),
+        paidPKR: sum((st) => st.paidPKR), notReceivedPKR: sum((st) => st.notReceivedPKR),
+        teacherPayPKR: sum((st) => st.teacherPayPKR), estimatedPayPKR: sum((st) => st.estimatedPayPKR),
+        expectedProfitPKR: sum((st) => st.expectedProfitPKR), profitSoFarPKR: sum((st) => st.profitSoFarPKR),
+      };
+    };
+    const typed = list.map((c) => ({ ...c, byType: { local: forType(details[c.courseId], 'local'), online: forType(details[c.courseId], 'online') } }));
+
+    if (!detailCourseId) return { classes: typed, teachers };
+    if (detailCourseId === 'all') return { classes: typed, teachers, details };
+    return { classes: typed, teachers, detail: details[detailCourseId] ?? [] };
   },
 };
 
