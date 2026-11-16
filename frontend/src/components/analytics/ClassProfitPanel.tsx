@@ -196,7 +196,8 @@ export default function ClassProfitPanel({ campus }: { campus: 'senior' | 'junio
           const cell = 'px-6 py-3 text-right whitespace-nowrap';
           return (
             <tr>
-              <td className="px-6 py-3" colSpan={2}>Total ({shown.length})</td>
+              <td className="px-6 py-3">Total ({shown.length})</td>
+              <td className="px-6 py-3" />
               <td className={cell}>{shown.reduce((s, r) => s + r.students, 0)}</td>
               <td className={cell}>{total((r) => r.revenuePKR)}</td>
               <td className={cell}>{total((r) => r.invoicedPKR)}</td>
