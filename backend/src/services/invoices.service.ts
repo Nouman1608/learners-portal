@@ -1180,11 +1180,12 @@ export const invoicesService = {
       throw new AppError(404, 'Teacher not found');
     }
 
-    if (teacher.role !== 'teacher') {
+    const isSalaried = teacher.teacherPaymentType === 'salaried';
+    // Admins with a salary are paid on a monthly slip like a permanent teacher
+    if (teacher.role !== 'teacher' && !(teacher.role === 'admin' && isSalaried)) {
       throw new AppError(400, 'User is not a teacher');
     }
 
-    const isSalaried = teacher.teacherPaymentType === 'salaried';
     const monthlySalary = teacher.monthlySalary ? parseFloat(teacher.monthlySalary) : 0;
     // Per child (Junior): a fixed amount for each local child taught, kept in monthly_salary
     const perChildRate = teacher.teacherPaymentType === 'per_child' ? monthlySalary : 0;
@@ -1680,6 +1681,7 @@ export const invoicesService = {
     search?: string;
     includeAllVersions?: boolean; // Set to true to include old versions
     includeOtherCampus?: boolean; // admins: add siblings who study in the other campus
+    hideAdminSlips?: boolean; // everyone but sudo: leave out the salary slips of admins
   }, database: Database = db) {
     // database: the Junior Campus for sudo's Junior tab on the Senior portal (read-only)
     let query = database
@@ -1727,6 +1729,10 @@ export const invoicesService = {
     if (filters?.type) {
       // 'teacher' = every salary slip, including a permanent teacher's separate 1-to-1 slip
       conditions.push(filters.type === 'teacher' ? inArray(invoices.type, ['teacher', ONE_TO_ONE_SLIP]) : eq(invoices.type, filters.type));
+    }
+    // Admins' own salary slips are for sudo only
+    if (filters?.hideAdminSlips) {
+      conditions.push(sql`${users.role} <> 'admin'`);
     }
     if (filters?.month) {
       conditions.push(eq(invoices.month, filters.month));
@@ -2194,7 +2200,7 @@ export const invoicesService = {
     const salaried = await db
       .select({ teacherId: users.id })
       .from(users)
-      .where(and(eq(users.role, 'teacher'), eq(users.isActive, true), eq(users.teacherPaymentType, 'salaried')));
+      .where(and(inArray(users.role, ['teacher', 'admin']), eq(users.isActive, true), eq(users.teacherPaymentType, 'salaried')));
     const allTeachers = [...new Map([...withClasses, ...salaried].map((t) => [t.teacherId, t])).values()];
 
     // Generate teacher invoices
@@ -2229,7 +2235,7 @@ export const invoicesService = {
     const salaried = await db
       .select({ teacherId: users.id })
       .from(users)
-      .where(and(eq(users.role, 'teacher'), eq(users.isActive, true), eq(users.teacherPaymentType, 'salaried')));
+      .where(and(inArray(users.role, ['teacher', 'admin']), eq(users.isActive, true), eq(users.teacherPaymentType, 'salaried')));
     const allTeachers = [...new Map([...withClasses, ...salaried].map((t) => [t.teacherId, t])).values()];
 
     logger.info(`[INVOICE] Generating teacher invoices for ${month}/${year}: ${allTeachers.length} teachers found`);

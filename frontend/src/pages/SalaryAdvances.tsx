@@ -43,12 +43,16 @@ const SalaryAdvances: React.FC = () => {
 
   useEffect(() => {
     if (!isAdmin) return;
-    usersApi.getUsersByRole('teacher')
+    // Sudo can also record advances for admins who have a salary
+    Promise.all([
+      usersApi.getUsersByRole('teacher'),
+      user?.role === 'sudo' ? usersApi.getUsersByRole('admin') : Promise.resolve([]),
+    ]).then(([teacherList, adminList]) => [...teacherList, ...adminList.filter((a) => a.teacherPaymentType === 'salaried')])
       .then((list) => setTeachers(list
         .map((t) => ({ id: t.id, name: `${t.firstName} ${t.lastName}`.trim() }))
         .sort((a, b) => a.name.localeCompare(b.name))))
       .catch(() => toast.error('Failed to load teachers'));
-  }, [isAdmin]);
+  }, [isAdmin, user?.role]);
 
   const load = useCallback(async () => {
     setLoading(true);

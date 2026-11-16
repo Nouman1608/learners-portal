@@ -58,7 +58,7 @@ export const teacherAdvancesService = {
 
   async create(input: AdvanceInput, userId: string) {
     const [teacher] = await db.select({ role: users.role }).from(users).where(eq(users.id, input.teacherId)).limit(1);
-    if (!teacher || teacher.role !== 'teacher') throw new AppError(404, 'Teacher not found');
+    if (!teacher || (teacher.role !== 'teacher' && teacher.role !== 'admin')) throw new AppError(404, 'Teacher not found');
     const [row] = await db.insert(teacherAdvances).values({
       teacherId: input.teacherId,
       amount: input.amount,

@@ -97,9 +97,13 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
   };
 
   useEffect(() => {
-    if (isAdmin) usersApi.getUsersByRole('teacher').then(setTeachers)
+    // Sudo also pays admins who have a salary (their slips are for sudo only)
+    if (isAdmin) Promise.all([
+      usersApi.getUsersByRole('teacher'),
+      user?.role === 'sudo' ? usersApi.getUsersByRole('admin') : Promise.resolve([] as User[]),
+    ]).then(([teacherList, adminList]) => setTeachers([...teacherList, ...adminList.filter((a) => a.teacherPaymentType === 'salaried')]))
       .catch(() => toast.error('Failed to load teachers'));
-  }, [isAdmin]);
+  }, [isAdmin, user?.role]);
 
   // Junior portal: absences/lates and advances are reviewed in a pop-up before a slip is made
   const [inputsFor, setInputsFor] = useState<{ id: string; month: number; year: number; name: string } | null>(null);

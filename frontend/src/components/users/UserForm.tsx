@@ -102,6 +102,12 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit, onSiblings
             updateData.monthlySalary = null;
           }
         }
+        // An admin with a salary is paid on a monthly slip like a permanent teacher (sudo sets it)
+        if (formData.role === 'admin' && isSudo) {
+          const salary = formData.monthlySalary ? parseFloat(formData.monthlySalary as any) : 0;
+          updateData.teacherPaymentType = salary > 0 ? 'salaried' : 'percentage_based';
+          updateData.monthlySalary = salary > 0 ? salary : null;
+        }
         await onSubmit(updateData);
       } else {
         // For creation, send all required fields
@@ -142,6 +148,10 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit, onSiblings
               ? parseFloat(formData.onlineStudentFixedAmountAlevel as any)
               : undefined;
           }
+        }
+        if (formData.role === 'admin' && isSudo && formData.monthlySalary && parseFloat(formData.monthlySalary as any) > 0) {
+          createData.teacherPaymentType = 'salaried';
+          createData.monthlySalary = parseFloat(formData.monthlySalary as any);
         }
         await onSubmit(createData);
       }
@@ -459,6 +469,26 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit, onSiblings
                   </p>
                 </div>
               </>
+            )}
+
+            {/* Admin salary: optional fixed monthly salary, paid on a monthly slip (sudo only) */}
+            {formData.role === 'admin' && isSudo && (
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Salary (PKR)</label>
+                <input
+                  type="number"
+                  value={formData.monthlySalary}
+                  onChange={(e) => setFormData({ ...formData, monthlySalary: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Leave empty if this admin is not paid through the portal"
+                  min="0"
+                  step="0.01"
+                  disabled={loading}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Fixed monthly salary. A salary slip is made for this admin each month with the others; only sudo can see it.
+                </p>
+              </div>
             )}
 
             {/* Teacher Fee Configuration - Only show for teachers */}

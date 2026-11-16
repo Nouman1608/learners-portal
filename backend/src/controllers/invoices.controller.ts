@@ -5,6 +5,7 @@ import { emailService } from '../services/email.service';
 import { db, juniorDb } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { invoices } from '../db/schema/invoices';
+import { users } from '../db/schema';
 import { eq, inArray } from 'drizzle-orm';
 
 // Validation schemas
@@ -70,6 +71,13 @@ export const generateStudentInvoice = async (req: Request, res: Response, next: 
   }
 };
 
+/** A salary slip of an admin is for sudo only: other admins get "not found" */
+async function hideAdminSlip(req: Request, recipientId: string) {
+  if (req.user?.role !== 'admin') return;
+  const [recipient] = await db.select({ role: users.role }).from(users).where(eq(users.id, recipientId)).limit(1);
+  if (recipient?.role === 'admin') throw new AppError(404, 'Invoice not found');
+}
+
 /** A locked month's salary slips (after the 11th of the next month): only sudo may (re)generate them */
 function sudoForPastSlips(req: Request, month: number, year: number): boolean {
   if (!invoicesService.isPastSlipMonth(month, year)) return false;
@@ -81,6 +89,7 @@ export const generateTeacherInvoice = async (req: Request, res: Response, next: 
   try {
     const validated = generateTeacherInvoiceSchema.parse(req.body);
     const allowPastMonth = sudoForPastSlips(req, validated.month, validated.year);
+    await hideAdminSlip(req, validated.teacherId);
     const result = await invoicesService.generateTeacherInvoice({
       ...validated,
       allowPastMonth,
@@ -163,7 +172,10 @@ export const getInvoices = async (req: Request, res: Response, next: NextFunctio
     }
 
     // Admins see a family's children in the other campus too (students only ever see their own)
-    else filters.includeOtherCampus = true;
+    else {
+      filters.includeOtherCampus = true;
+      if (req.user?.role === 'admin') filters.hideAdminSlips = true; // admins' own pay is for sudo only
+    }
 
     // Sudo on the Senior portal can read the Junior Campus (?campus=junior, read-only)
     let database;
@@ -182,6 +194,7 @@ export const getInvoices = async (req: Request, res: Response, next: NextFunctio
 export const getInvoiceById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const invoice = await invoicesService.getInvoiceById(req.params.id);
+    await hideAdminSlip(req, invoice.recipientId);
 
     // Authorization: users can only view their own invoices (unless admin/sudo)
     if (
@@ -201,6 +214,7 @@ export const getInvoiceById = async (req: Request, res: Response, next: NextFunc
 export const downloadInvoice = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const invoice = await invoicesService.getInvoiceById(req.params.id);
+    await hideAdminSlip(req, invoice.recipientId);
 
     // Authorization: users can only download their own invoices (unless admin/sudo)
     if (
