@@ -44,6 +44,9 @@ export interface ClassFinance {
   oneToOne: boolean;
   students: number;
   revenuePKR: number;
+  /** Revenue split by the student's profile Type (Local / Online); other types are in neither */
+  revenueLocalPKR: number;
+  revenueOnlinePKR: number;
   invoicedPKR: number;
   notInvoicedPKR: number;
   paidPKR: number;
@@ -249,9 +252,12 @@ export const classProfitService = {
       SELECT f.course_id AS "courseId", c.title, COALESCE(f.currency, 'PKR') AS currency,
              COALESCE(SUM(f.amount::numeric) FILTER (WHERE f.status = 'received'), 0)::float AS paid,
              COALESCE(SUM(f.amount::numeric) FILTER (WHERE f.status <> 'received' AND (f.due_date IS NULL OR f.due_date <= ${today}::date)), 0)::float AS "notReceived",
-             COALESCE(SUM(f.amount::numeric) FILTER (WHERE f.status <> 'received' AND f.due_date > ${today}::date), 0)::float AS "notInvoiced"
+             COALESCE(SUM(f.amount::numeric) FILTER (WHERE f.status <> 'received' AND f.due_date > ${today}::date), 0)::float AS "notInvoiced",
+             COALESCE(SUM(f.amount::numeric) FILTER (WHERE u.student_subcategory = 'local'), 0)::float AS "localRevenue",
+             COALESCE(SUM(f.amount::numeric) FILTER (WHERE u.student_subcategory = 'online'), 0)::float AS "onlineRevenue"
       FROM fees f
       INNER JOIN courses c ON c.id = f.course_id
+      LEFT JOIN users u ON u.id = f.student_id
       WHERE ${owed}
       GROUP BY f.course_id, c.title, COALESCE(f.currency, 'PKR')`)).rows as any[];
     const studentRows = (await database.execute(sql`
@@ -264,7 +270,7 @@ export const classProfitService = {
       if (!entry) {
         entry = {
           courseId, title, teachers: [], teacherIds: [], oneToOne: false, students: 0,
-          revenuePKR: 0, invoicedPKR: 0, notInvoicedPKR: 0, paidPKR: 0, notReceivedPKR: 0,
+          revenuePKR: 0, revenueLocalPKR: 0, revenueOnlinePKR: 0, invoicedPKR: 0, notInvoicedPKR: 0, paidPKR: 0, notReceivedPKR: 0,
           teacherPayPKR: 0, estimatedPayPKR: 0, expectedProfitPKR: 0, profitSoFarPKR: 0,
         };
         classes.set(courseId, entry);
@@ -277,6 +283,8 @@ export const classProfitService = {
       entry.paidPKR += row.paid * rate;
       entry.notReceivedPKR += row.notReceived * rate;
       entry.notInvoicedPKR += row.notInvoiced * rate;
+      entry.revenueLocalPKR += row.localRevenue * rate;
+      entry.revenueOnlinePKR += row.onlineRevenue * rate;
     }
     for (const row of studentRows) {
       const entry = classes.get(row.courseId);
@@ -311,6 +319,11 @@ export const classProfitService = {
         SELECT DISTINCT f.enrollment_id AS id FROM fees f
         WHERE f.status IN ('received', 'pending', 'overdue') AND f.amount::numeric > 0
           AND f.year = ${nowYear} AND f.month = ${nowMonth}`)).rows as any[]).map((r) => r.id));
+      // Each student's profile Type, to count the expected 1-to-1 income as Local or Online
+      const typeRows = oneToOne.length
+        ? (await database.execute(sql`SELECT id, student_subcategory AS type FROM users WHERE id IN (${sql.join([...new Set(oneToOne.map((e) => e.studentId))].map((id) => sql`${id}`), sql`, `)})`)).rows as any[]
+        : [];
+      const typeOf = new Map(typeRows.map((r) => [r.id as string, r.type as string | null]));
       for (const enrollment of oneToOne) {
         const perSession = parseFloat(enrollment.perSessionFee || '0');
         if (enrollment.status !== 'active' || counted.has(enrollment.enrollmentId) || !(perSession > 0) || !enrollment.expectedClasses) continue;
@@ -318,6 +331,8 @@ export const classProfitService = {
         entry.oneToOne = true;
         const expectedPKR = perSession * enrollment.expectedClasses * rateToPKR(enrollment.currency);
         entry.notInvoicedPKR += expectedPKR;
+        if (typeOf.get(enrollment.studentId) === 'local') entry.revenueLocalPKR += expectedPKR;
+        if (typeOf.get(enrollment.studentId) === 'online') entry.revenueOnlinePKR += expectedPKR;
         entry.students += 1;
         if (wantsDetail(enrollment.courseId)) {
           const byStudent = detailExpected.get(enrollment.courseId) ?? new Map<string, number>();
@@ -492,6 +507,8 @@ export const classProfitService = {
         ...c,
         oneToOne: oneToOneCourses.has(c.courseId), // also classes that only have teacher pay so far
         revenuePKR: round(revenue),
+        revenueLocalPKR: round(c.revenueLocalPKR),
+        revenueOnlinePKR: round(c.revenueOnlinePKR),
         invoicedPKR: round(invoiced),
         notInvoicedPKR: round(c.notInvoicedPKR),
         paidPKR: round(c.paidPKR),

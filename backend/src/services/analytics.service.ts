@@ -387,6 +387,8 @@ export const analyticsService = {
         oneToOne: c.oneToOne,
         studentCount: c.students,
         revenuePKR: c.revenuePKR,
+        revenueLocalPKR: c.revenueLocalPKR,
+        revenueOnlinePKR: c.revenueOnlinePKR,
         invoicedPKR: c.invoicedPKR,
         notInvoicedPKR: c.notInvoicedPKR,
         paidPKR: c.paidPKR,
