@@ -604,7 +604,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
       <AnalyticsTable<TeacherProfitability>
         title={`Teacher profitability${monthLabel ? ` · ${monthLabel}` : ''}`}
         actions={monthFilter}
-        exportSum={['classes', 'students', 'revenue', 'revenueLocal', 'revenueOnline', 'invoiced', 'notInvoiced', 'paid', 'notReceived', 'cost', 'profit', 'soFar', 'slips']}
+        exportSum={['classes', 'students', 'revenue', 'invoiced', 'notInvoiced', 'paid', 'notReceived', 'cost', 'profit', 'soFar', 'slips']}
         exportNote={monthLabel ? `Month: ${monthLabel}` : `Period: ${comparison.period.start.slice(0, 7)} to ${comparison.period.end.slice(0, 7)}`}
         description={`The same figures per teacher: the money from their classes against everything they are paid in the period. A class with two teachers is split equally between them. Click a Received or Not received figure to see the students. Only active teachers are listed${leftTeachers.length ? `; ${leftTeachers.length} teacher${leftTeachers.length === 1 ? "" : "s"} who left (paid ${pkr(leftTeachers.reduce((sum, t) => sum + t.teacherCostPKR, 0))} in this period) are not shown, but their pay is still in the top figures.` : "."}`}
         rows={teacherProfitability}
@@ -626,8 +626,6 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
           { key: 'classes', header: terms.courses, align: 'right', value: t => t.classCount },
           { key: 'students', header: 'Students', align: 'right', value: t => t.studentCount },
           { key: 'revenue', header: 'Revenue', align: 'right', value: t => t.revenuePKR, cell: t => pkr(t.revenuePKR), className: 'font-medium text-gray-900' },
-          { key: 'revenueLocal', header: 'Revenue local', align: 'right', value: t => t.revenueLocalPKR ?? 0, cell: t => pkr(t.revenueLocalPKR ?? 0), className: 'text-gray-700' },
-          { key: 'revenueOnline', header: 'Revenue online', align: 'right', value: t => t.revenueOnlinePKR ?? 0, cell: t => pkr(t.revenueOnlinePKR ?? 0), className: 'text-gray-700' },
           { key: 'invoiced', header: 'Invoiced', align: 'right', value: t => t.invoicedPKR, cell: t => pkr(t.invoicedPKR) },
           { key: 'notInvoiced', header: 'Not invoiced', align: 'right', value: t => t.notInvoicedPKR, cell: t => pkr(t.notInvoicedPKR), className: 'text-gray-500' },
           { key: 'paid', header: 'Received', align: 'right', value: t => t.paidPKR, cell: t => feeCell({ name: t.teacherName, campus: t.campus, teacherId: t.teacherId }, 'received', t.paidPKR), className: 'text-green-700' },
@@ -653,8 +651,6 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
               <td className="px-6 py-3">Total ({shown.length})</td>
               <td className="px-6 py-3" colSpan={2} />
               <td className={cell}>{sum(t => t.revenuePKR)}</td>
-              <td className={cell}>{sum(t => t.revenueLocalPKR ?? 0)}</td>
-              <td className={cell}>{sum(t => t.revenueOnlinePKR ?? 0)}</td>
               <td className={cell}>{sum(t => t.invoicedPKR)}</td>
               <td className={cell}>{sum(t => t.notInvoicedPKR)}</td>
               <td className={cell}>{sum(t => t.paidPKR)}</td>

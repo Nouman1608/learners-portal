@@ -134,8 +134,6 @@ export interface CollectionRate {
 
 /** One teacher over the period: their classes' money against everything they are paid */
 export interface TeacherProfitability extends ClassMoney {
-  revenueLocalPKR?: number;
-  revenueOnlinePKR?: number;
   teacherId: string | null; // null = classes with no teacher assigned
   teacherName: string;
   classCount: number;
