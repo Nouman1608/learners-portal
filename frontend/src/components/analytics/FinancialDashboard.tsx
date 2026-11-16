@@ -142,7 +142,10 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
   const { totals, comparison, collectionRate } = data;
   // The tables show the chosen month, or the whole period when no month is picked
   const courseProfitability = (tableMonth && monthRows ? monthRows : data).courseProfitability;
-  const teacherProfitability = (tableMonth && monthRows ? monthRows : data).teacherProfitability ?? [];
+  const allTeacherRows = (tableMonth && monthRows ? monthRows : data).teacherProfitability ?? [];
+  // Only teachers who are still here are listed; the rows of those who left are counted, not shown
+  const teacherProfitability = allTeacherRows.filter(t => t.active !== false);
+  const leftTeachers = allTeacherRows.filter(t => t.active === false);
 
   // Every month of the period, newest first, for the month filter
   const monthOptions: { value: string; label: string }[] = [];
@@ -555,7 +558,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
         actions={monthFilter}
         exportSum={['classes', 'students', 'revenue', 'invoiced', 'notInvoiced', 'paid', 'notReceived', 'cost', 'profit', 'soFar', 'slips']}
         exportNote={monthLabel ? `Month: ${monthLabel}` : `Period: ${comparison.period.start.slice(0, 7)} to ${comparison.period.end.slice(0, 7)}`}
-        description="The same figures per teacher: the money from their classes against everything they are paid in the period. A class with two teachers is split equally between them. Click a Received or Not received figure to see the students."
+        description={`The same figures per teacher: the money from their classes against everything they are paid in the period. A class with two teachers is split equally between them. Click a Received or Not received figure to see the students. Only active teachers are listed${leftTeachers.length ? `; ${leftTeachers.length} teacher${leftTeachers.length === 1 ? "" : "s"} who left (paid ${pkr(leftTeachers.reduce((sum, t) => sum + t.teacherCostPKR, 0))} in this period) are not shown, but their pay is still in the top figures.` : "."}`}
         rows={teacherProfitability}
         rowKey={(t, i) => `${t.teacherId ?? 'none'}-${i}`}
         searchPlaceholder="Search teacher..."

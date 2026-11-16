@@ -62,6 +62,7 @@ export interface TeacherPay {
   estimatedPKR: number;
   slipCount: number;
   unassignedPKR: number; // pay not tied to any class (salaried staff who teach no class)
+  isActive: boolean; // a teacher who has left is paid for the months worked but is not listed as a teacher
   campus?: 'senior' | 'junior';
 }
 
@@ -374,7 +375,7 @@ export const classProfitService = {
     for (const teacher of allTeachers) {
       const name = `${teacher.firstName} ${teacher.lastName}`;
       const ownClasses = teaching.filter((t) => t.teacherId === teacher.id);
-      const pay: TeacherPay = { teacherId: teacher.id, name, payPKR: 0, estimatedPKR: 0, slipCount: 0, unassignedPKR: 0 };
+      const pay: TeacherPay = { teacherId: teacher.id, name, payPKR: 0, estimatedPKR: 0, slipCount: 0, unassignedPKR: 0, isActive: teacher.isActive };
       const addPay = (courseId: string, title: string, amount: number, estimated: boolean) => {
         const entry = classFor(courseId, title);
         entry.teacherPayPKR += amount;

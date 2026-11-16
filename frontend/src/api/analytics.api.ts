@@ -142,6 +142,7 @@ export interface TeacherProfitability extends ClassMoney {
   estimatedCostPKR: number; // part of the pay with no slip made yet
   slipCount: number; // salary slips in the period
   marginPercent: number;
+  active: boolean; // false = the teacher has left (not listed in the table)
   campus?: 'senior' | 'junior'; // set when both campuses are shown together
 }
 

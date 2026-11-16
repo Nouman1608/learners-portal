@@ -400,6 +400,8 @@ export const analyticsService = {
         teacherId, teacherName, classCount: 0, studentCount: 0,
         // Set when both campuses are shown together, so a teacher's fees are looked up in the right one
         campus: undefined as 'senior' | 'junior' | undefined,
+        // false for a teacher who has left: the table lists active teachers only, the totals keep their pay
+        active: true,
         revenuePKR: 0, invoicedPKR: 0, notInvoicedPKR: 0, paidPKR: 0, notReceivedPKR: 0,
         teacherCostPKR: 0, estimatedCostPKR: 0, slipCount: 0,
       });
@@ -409,6 +411,7 @@ export const analyticsService = {
         row.teacherCostPKR = pay.payPKR;
         row.estimatedCostPKR = pay.estimatedPKR;
         row.slipCount = pay.slipCount;
+        row.active = pay.isActive;
         byTeacher.set(pay.teacherId, row);
       }
       for (const c of finance.classes) {
