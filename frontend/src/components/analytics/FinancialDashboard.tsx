@@ -578,7 +578,8 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
           const cell = 'px-6 py-3 text-right whitespace-nowrap';
           return (
             <tr>
-              <td className="px-6 py-3" colSpan={2}>Total ({shown.length})</td>
+              <td className="px-6 py-3">Total ({shown.length})</td>
+              <td className="px-6 py-3" />
               <td className={cell}>{shown.reduce((s, c) => s + c.studentCount, 0)}</td>
               <td className={cell}>{sum(c => c.revenuePKR)}</td>
               <td className={cell}>{sum(c => c.invoicedPKR)}</td>
@@ -641,7 +642,8 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
           const cell = 'px-6 py-3 text-right whitespace-nowrap';
           return (
             <tr>
-              <td className="px-6 py-3" colSpan={3}>Total ({shown.length})</td>
+              <td className="px-6 py-3">Total ({shown.length})</td>
+              <td className="px-6 py-3" colSpan={2} />
               <td className={cell}>{sum(t => t.revenuePKR)}</td>
               <td className={cell}>{sum(t => t.invoicedPKR)}</td>
               <td className={cell}>{sum(t => t.notInvoicedPKR)}</td>

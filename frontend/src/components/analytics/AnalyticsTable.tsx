@@ -232,7 +232,7 @@ export default function AnalyticsTable<T>({
                 </tr>
               ))}
             </tbody>
-            {footer && <tfoot className="bg-gray-100 text-sm font-semibold text-gray-900 sticky bottom-0 [&_td:first-child]:sticky [&_td:first-child]:left-0 [&_td:first-child]:z-[5] [&_td:first-child]:bg-gray-100">{footer(shown)}</tfoot>}
+            {footer && <tfoot className="bg-gray-100 text-sm font-semibold text-gray-900 sticky bottom-0 z-10 [&_td]:bg-gray-100 [&_td:first-child]:sticky [&_td:first-child]:left-0 [&_td:first-child]:z-[5]">{footer(shown)}</tfoot>}
           </table>
         </div>
       )}
