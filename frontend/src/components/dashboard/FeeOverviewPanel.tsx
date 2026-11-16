@@ -81,6 +81,21 @@ export default function FeeOverviewPanel({ campus }: { campus: Campus }) {
     setPeriod({ month: (index % 12) + 1, year: Math.floor(index / 12) });
   };
 
+  // Months to pick from: the last 12 up to next month, newest first (the books start in October 2026)
+  const monthChoices = (() => {
+    const now = new Date();
+    const last = now.getFullYear() * 12 + now.getMonth() + 1; // next month
+    const out: { value: string; label: string }[] = [];
+    for (let index = last; index > last - 13; index--) {
+      const year = Math.floor(index / 12);
+      const month = (index % 12) + 1;
+      if (year * 12 + month < 2026 * 12 + 10) break;
+      out.push({ value: `${year}-${month}`, label: `${MONTHS[month - 1]} ${year}` });
+    }
+    return out;
+  })();
+  const shownMonth = data ? `${data.year}-${data.month}` : '';
+
   const toggle = (key: string) => setOpen((current) => {
     const next = new Set(current);
     if (!next.delete(key)) next.add(key);
@@ -167,7 +182,20 @@ export default function FeeOverviewPanel({ campus }: { campus: Campus }) {
       {/* 2. Each teacher's classes */}
       <div className="mt-6 overflow-hidden rounded-xl bg-white shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-4 py-3">
-          <h3 className="text-sm font-semibold text-gray-900">Teachers' {terms.coursesLc}: students enrolled and fees paid</h3>
+          <h3 className="text-sm font-semibold text-gray-900">Teachers' {terms.coursesLc}: students enrolled and fees paid{data ? ` · ${MONTHS[data.month - 1]} ${data.year}` : ''}</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* The same month as the boxes above: choosing one here changes both */}
+            <select
+              value={shownMonth}
+              onChange={(e) => { const [year, month] = e.target.value.split('-').map(Number); setPeriod({ month, year }); }}
+              aria-label="Month"
+              className="rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm text-indigo-800 focus:ring-2 focus:ring-indigo-500"
+            >
+              {data && !monthChoices.some((choice) => choice.value === shownMonth) && (
+                <option value={shownMonth}>{MONTHS[data.month - 1]} {data.year}</option>
+              )}
+              {monthChoices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
+            </select>
           <input
             type="search"
             value={search}
@@ -175,6 +203,7 @@ export default function FeeOverviewPanel({ campus }: { campus: Campus }) {
             placeholder="Search teacher or class..."
             className="w-56 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500"
           />
+          </div>
         </div>
         <div className="max-h-[60vh] overflow-auto">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
