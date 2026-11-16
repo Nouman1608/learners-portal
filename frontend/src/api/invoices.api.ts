@@ -9,7 +9,7 @@ import type { InvoiceDeduction } from './teacherAttendance.api';
 export interface Invoice {
   id: string;
   invoiceNumber: string;
-  type: 'student' | 'teacher';
+  type: 'student' | 'teacher' | 'teacher_1to1'; // teacher_1to1: a permanent-salary teacher's separate 1-to-1 slip
   recipientId: string;
   month: number;
   year: number;
@@ -28,6 +28,7 @@ export interface Invoice {
     whatsappGroupLink?: string;
     studentCategory?: string;
     studentSubcategory?: string;
+    teacherPaymentType?: 'percentage_based' | 'salaried' | 'per_child' | null;
   };
   lineItems: InvoiceLineItem[];
   siblings?: { id: string; firstName: string; lastName: string }[]; // student invoices: linked brothers / sisters
@@ -80,6 +81,7 @@ export interface GenerateTeacherInvoiceInput {
   teacherId: string;
   month: number;
   year: number;
+  oneToOneOnly?: boolean; // a permanent-salary teacher's separate 1-to-1 slip
 }
 
 export interface GenerateMonthlyInvoicesInput {
@@ -220,8 +222,8 @@ export const invoicesApi = {
     return response.data;
   },
 
-  async getTeacher1to1Sessions(teacherId: string, month: number, year: number): Promise<OneToOneSession[]> {
-    const response = await apiClient.get(`/invoices/teacher/${teacherId}/1to1-sessions?month=${month}&year=${year}`);
+  async getTeacher1to1Sessions(teacherId: string, month: number, year: number, oneToOneSlip = false): Promise<OneToOneSession[]> {
+    const response = await apiClient.get(`/invoices/teacher/${teacherId}/1to1-sessions?month=${month}&year=${year}${oneToOneSlip ? '&oneToOne=1' : ''}`);
     return response.data.sessions;
   },
 

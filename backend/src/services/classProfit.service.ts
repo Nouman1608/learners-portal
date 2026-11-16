@@ -330,7 +330,7 @@ export const classProfitService = {
 
     // ---- 3. Teachers' pay: each month's slip, or a preview of it while there is none ----
     const slips = await database.select().from(invoices).where(and(
-      eq(invoices.type, 'teacher'),
+      inArray(invoices.type, ['teacher', 'teacher_1to1']), // a permanent teacher's 1-to-1 slip is a slip of its own
       eq(invoices.isLatest, true),
       sql`(${invoices.year} * 12 + ${invoices.month}) BETWEEN ${firstMonth} AND ${lastMonth}`,
       feeInBooks(database, invoices.year, invoices.month),
@@ -387,44 +387,54 @@ export const classProfitService = {
 
       for (let index = firstMonth; index <= lastPayMonth; index++) {
         const { year, month } = fromIndex(index);
-        const slip = slips.find((s) => s.recipientId === teacher.id && s.year === year && s.month === month);
-
-        let lines: { courseId: string | null; amount: string; metadata?: unknown }[];
-        let factor = 1; // a real slip: scale its lines to the slip's total (absence / late deductions)
-        if (slip) {
-          lines = slipLines.filter((line) => line.invoiceId === slip.id);
+        // A teacher can have two slips for a month: the ordinary one, and (permanent salary only)
+        // a separate 1-to-1 slip. Each is a real slip, or a preview of it while there is none.
+        const monthSlips = slips.filter((s) => s.recipientId === teacher.id && s.year === year && s.month === month);
+        const sources: { lines: { courseId: string | null; amount: string; metadata?: unknown }[]; factor: number; real: boolean }[] = [];
+        for (const slip of monthSlips) {
+          const lines = slipLines.filter((line) => line.invoiceId === slip.id);
+          let factor = 1; // a real slip: scale its lines to the slip's total (absence / late deductions)
           const gross = lines.reduce((sum, line) => sum + Number(line.amount), 0);
           if (gross > 0) factor = Number(slip.totalAmount) / gross;
-          pay.slipCount += 1;
-        } else if (canPreview && teacher.isActive) {
-          try {
-            ({ lineItems: lines } = await invoicesService.generateTeacherInvoice({ teacherId: teacher.id, month, year, preview: true }));
-          } catch {
-            lines = []; // no pay set up, or nothing to pay: no estimate for this teacher
-          }
-        } else {
-          lines = [];
+          sources.push({ lines, factor, real: true });
+          if (slip.type === 'teacher') pay.slipCount += 1;
         }
-        if (index === thisMonth) thisMonthCourses = new Set(lines.map((line) => line.courseId).filter((id): id is string => !!id));
+        if (canPreview && teacher.isActive) {
+          const kinds: boolean[] = []; // oneToOneOnly flags still to preview
+          if (!monthSlips.some((s) => s.type === 'teacher')) kinds.push(false);
+          if (teacher.teacherPaymentType === 'salaried' && !monthSlips.some((s) => s.type === 'teacher_1to1')) kinds.push(true);
+          for (const oneToOneOnly of kinds) {
+            try {
+              const { lineItems } = await invoicesService.generateTeacherInvoice({ teacherId: teacher.id, month, year, preview: true, oneToOneOnly });
+              sources.push({ lines: lineItems, factor: 1, real: false });
+            } catch {
+              // no pay set up, or nothing to pay: no estimate for this slip
+            }
+          }
+        }
+        if (index === thisMonth) thisMonthCourses = new Set(sources.flatMap((s) => s.lines.map((line) => line.courseId)).filter((id): id is string => !!id));
 
-        for (const line of lines) {
-          const amount = Number(line.amount) * factor;
-          pay.payPKR += amount;
-          if (!slip) pay.estimatedPKR += amount;
-          const own = line.courseId ? ownClasses.find((c) => c.courseId === line.courseId) : undefined;
-          if (line.courseId && (own || classes.has(line.courseId))) {
-            addPay(line.courseId, own?.title ?? classes.get(line.courseId)!.title, amount, !slip);
-            noteDetailPay(line.courseId, String((line.metadata as { studentName?: string } | null)?.studentName ?? ''), amount, !slip);
-          } else {
-            noClass += amount;
-            if (!slip) noClassEstimated += amount;
+        for (const { lines, factor, real } of sources) {
+          for (const line of lines) {
+            const amount = Number(line.amount) * factor;
+            pay.payPKR += amount;
+            if (!real) pay.estimatedPKR += amount;
+            const own = line.courseId ? ownClasses.find((c) => c.courseId === line.courseId) : undefined;
+            if (line.courseId && (own || classes.has(line.courseId))) {
+              addPay(line.courseId, own?.title ?? classes.get(line.courseId)!.title, amount, !real);
+              noteDetailPay(line.courseId, String((line.metadata as { studentName?: string } | null)?.studentName ?? ''), amount, !real);
+            } else {
+              noClass += amount;
+              if (!real) noClassEstimated += amount;
+            }
           }
         }
       }
 
       // 1-to-1 classes of this month that are not counted yet: the teacher is paid per class
       // taken, so expect the same classes the student is expected to be invoiced for
-      if (teacher.teacherPaymentType !== 'salaried' && thisMonthCourses) {
+      // (permanent-salary teachers too: their 1-to-1 classes are paid per class on the separate slip)
+      if (thisMonthCourses) {
         for (const course of ownClasses) {
           const expectedClasses = expectedByCourse.get(course.courseId);
           if (!expectedClasses || thisMonthCourses.has(course.courseId)) continue;
@@ -442,8 +452,12 @@ export const classProfitService = {
       if (noClass > 0) {
         // Split equally between the teacher's classes: those in the report, else those with
         // students now. Salaried staff with no class keep their pay unassigned.
-        let share = ownClasses.filter((c) => classes.has(c.courseId));
-        if (!share.length) share = ownClasses.filter((c) => withStudents.has(c.courseId));
+        // The fixed salary is shared between the group classes only: 1-to-1 classes carry their
+        // own per-class pay (owner rule, Nov 2026). With no group class it falls back to all.
+        const oneToOneIds = new Set(oneToOne.map((e) => e.courseId));
+        const groupOnly = (list: typeof ownClasses) => (list.some((c) => !oneToOneIds.has(c.courseId)) ? list.filter((c) => !oneToOneIds.has(c.courseId)) : list);
+        let share = groupOnly(ownClasses.filter((c) => classes.has(c.courseId)));
+        if (!share.length) share = groupOnly(ownClasses.filter((c) => withStudents.has(c.courseId)));
         if (share.length) {
           for (const c of share) {
             addPay(c.courseId, c.title, (noClass - noClassEstimated) / share.length, false);

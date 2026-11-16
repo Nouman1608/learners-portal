@@ -24,6 +24,7 @@ const generateTeacherInvoiceSchema = z.object({
   teacherId: z.string().uuid(),
   month: z.number().int().min(1).max(12),
   year: z.number().int().min(2020),
+  oneToOneOnly: z.boolean().optional(), // a permanent teacher's separate 1-to-1 slip
 });
 
 const generateMonthlyInvoicesSchema = z.object({
@@ -51,7 +52,7 @@ export const getTeacher1to1Sessions = async (req: Request, res: Response, next: 
     const input = generateTeacherInvoiceSchema.parse({
       teacherId: req.params.teacherId, month: Number(req.query.month), year: Number(req.query.year),
     });
-    const sessions = await invoicesService.getTeacher1to1Sessions(input.teacherId, input.month, input.year);
+    const sessions = await invoicesService.getTeacher1to1Sessions(input.teacherId, input.month, input.year, req.query.oneToOne === '1');
     res.json({ sessions });
   } catch (error) { next(error); }
 };
@@ -216,7 +217,7 @@ export const downloadInvoice = async (req: Request, res: Response, next: NextFun
     if (req.user?.role === 'sudo' || req.user?.role === 'admin') {
       // Admins always see the detailed PDF
       pdfUrl = invoice.pdfUrl;
-    } else if (invoice.type === 'teacher' && invoice.simplifiedPdfUrl) {
+    } else if ((invoice.type === 'teacher' || invoice.type === 'teacher_1to1') && invoice.simplifiedPdfUrl) {
       // Teachers viewing their own invoice see the simplified version
       pdfUrl = invoice.simplifiedPdfUrl;
     } else {
@@ -294,7 +295,7 @@ export const emailInvoice = async (req: Request, res: Response, next: NextFuncti
       year: invoice.year,
       totalAmount: invoice.totalAmount,
       pdfPath: invoice.pdfUrl,
-      type: invoice.type as 'student' | 'teacher',
+      type: invoice.type === 'student' ? 'student' : 'teacher',
     });
 
     if (emailSent) {

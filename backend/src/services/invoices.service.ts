@@ -105,7 +105,13 @@ export interface GenerateTeacherInvoiceInput {
   // A slip for a month before the current one is locked: only an explicit request by sudo
   // sets this. Automatic rebuilds (fee / enrollment edits) never do, so past slips stay as they were.
   allowPastMonth?: boolean;
+  // A permanent-salary teacher's 1-to-1 classes are paid on a slip of their own (type
+  // 'teacher_1to1'), per class taken. The fixed salary stays on the ordinary slip.
+  oneToOneOnly?: boolean;
 }
+
+/** Slip types: the ordinary slip, and the separate 1-to-1 slip of a permanent-salary teacher */
+export const ONE_TO_ONE_SLIP = 'teacher_1to1';
 
 export const invoicesService = {
   /**
@@ -133,8 +139,8 @@ export const invoicesService = {
   /**
    * Generate invoice number
    */
-  generateInvoiceNumber(type: 'student' | 'teacher', month: number, year: number, sequence: number): string {
-    const typeCode = type === 'student' ? 'STU' : 'TCH';
+  generateInvoiceNumber(type: 'student' | 'teacher' | 'teacher_1to1', month: number, year: number, sequence: number): string {
+    const typeCode = type === 'student' ? 'STU' : type === 'teacher_1to1' ? 'T1T' : 'TCH';
     const monthStr = month.toString().padStart(2, '0');
     const seqStr = sequence.toString().padStart(5, '0');
     return `INV-${year}-${monthStr}-${typeCode}-${seqStr}`;
@@ -143,7 +149,7 @@ export const invoicesService = {
   /**
    * Get next invoice sequence number
    */
-  async getNextSequence(type: 'student' | 'teacher', month: number, year: number): Promise<number> {
+  async getNextSequence(type: 'student' | 'teacher' | 'teacher_1to1', month: number, year: number): Promise<number> {
     const existingInvoices = await db
       .select({ invoiceNumber: invoices.invoiceNumber })
       .from(invoices)
@@ -160,7 +166,7 @@ export const invoicesService = {
     // invoice_number constraint then rejects the new invoice.
     let highest = 0;
     for (const { invoiceNumber } of existingInvoices) {
-      const match = /-(?:STU|TCH)-(\d+)/.exec(invoiceNumber);
+      const match = /-(?:STU|TCH|T1T)-(\d+)/.exec(invoiceNumber);
       if (match) highest = Math.max(highest, parseInt(match[1], 10));
     }
     return Math.max(highest, existingInvoices.length) + 1;
@@ -1122,9 +1128,10 @@ export const invoicesService = {
     }
     // Validate all manual counts before changing invoice versions. These are
     // invoice snapshots, not edits to the student's fees or calendar.
+    const slipType = input.oneToOneOnly ? ONE_TO_ONE_SLIP : 'teacher';
     const manualSessions = new Map<string, number>();
     if (input.sessionOverrides?.length) {
-      const eligible = await this.getTeacher1to1Sessions(input.teacherId, input.month, input.year);
+      const eligible = await this.getTeacher1to1Sessions(input.teacherId, input.month, input.year, !!input.oneToOneOnly);
       const allowed = new Set(eligible.map(e => e.enrollmentId));
       for (const override of input.sessionOverrides) {
         if (!allowed.has(override.enrollmentId) || manualSessions.has(override.enrollmentId) ||
@@ -1137,7 +1144,7 @@ export const invoicesService = {
       // Automatic regenerations (fee edits, status changes, bulk/cron runs) keep the
       // class counts an admin entered earlier instead of reverting to the fee records.
       const saved = input.savedSessionCounts
-        ?? await this.getSavedTeacherSessionCounts(input.teacherId, input.month, input.year);
+        ?? await this.getSavedTeacherSessionCounts(input.teacherId, input.month, input.year, slipType);
       for (const [enrollmentId, count] of saved) manualSessions.set(enrollmentId, count);
     }
     // Check if latest invoice already exists
@@ -1149,7 +1156,7 @@ export const invoicesService = {
           eq(invoices.recipientId, input.teacherId),
           eq(invoices.month, input.month),
           eq(invoices.year, input.year),
-          eq(invoices.type, 'teacher'),
+          eq(invoices.type, slipType),
           eq(invoices.isLatest, true)
         )
       )
@@ -1186,8 +1193,12 @@ export const invoicesService = {
     const onlineFixedAmountAlevel = teacher.onlineStudentFixedAmountAlevel ? parseFloat(teacher.onlineStudentFixedAmountAlevel) : 0;
 
     const oneToOneClassRate = (teacherOneToOneRates as Record<string, number>)[input.teacherId] ?? teacherOneToOneRates.default;
-    const hasLocalConfig = localFeePercentage > 0 || perChildRate > 0;
-    const hasOnlineConfig = onlineFixedAmountIg > 0 || onlineFixedAmountAlevel > 0 || oneToOneClassRate !== null;
+    if (input.oneToOneOnly && !isSalaried) {
+      throw new AppError(400, 'Only permanent-salary teachers have a separate 1-to-1 slip');
+    }
+    // The 1-to-1 slip pays per class taken, whatever the teacher's other pay settings
+    const hasLocalConfig = input.oneToOneOnly || localFeePercentage > 0 || perChildRate > 0;
+    const hasOnlineConfig = input.oneToOneOnly || onlineFixedAmountIg > 0 || onlineFixedAmountAlevel > 0 || oneToOneClassRate !== null;
     const hasSalaryConfig = isSalaried && monthlySalary > 0;
 
     if (!hasSalaryConfig && !hasLocalConfig && !hasOnlineConfig) {
@@ -1221,7 +1232,8 @@ export const invoicesService = {
     let totalAmount = 0;
 
     // Salaried teachers: single line item, skip per-student calculations
-    if (isSalaried) {
+    // (their 1-to-1 classes go on the separate 1-to-1 slip)
+    if (isSalaried && !input.oneToOneOnly) {
       lineItemsData.push({
         description: `Monthly Salary - ${input.month}/${input.year}`,
         courseId: null,
@@ -1240,7 +1252,7 @@ export const invoicesService = {
     }
 
     // Per-student calculations (only for percentage_based teachers)
-    if (!isSalaried) for (const teacherCourse of teacherCourses) {
+    if (!isSalaried || input.oneToOneOnly) for (const teacherCourse of teacherCourses) {
       // The students the teacher is paid for THIS month: those enrolled now, and those who
       // have left since but still have a fee for this month. A slip for a past month must not
       // shrink because a student was dropped afterwards (owner rule, Nov 2026). The drop rules
@@ -1283,9 +1295,10 @@ export const invoicesService = {
         continue;
       }
 
-      // Separate local and online students from active enrollments
-      const localEnrollments = hasLocalConfig ? activeEnrollments.filter(e => e.attendanceMode === 'local') : [];
-      const onlineEnrollments = hasOnlineConfig ? activeEnrollments.filter(e => e.attendanceMode === 'online') : [];
+      // Separate local and online students from active enrollments (the 1-to-1 slip: only 1-to-1 classes)
+      const wanted = input.oneToOneOnly ? activeEnrollments.filter(e => e.classType === '1-to-1') : activeEnrollments;
+      const localEnrollments = hasLocalConfig ? wanted.filter(e => e.attendanceMode === 'local') : [];
+      const onlineEnrollments = hasOnlineConfig ? wanted.filter(e => e.attendanceMode === 'online') : [];
 
       if (localEnrollments.length === 0 && onlineEnrollments.length === 0) {
         const modes = activeEnrollments.map(e => e.attendanceMode).filter(Boolean);
@@ -1551,14 +1564,15 @@ export const invoicesService = {
     }
 
     // Generate invoice number (append version suffix if regenerated)
-    const sequence = await this.getNextSequence('teacher', input.month, input.year);
-    let invoiceNumber = this.generateInvoiceNumber('teacher', input.month, input.year, sequence);
+    const sequence = await this.getNextSequence(slipType, input.month, input.year);
+    let invoiceNumber = this.generateInvoiceNumber(slipType, input.month, input.year, sequence);
     if (newVersion > 1) {
       invoiceNumber = `${invoiceNumber}-v${newVersion}`;
     }
 
     // Junior campus absent/late deductions come off the month's earnings (none without marks)
-    const deduction = await teacherDeductionsService.summaryFor(input.teacherId, input.month, input.year, totalAmount);
+    // (the separate 1-to-1 slip carries none: they come off the ordinary slip)
+    const deduction = input.oneToOneOnly ? null : await teacherDeductionsService.summaryFor(input.teacherId, input.month, input.year, totalAmount);
     const netTotal = Math.round((totalAmount - (deduction?.total || 0)) * 100) / 100;
 
     // Keep the previous invoice current until the new one is written: swap them in one
@@ -1573,7 +1587,7 @@ export const invoicesService = {
         .insert(invoices)
         .values({
           invoiceNumber,
-          type: 'teacher',
+          type: slipType,
           recipientId: input.teacherId,
           month: input.month,
           year: input.year,
@@ -1595,7 +1609,7 @@ export const invoicesService = {
     });
 
     // Generate both detailed and simplified PDFs (with any deductions and salary advances)
-    const advance = await teacherAdvancesService.summaryFor(teacher.id, input.month, input.year, netTotal);
+    const advance = input.oneToOneOnly ? null : await teacherAdvancesService.summaryFor(teacher.id, input.month, input.year, netTotal);
     const pdfUrl = await this.generateTeacherInvoicePDF(newInvoice, createdLineItems, teacher, undefined, advance, deduction);
     const simplifiedPdfUrl = await this.generateSimplifiedTeacherInvoicePDF(newInvoice, createdLineItems, teacher, undefined, advance, deduction);
 
@@ -1607,6 +1621,18 @@ export const invoicesService = {
       .returning();
 
     logger.info(`[INVOICE] Generated teacher invoice ${invoiceNumber} for ${teacher.username}`);
+
+    // A permanent-salary teacher's 1-to-1 classes are paid on their own slip, made together with
+    // the salary slip (nothing is made when there are no classes taken that month)
+    if (isSalaried && !input.oneToOneOnly) {
+      try {
+        await this.generateTeacherInvoice({ ...input, oneToOneOnly: true, sessionOverrides: undefined, savedSessionCounts: undefined });
+      } catch (error: any) {
+        if (error.statusCode !== 404 && error.statusCode !== 400) {
+          logger.error(`[INVOICE] 1-to-1 slip failed for ${teacher.username}`, { error: error.message });
+        }
+      }
+    }
 
     return {
       invoice: updatedInvoice,
@@ -1681,6 +1707,7 @@ export const invoicesService = {
           studentCategory: users.studentCategory,
           studentSubcategory: users.studentSubcategory,
           familyId: users.familyId,
+          teacherPaymentType: users.teacherPaymentType,
         },
       })
       .from(invoices)
@@ -1698,7 +1725,8 @@ export const invoicesService = {
       conditions.push(eq(invoices.recipientId, filters.recipientId));
     }
     if (filters?.type) {
-      conditions.push(eq(invoices.type, filters.type));
+      // 'teacher' = every salary slip, including a permanent teacher's separate 1-to-1 slip
+      conditions.push(filters.type === 'teacher' ? inArray(invoices.type, ['teacher', ONE_TO_ONE_SLIP]) : eq(invoices.type, filters.type));
     }
     if (filters?.month) {
       conditions.push(eq(invoices.month, filters.month));
@@ -2223,11 +2251,13 @@ export const invoicesService = {
     };
   },
 
-  async getTeacher1to1Sessions(teacherId: string, month: number, year: number) {
+  async getTeacher1to1Sessions(teacherId: string, month: number, year: number, forOneToOneSlip = false) {
     const [teacher] = await db.select({ role: users.role, paymentType: users.teacherPaymentType })
       .from(users).where(eq(users.id, teacherId)).limit(1);
     if (!teacher || teacher.role !== 'teacher') throw new AppError(404, 'Teacher not found');
-    if (teacher.paymentType === 'salaried') return [];
+    // A permanent-salary teacher's ordinary slip has no per-class pay; the 1-to-1 slip does
+    if (teacher.paymentType === 'salaried' && !forOneToOneSlip) return [];
+    if (forOneToOneSlip && teacher.paymentType !== 'salaried') return [];
     const assigned = await db.select({
       enrollmentId: enrollments.id, studentId: enrollments.studentId,
       firstName: users.firstName, lastName: users.lastName, enrolledAt: enrollments.enrolledAt,
@@ -2236,7 +2266,7 @@ export const invoicesService = {
       .innerJoin(users, eq(users.id, enrollments.studentId))
       .where(and(eq(courseTeachers.teacherId, teacherId), eq(enrollments.status, 'active'),
         eq(enrollments.classType, '1-to-1')));
-    const savedCounts = await this.getSavedTeacherSessionCounts(teacherId, month, year);
+    const savedCounts = await this.getSavedTeacherSessionCounts(teacherId, month, year, forOneToOneSlip ? ONE_TO_ONE_SLIP : 'teacher');
     const result = [];
     for (const enrollment of assigned) {
       const date = new Date(enrollment.enrolledAt);
@@ -2251,10 +2281,10 @@ export const invoicesService = {
   /**
    * Class counts an admin entered on the teacher's latest invoice for the period
    */
-  async getSavedTeacherSessionCounts(teacherId: string, month: number, year: number) {
+  async getSavedTeacherSessionCounts(teacherId: string, month: number, year: number, slipType: string = 'teacher') {
     const previousCounts = await db.select({ metadata: invoiceLineItems.metadata })
       .from(invoiceLineItems).innerJoin(invoices, eq(invoices.id, invoiceLineItems.invoiceId))
-      .where(and(eq(invoices.recipientId, teacherId), eq(invoices.type, 'teacher'),
+      .where(and(eq(invoices.recipientId, teacherId), eq(invoices.type, slipType),
         eq(invoices.month, month), eq(invoices.year, year), eq(invoices.isLatest, true)));
     const savedCounts = new Map<string, number>();
     for (const line of previousCounts) {

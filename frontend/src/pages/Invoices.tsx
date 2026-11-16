@@ -68,6 +68,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
     year: number;
     sessions: OneToOneSession[];
     invoiceId?: string; // set when regenerating an existing invoice
+    oneToOneOnly?: boolean; // a permanent-salary teacher's separate 1-to-1 slip
   } | null>(null);
   const [teachers, setTeachers] = useState<User[]>([]);
   const [teacherId, setTeacherId] = useState('');
@@ -102,7 +103,12 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
 
   // Junior portal: absences/lates and advances are reviewed in a pop-up before a slip is made
   const [inputsFor, setInputsFor] = useState<{ id: string; month: number; year: number; name: string } | null>(null);
-  const [salaryTab, setSalaryTab] = useState<'slips' | 'advances' | 'attendance'>('slips');
+  // Admins see the slips in three lists (permanent salary, percentage, permanent teachers' 1-to-1
+  // classes); a teacher just sees their own slips ('slips')
+  type SalaryTab = 'slips' | 'permanent' | 'percentage' | 'oneToOne' | 'advances' | 'attendance';
+  const [salaryTab, setSalaryTab] = useState<SalaryTab>('permanent');
+  const onSlipList = salaryTab !== 'advances' && salaryTab !== 'attendance';
+  const slipGroup = isSalary && isAdmin && onSlipList ? (salaryTab === 'slips' ? 'permanent' : salaryTab) : null;
 
   // Both portals review salary advances (and, on Junior, absences / lates) before a slip is made
   const startSalarySlip = (id: string, month: number, year: number, name: string) => {
@@ -214,7 +220,27 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
     }
   };
 
+  // A permanent-salary teacher's 1-to-1 classes: count the classes taken, then make the separate slip
+  const startOneToOneSlip = async (id: string, month: number, year: number, name: string) => {
+    setTeacherGenerating(true);
+    try {
+      const sessions = await invoicesApi.getTeacher1to1Sessions(id, month, year, true);
+      if (!sessions.length) {
+        toast.error(`${name} has no 1-to-1 classes for ${MONTHS[month - 1]} ${year}, so there is no 1-to-1 slip to make`);
+        return;
+      }
+      setSessionModal({ type: 'teacher', studentId: id, studentName: name, month, year, sessions, oneToOneOnly: true });
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to load the 1-to-1 classes');
+    } finally { setTeacherGenerating(false); }
+  };
+
   const handleRegenerateInvoice = async (invoice: Invoice) => {
+    if (invoice.type === 'teacher_1to1') {
+      void startOneToOneSlip(invoice.recipientId, invoice.month, invoice.year,
+        `${invoice.recipient.firstName} ${invoice.recipient.lastName}`);
+      return;
+    }
     if (invoice.type === 'teacher') {
       startSalarySlip(invoice.recipientId, invoice.month, invoice.year,
         `${invoice.recipient.firstName} ${invoice.recipient.lastName}`);
@@ -268,7 +294,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
     try {
       const period = { month: sessionModal.month, year: sessionModal.year, sessionOverrides: overrides };
       if (sessionModal.type === 'teacher') {
-        await invoicesApi.generateTeacherInvoice({ ...period, teacherId: sessionModal.studentId });
+        await invoicesApi.generateTeacherInvoice({ ...period, teacherId: sessionModal.studentId, oneToOneOnly: sessionModal.oneToOneOnly });
       } else {
         await invoicesApi.generateStudentInvoice({ ...period, studentId: sessionModal.studentId });
       }
@@ -416,6 +442,9 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
   };
 
   const filteredInvoices = invoices.filter((inv) => {
+    if (slipGroup === 'oneToOne') return inv.type === 'teacher_1to1';
+    if (slipGroup === 'permanent') return inv.type === 'teacher' && inv.recipient.teacherPaymentType === 'salaried';
+    if (slipGroup === 'percentage') return inv.type === 'teacher' && inv.recipient.teacherPaymentType !== 'salaried';
     if (filterCategory !== 'all' && inv.recipient.studentCategory !== filterCategory) return false;
     if (filterSubcategory !== 'all' && inv.recipient.studentSubcategory !== filterSubcategory) return false;
     return true;
@@ -474,12 +503,14 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
   if (!isSalary && user?.role === 'teacher') return <Navigate to="/salary-slips" replace />;
 
   // Advances (both portals) and Absences & Lates (Junior only) live inside Salary Slips as sub-tabs
-  const tabList: (readonly ['slips' | 'advances' | 'attendance', string])[] = [['slips', 'Salary Slips'], ['advances', 'Advances']];
-  if (isJuniorPortal) tabList.push(['attendance', 'Absences & Lates']);
-  const campusTabs = canPickCampus && (
+  const tabList: (readonly [SalaryTab, string])[] = isAdmin
+    ? [['permanent', 'Permanent teachers'], ['percentage', 'Percentage teachers'], ['oneToOne', "Permanent teachers' 1-to-1"], ['advances', 'Advances']]
+    : [['slips', 'Salary Slips'], ['advances', 'Advances']];
+  const shownTab: SalaryTab = !isAdmin && onSlipList ? 'slips' : salaryTab;
+  if (isJuniorPortal) tabList.push(['attendance', 'Absences & Lates']);  const campusTabs = canPickCampus && (
     <div className="mb-4 inline-flex rounded-lg bg-white p-1 shadow" role="tablist" aria-label="Campus">
       {([['senior', isSalary ? 'Senior Campus Teachers' : 'Senior Campus Students'], ['junior', isSalary ? 'Junior Campus Teachers' : 'Junior Campus Students']] as const).map(([value, label]) => (
-        <button key={value} role="tab" aria-selected={campusTab === value} onClick={() => { setCampusTab(value); setSalaryTab('slips'); setFilterCategory('all'); setFilterSubcategory('all'); }}
+        <button key={value} role="tab" aria-selected={campusTab === value} onClick={() => { setCampusTab(value); setSalaryTab('permanent'); setFilterCategory('all'); setFilterSubcategory('all'); }}
           className={`rounded-md px-3 py-2 text-sm font-medium ${campusTab === value ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
           {label}
         </button>
@@ -493,9 +524,9 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
         <button
           key={value}
           role="tab"
-          aria-selected={salaryTab === value}
+          aria-selected={shownTab === value}
           onClick={() => setSalaryTab(value)}
-          className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${salaryTab === value ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${shownTab === value ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
         >
           {label}
         </button>
@@ -503,7 +534,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
     </div>
   );
 
-  if (salaryTabs && salaryTab !== 'slips') {
+  if (salaryTabs && !onSlipList) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="mb-4 text-3xl font-bold text-gray-900">Salary Slips</h1>
@@ -556,17 +587,27 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
             <select id="individual-teacher" value={teacherId} onChange={e => setTeacherId(e.target.value)}
               disabled={teacherGenerating} className="w-full px-3 py-2 border border-gray-300 rounded-md">
               <option value="">Select a teacher</option>
-              {teachers.map(t => <option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>)}
+              {teachers
+                .filter(t => slipGroup === 'percentage' ? t.teacherPaymentType !== 'salaried' : slipGroup ? t.teacherPaymentType === 'salaried' : true)
+                .map(t => <option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>)}
             </select>
           </div>
           <button disabled={!teacherId || teacherGenerating || slipLocked(selectedMonth, selectedYear)} title={slipLocked(selectedMonth, selectedYear) ? LOCKED_SLIP : undefined} className="px-4 py-2 bg-indigo-600 text-white rounded-md disabled:opacity-50"
-            onClick={() => { const teacher = teachers.find(t => t.id === teacherId); if (teacher) startSalarySlip(teacherId, selectedMonth, selectedYear, `${teacher.firstName} ${teacher.lastName}`); }}>
-            {teacherGenerating ? 'Loading...' : 'Generate Salary Slip'}
+            onClick={() => {
+              const teacher = teachers.find(t => t.id === teacherId);
+              if (!teacher) return;
+              const name = `${teacher.firstName} ${teacher.lastName}`;
+              if (slipGroup === 'oneToOne') void startOneToOneSlip(teacherId, selectedMonth, selectedYear, name);
+              else startSalarySlip(teacherId, selectedMonth, selectedYear, name);
+            }}>
+            {teacherGenerating ? 'Loading...' : slipGroup === 'oneToOne' ? 'Generate 1-to-1 Slip' : 'Generate Salary Slip'}
           </button>
           <p className="w-full text-sm text-gray-500">
             {slipLocked(selectedMonth, selectedYear)
               ? <span className="text-amber-700">{MONTHS[selectedMonth - 1]} {selectedYear}: {LOCKED_SLIP}.</span>
-              : <>For {MONTHS[selectedMonth - 1]} {selectedYear}. Review one-to-one classes taken before generating.</>}
+              : slipGroup === 'oneToOne'
+                ? <>For {MONTHS[selectedMonth - 1]} {selectedYear}. A permanent teacher's 1-to-1 classes are paid per class taken on a slip of their own; count the classes before generating.</>
+                : <>For {MONTHS[selectedMonth - 1]} {selectedYear}. Review one-to-one classes taken before generating.</>}
           </p>
         </div>
       )}
@@ -772,7 +813,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
                           : 'bg-green-100 text-green-800'
                       }`}
                     >
-                      {invoice.members ? 'family' : invoice.type}
+                      {invoice.members ? 'family' : invoice.type === 'teacher_1to1' ? '1-to-1 slip' : invoice.type}
                     </span>
                   </td>
                   {isAdmin && (
@@ -849,9 +890,9 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
                         onClick={() => invoice.members
                           ? setOpenFamilies((open) => new Set(open).add(invoice.invoiceNumber))
                           : handleRegenerateInvoice(invoice)}
-                        disabled={regeneratingId === invoice.id || teacherGenerating || (invoice.type === 'teacher' && slipLocked(invoice.month, invoice.year))}
+                        disabled={regeneratingId === invoice.id || teacherGenerating || (invoice.type !== 'student' && slipLocked(invoice.month, invoice.year))}
                         className="p-1.5 text-orange-500 hover:text-orange-700 hover:bg-orange-50 rounded-lg transition-colors disabled:opacity-50"
-                        title={invoice.type === 'teacher' && slipLocked(invoice.month, invoice.year) ? LOCKED_SLIP : invoice.members ? 'Regenerate: choose the child below' : 'Regenerate Invoice'}
+                        title={invoice.type !== 'student' && slipLocked(invoice.month, invoice.year) ? LOCKED_SLIP : invoice.members ? 'Regenerate: choose the child below' : 'Regenerate Invoice'}
                       >
                         <ArrowPathIcon className={`h-5 w-5 ${regeneratingId === invoice.id ? 'animate-spin' : ''}`} />
                       </button>

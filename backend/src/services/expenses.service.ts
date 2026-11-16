@@ -90,13 +90,13 @@ async function summaryFor({ database, segment }: View, year: number): Promise<Mo
     ? await database.execute(sql`
         select i.month, coalesce(sum(li.amount::numeric * ${pkrRateExpr(sql`i.currency`)}), 0)::float as pkr
         from invoices i join invoice_line_items li on li.invoice_id = i.id
-        where i.type = 'teacher' and i.is_latest and i.year = ${year}
+        where i.type in ('teacher', 'teacher_1to1') and i.is_latest and i.year = ${year}
           and ${feeInBooks(database, sql`i.year`, sql`i.month`)}
           and coalesce(li.metadata->>'attendanceMode', 'local') = ${segment}
         group by 1`)
     : await database.execute(sql`
         select month, coalesce(sum(total_amount::numeric * ${pkrRateExpr(sql`currency`)}), 0)::float as pkr
-        from invoices where type = 'teacher' and is_latest and year = ${year}
+        from invoices where type in ('teacher', 'teacher_1to1') and is_latest and year = ${year}
           and ${feeInBooks(database, sql`year`, sql`month`)}
         group by 1`);
   for (const r of teacherPay.rows as any[]) months[r.month - 1].teacherPayPKR = r.pkr;
