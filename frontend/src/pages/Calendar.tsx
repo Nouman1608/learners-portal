@@ -18,7 +18,7 @@ import ConfirmDialog from '../components/common/ConfirmDialog';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import SearchableSelect from '../components/common/SearchableSelect';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
-import { terms } from '../brand';
+import { terms, isJuniorPortal } from '../brand';
 
 type CalendarView = 'month' | 'week' | 'day' | 'agenda';
 
@@ -979,7 +979,7 @@ const CalendarPage: React.FC = () => {
                 >
                   <option value="all">All Categories</option>
                   <option value="senior">Senior</option>
-                  <option value="junior">Junior</option>
+                  {isJuniorPortal && <option value="junior">Junior</option>}
                 </select>
               </div>
               <div>

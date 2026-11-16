@@ -534,7 +534,7 @@ export default function Fees() {
         >
           <option value="all">All Categories</option>
           <option value="senior">Senior</option>
-          <option value="junior">Junior</option>
+          {isJuniorPortal && <option value="junior">Junior</option>}
         </select>
         )}
 

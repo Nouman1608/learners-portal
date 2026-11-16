@@ -341,7 +341,7 @@ const Users: React.FC = () => {
           className="px-3 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 text-sm"
         >
           <option value="">All Categories</option>
-          <option value="junior">Junior</option>
+          {isJuniorPortal && <option value="junior">Junior</option>}
           <option value="senior">Senior</option>
         </select>
         )}

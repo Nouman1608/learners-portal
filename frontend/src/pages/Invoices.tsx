@@ -691,7 +691,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
               >
                 <option value="all">All Categories</option>
                 <option value="senior">Senior</option>
-                <option value="junior">Junior</option>
+                {isJuniorPortal && <option value="junior">Junior</option>}
               </select>
             </div>
           )}

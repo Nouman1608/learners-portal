@@ -372,7 +372,7 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 >
                   {brand.campus === 'senior' && <option value="senior">Senior</option>}
-                  <option value="junior">Junior</option>
+                  {isJuniorPortal && <option value="junior">Junior</option>}
                 </select>
                 {errors.courseCategory && (
                   <p className="mt-1 text-sm text-red-600">{errors.courseCategory.message}</p>

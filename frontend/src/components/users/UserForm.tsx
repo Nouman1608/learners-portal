@@ -394,7 +394,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onClose, onSubmit, onSiblings
                     disabled={loading}
                   >
                     <option value="">Select category</option>
-                    <option value="junior">Junior</option>
+                    {(isJuniorPortal || formData.studentCategory === 'junior') && <option value="junior">Junior</option>}
                     {brand.campus === 'senior' && <option value="senior">Senior</option>}
                   </select>
                 </div>
