@@ -308,7 +308,7 @@ export const dashboardService = {
    *    fee for the month stands.
    * Dropped / on-leave fees and zero-amount placeholders are not owed, so they are left out.
    */
-  async getFeeOverview(month: number, year: number, database: Database = db): Promise<FeeOverview> {
+  async getFeeOverview(month: number, year: number, database: Database = db, studentType?: 'local' | 'online'): Promise<FeeOverview> {
     const owed = sql`f.status IN ('received', 'pending', 'overdue') AND f.amount::numeric > 0
       AND f.month = ${month} AND f.year = ${year}`;
 
@@ -356,6 +356,7 @@ export const dashboardService = {
       INNER JOIN users u ON u.id = ct.teacher_id AND u.is_active = true
       INNER JOIN courses c ON c.id = ct.course_id AND c.is_active = true
       INNER JOIN enrollments e ON e.course_id = c.id AND e.status = 'active'
+      INNER JOIN users su ON su.id = e.student_id AND ${studentType ? sql`su.student_subcategory = ${studentType}` : sql`true`}
       LEFT JOIN fees f ON f.enrollment_id = e.id AND ${owed}
       GROUP BY ct.teacher_id, u.first_name, u.last_name, c.id, c.title
       ORDER BY u.first_name, u.last_name, c.title`)).rows as any[];
@@ -395,7 +396,7 @@ export const dashboardService = {
    * One line per student and class.
    */
   async getFeeOverviewStudents(
-    filter: { month: number; year: number; status: FeeOverviewStatus; teacherId?: string; courseId?: string },
+    filter: { month: number; year: number; status: FeeOverviewStatus; teacherId?: string; courseId?: string; studentType?: 'local' | 'online' },
     database: Database = db,
   ): Promise<FeeOverviewStudent[]> {
     const { month, year, status } = filter;
@@ -424,6 +425,7 @@ export const dashboardService = {
         INNER JOIN users u ON u.id = e.student_id
         LEFT JOIN fees f ON f.enrollment_id = e.id AND ${owed}
         WHERE ct.teacher_id = ${filter.teacherId}
+          AND ${filter.studentType ? sql`u.student_subcategory = ${filter.studentType}` : sql`true`}
           AND ${filter.courseId ? sql`c.id = ${filter.courseId}` : sql`true`}
           AND ${wanted}
         ORDER BY u.first_name, u.last_name, c.title`)).rows as unknown as FeeOverviewStudent[];

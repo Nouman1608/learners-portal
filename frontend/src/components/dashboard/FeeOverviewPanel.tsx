@@ -23,6 +23,7 @@ interface Drill {
   campus: Campus;
   teacherId?: string;
   courseId?: string;
+  studentType?: 'local' | 'online'; // only the Local / only the Online students (teachers' table views)
 }
 
 /**
@@ -42,21 +43,24 @@ export default function FeeOverviewPanel({ campus }: { campus: Campus }) {
   const [drill, setDrill] = useState<Drill | null>(null);
   const [students, setStudents] = useState<FeeOverviewStudent[] | null>(null);
   const [reload, setReload] = useState(0);
+  // The teachers' table for all students, or only the Local or only the Online students (profile Type)
+  const [type, setType] = useState<'all' | 'local' | 'online'>('all');
+  const studentType = type === 'all' ? undefined : type;
 
   useEffect(() => {
     const seq = ++requestSeq.current;
     setLoading(true);
-    dashboardApi.getFeeOverview(campus, period?.month, period?.year)
+    dashboardApi.getFeeOverview(campus, period?.month, period?.year, studentType)
       .then((result) => { if (seq === requestSeq.current) setData(result); })
       .catch(() => { if (seq === requestSeq.current) toast.error('Failed to load the fee overview'); })
       .finally(() => { if (seq === requestSeq.current) setLoading(false); });
-  }, [campus, period, reload]);
+  }, [campus, period, reload, studentType]);
 
   const loadStudents = (of: Drill) => {
     if (!data) return;
     dashboardApi.getFeeOverviewStudents({
       month: data.month, year: data.year, status: of.status, campus: of.campus,
-      teacherId: of.teacherId, courseId: of.courseId,
+      teacherId: of.teacherId, courseId: of.courseId, studentType: of.studentType,
     })
       .then(setStudents)
       .catch(() => { toast.error('Failed to load the students'); setDrill(null); });
@@ -122,7 +126,7 @@ export default function FeeOverviewPanel({ campus }: { campus: Campus }) {
       {value > 0 ? (
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); openDrill({ ...target, campus: target.campus || (campus === 'both' ? 'senior' : campus) }); }}
+          onClick={(e) => { e.stopPropagation(); openDrill({ ...target, studentType, campus: target.campus || (campus === 'both' ? 'senior' : campus) }); }}
           className={`rounded px-1.5 underline decoration-dotted underline-offset-2 hover:bg-indigo-100 ${color}`}
           title="Show these students"
         >
@@ -182,8 +186,21 @@ export default function FeeOverviewPanel({ campus }: { campus: Campus }) {
       {/* 2. Each teacher's classes */}
       <div className="mt-6 overflow-hidden rounded-xl bg-white shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-4 py-3">
-          <h3 className="text-sm font-semibold text-gray-900">Teachers' {terms.coursesLc}: students enrolled and fees paid{data ? ` · ${MONTHS[data.month - 1]} ${data.year}` : ''}</h3>
+          <h3 className="text-sm font-semibold text-gray-900">Teachers' {terms.coursesLc}: students enrolled and fees paid{type === 'local' ? ' · Local students' : type === 'online' ? ' · Online students' : ''}{data ? ` · ${MONTHS[data.month - 1]} ${data.year}` : ''}</h3>
           <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex overflow-hidden rounded-md border border-gray-300" role="group" aria-label="Which students">
+              {([['all', 'Overall'], ['local', 'Local'], ['online', 'Online']] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setType(value)}
+                  aria-pressed={type === value}
+                  className={`px-3 py-1.5 text-sm ${type === value ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             {/* The same month as the boxes above: choosing one here changes both */}
             <select
               value={shownMonth}
@@ -272,7 +289,7 @@ export default function FeeOverviewPanel({ campus }: { campus: Campus }) {
       {drill && data && (
         <FeeListModal
           title={drill.title}
-          subtitle={`${STATUS_LABEL[drill.status]} · ${period_}`}
+          subtitle={`${STATUS_LABEL[drill.status]}${drill.studentType ? ` · ${drill.studentType} students only` : ''} · ${period_}`}
           rows={students}
           period={{ month: data.month, year: data.year }}
           onClose={() => setDrill(null)}

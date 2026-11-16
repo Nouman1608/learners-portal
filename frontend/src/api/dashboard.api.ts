@@ -111,16 +111,16 @@ export const dashboardApi = {
 
   /** The students behind one number of the fee overview (a teacher's / class's, or one of the four boxes) */
   async getFeeOverviewStudents(params: {
-    month: number; year: number; status: FeeOverviewStatus; campus: Campus; teacherId?: string; courseId?: string;
+    month: number; year: number; status: FeeOverviewStatus; campus: Campus; teacherId?: string; courseId?: string; studentType?: 'local' | 'online';
   }): Promise<FeeOverviewStudent[]> {
     const response = await apiClient.get('/dashboard/fee-overview/students', { params });
     return response.data.students;
   },
 
   /** Admins and sudo. Leave month/year out for the current month. */
-  async getFeeOverview(campus: Campus = 'senior', month?: number, year?: number): Promise<FeeOverview> {
+  async getFeeOverview(campus: Campus = 'senior', month?: number, year?: number, studentType?: 'local' | 'online'): Promise<FeeOverview> {
     const response = await apiClient.get('/dashboard/fee-overview', {
-      params: { ...(campus === 'senior' ? {} : { campus }), ...(month && year ? { month, year } : {}) },
+      params: { ...(campus === 'senior' ? {} : { campus }), ...(month && year ? { month, year } : {}), ...(studentType ? { studentType } : {}) },
     });
     return response.data;
   },

@@ -10,6 +10,7 @@ const feeOverviewStudentsQuery = z.object({
   status: z.enum(['total', 'enrolled', 'paid', 'pending', 'overdue', 'nofee']),
   teacherId: z.string().uuid().optional(),
   courseId: z.string().uuid().optional(),
+  studentType: z.enum(['local', 'online']).optional(),
   campus: z.enum(['senior', 'junior', 'both']).default('senior'),
 });
 
@@ -53,19 +54,20 @@ export const getFeeOverview = async (req: Request, res: Response, next: NextFunc
       throw new AppError(400, 'Invalid month or year');
     }
 
+    const studentType = req.query.studentType === 'local' || req.query.studentType === 'online' ? req.query.studentType : undefined;
     const campus = typeof req.query.campus === 'string' ? req.query.campus : 'senior';
     if (campus !== 'junior' && campus !== 'both') {
-      return res.json(await dashboardService.getFeeOverview(month, year));
+      return res.json(await dashboardService.getFeeOverview(month, year, undefined, studentType));
     }
     // Admins see their own campus only; the other campus is for sudo
     if (req.user!.role !== 'sudo') throw new AppError(403, 'Only sudo can view other campuses');
     if (!juniorDb) throw new AppError(400, 'Junior Campus is not connected to this portal');
 
-    const junior = await dashboardService.getFeeOverview(month, year, juniorDb);
+    const junior = await dashboardService.getFeeOverview(month, year, juniorDb, studentType);
     if (campus === 'junior') return res.json(junior);
 
     // Both: counts are added; money is added per currency only
-    const senior = await dashboardService.getFeeOverview(month, year);
+    const senior = await dashboardService.getFeeOverview(month, year, undefined, studentType);
     const add = (a: FeeGroup, b: FeeGroup): FeeGroup => {
       const perCurrency = new Map<string, number>();
       for (const row of [...a.amounts, ...b.amounts]) perCurrency.set(row.currency, (perCurrency.get(row.currency) || 0) + parseFloat(row.amount));
