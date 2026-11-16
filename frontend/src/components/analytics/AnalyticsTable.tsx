@@ -206,7 +206,7 @@ export default function AnalyticsTable<T>({
                       key={column.key}
                       onClick={() => requestSort(column)}
                       aria-sort={active ? (sort!.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
-                      className={`px-6 py-3 text-xs font-medium uppercase cursor-pointer select-none hover:bg-gray-100 ${column.align === 'right' ? 'text-right' : 'text-left'} ${active ? 'text-indigo-700' : 'text-gray-500'}`}
+                      className={`px-6 py-3 text-xs font-medium uppercase cursor-pointer select-none hover:bg-gray-100 ${column === columns[0] ? 'sticky left-0 z-20 bg-gray-50 shadow-[1px_0_0_#e5e7eb]' : ''} ${column.align === 'right' ? 'text-right' : 'text-left'} ${active ? 'text-indigo-700' : 'text-gray-500'}`}
                     >
                       <span className="inline-flex items-center gap-1">
                         {column.header}
@@ -217,7 +217,8 @@ export default function AnalyticsTable<T>({
                 })}
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            {/* The first column stays in view while the rest scrolls sideways */}
+            <tbody className="bg-white divide-y divide-gray-200 [&_td:first-child]:sticky [&_td:first-child]:left-0 [&_td:first-child]:z-[5] [&_td:first-child]:bg-white [&_td:first-child]:shadow-[1px_0_0_#e5e7eb]">
               {shown.map((row, index) => (
                 <tr key={rowKey(row, index)} className="hover:bg-indigo-50/30">
                   {columns.map((column) => {
@@ -231,7 +232,7 @@ export default function AnalyticsTable<T>({
                 </tr>
               ))}
             </tbody>
-            {footer && <tfoot className="bg-gray-100 text-sm font-semibold text-gray-900 sticky bottom-0">{footer(shown)}</tfoot>}
+            {footer && <tfoot className="bg-gray-100 text-sm font-semibold text-gray-900 sticky bottom-0 [&_td:first-child]:sticky [&_td:first-child]:left-0 [&_td:first-child]:z-[5] [&_td:first-child]:bg-gray-100">{footer(shown)}</tfoot>}
           </table>
         </div>
       )}
