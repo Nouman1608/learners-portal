@@ -410,7 +410,7 @@ export const analyticsService = {
         campus: undefined as 'senior' | 'junior' | undefined,
         // false for a teacher who has left: the table lists active teachers only, the totals keep their pay
         active: true,
-        revenuePKR: 0, invoicedPKR: 0, notInvoicedPKR: 0, paidPKR: 0, notReceivedPKR: 0,
+        revenuePKR: 0, revenueLocalPKR: 0, revenueOnlinePKR: 0, invoicedPKR: 0, notInvoicedPKR: 0, paidPKR: 0, notReceivedPKR: 0,
         teacherCostPKR: 0, estimatedCostPKR: 0, slipCount: 0,
       });
       const byTeacher = new Map<string, ReturnType<typeof blank>>();
@@ -433,6 +433,8 @@ export const analyticsService = {
           row.classCount += 1;
           row.studentCount += c.students;
           row.revenuePKR += c.revenuePKR / sharers.length;
+          row.revenueLocalPKR += c.revenueLocalPKR / sharers.length;
+          row.revenueOnlinePKR += c.revenueOnlinePKR / sharers.length;
           row.invoicedPKR += c.invoicedPKR / sharers.length;
           row.notInvoicedPKR += c.notInvoicedPKR / sharers.length;
           row.paidPKR += c.paidPKR / sharers.length;
