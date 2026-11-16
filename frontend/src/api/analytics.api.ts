@@ -147,9 +147,6 @@ export interface TeacherProfitability extends ClassMoney {
 }
 
 export interface CourseProfitability extends ClassMoney {
-  /** Revenue from students whose profile Type is Local / Online (other types are in neither) */
-  revenueLocalPKR?: number;
-  revenueOnlinePKR?: number;
   courseId: string;
   courseTitle: string;
   teachers: string[];

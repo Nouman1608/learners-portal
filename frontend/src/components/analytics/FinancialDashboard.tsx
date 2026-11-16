@@ -327,8 +327,6 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
         { header: 'Type', value: c => (c.oneToOne ? '1-to-1' : 'Group') },
         { header: 'Students', value: c => c.studentCount },
         { header: 'Revenue (PKR)', value: c => Math.round(c.revenuePKR) },
-        { header: 'Revenue local (PKR)', value: c => Math.round(c.revenueLocalPKR ?? 0) },
-        { header: 'Revenue online (PKR)', value: c => Math.round(c.revenueOnlinePKR ?? 0) },
         { header: 'Invoiced (PKR)', value: c => Math.round(c.invoicedPKR) },
         { header: 'Not invoiced (PKR)', value: c => Math.round(c.notInvoicedPKR) },
         { header: 'Received (PKR)', value: c => Math.round(c.paidPKR) },
@@ -530,7 +528,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
       <AnalyticsTable<CourseProfitability>
         title={`${terms.course} profitability${monthLabel ? ` · ${monthLabel}` : ''}`}
         actions={monthFilter}
-        exportSum={['students', 'revenue', 'revenueLocal', 'revenueOnline', 'invoiced', 'notInvoiced', 'paid', 'notReceived', 'cost', 'profit', 'soFar']}
+        exportSum={['students', 'revenue', 'invoiced', 'notInvoiced', 'paid', 'notReceived', 'cost', 'profit', 'soFar']}
         exportNote={monthLabel ? `Month: ${monthLabel}` : `Period: ${comparison.period.start.slice(0, 7)} to ${comparison.period.end.slice(0, 7)}`}
         description="Revenue is what the class brings in when every student has paid: Invoiced (fee date has arrived) plus Not invoiced (fee dated later, or 1-to-1 classes not counted yet). Invoiced is Received plus Not received. Teacher cost is the expected salary slip; a fixed monthly salary is split equally between that teacher's classes. All in PKR. Click any figure to see it student by student; Received and Not received open the fees themselves, where you can mark them paid."
         rows={courseProfitability}
@@ -558,8 +556,6 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
           { key: 'teacher', header: 'Teacher', value: c => c.teachers.join(', ') || null, className: 'text-gray-600' },
           { key: 'students', header: 'Students', align: 'right', value: c => c.studentCount, cell: c => drill(c, undefined, c.studentCount) },
           { key: 'revenue', header: 'Revenue', align: 'right', value: c => c.revenuePKR, cell: c => drill(c, 'revenue', pkr(c.revenuePKR)), className: 'font-medium text-gray-900' },
-          { key: 'revenueLocal', header: 'Revenue local', align: 'right', value: c => c.revenueLocalPKR ?? 0, cell: c => pkr(c.revenueLocalPKR ?? 0), className: 'text-gray-700' },
-          { key: 'revenueOnline', header: 'Revenue online', align: 'right', value: c => c.revenueOnlinePKR ?? 0, cell: c => pkr(c.revenueOnlinePKR ?? 0), className: 'text-gray-700' },
           { key: 'invoiced', header: 'Invoiced', align: 'right', value: c => c.invoicedPKR, cell: c => drill(c, 'invoiced', pkr(c.invoicedPKR)) },
           { key: 'notInvoiced', header: 'Not invoiced', align: 'right', value: c => c.notInvoicedPKR, cell: c => drill(c, 'notInvoiced', pkr(c.notInvoicedPKR)), className: 'text-gray-500' },
           { key: 'paid', header: 'Received', align: 'right', value: c => c.paidPKR, cell: c => feeCell({ name: c.courseTitle, campus: c.campus, courseId: c.courseId }, 'received', c.paidPKR), className: 'text-green-700' },
@@ -586,8 +582,6 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
               <td className="px-6 py-3" />
               <td className={cell}>{shown.reduce((s, c) => s + c.studentCount, 0)}</td>
               <td className={cell}>{sum(c => c.revenuePKR)}</td>
-              <td className={cell}>{sum(c => c.revenueLocalPKR ?? 0)}</td>
-              <td className={cell}>{sum(c => c.revenueOnlinePKR ?? 0)}</td>
               <td className={cell}>{sum(c => c.invoicedPKR)}</td>
               <td className={cell}>{sum(c => c.notInvoicedPKR)}</td>
               <td className={cell}>{sum(c => c.paidPKR)}</td>
