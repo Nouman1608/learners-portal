@@ -395,7 +395,7 @@ export const analyticsApi = {
   /** The fees behind a class's or a teacher's Received / Not received figure */
   getProfitabilityFees: async (params: {
     startDate: string; endDate: string; group: 'received' | 'notReceived' | 'notInvoiced';
-    teacherId?: string | null; courseId?: string; campus?: 'senior' | 'junior';
+    teacherId?: string | null; courseId?: string; campus?: 'senior' | 'junior'; studentType?: 'local' | 'online';
   }): Promise<FeeListRow[]> => {
     // One class (courseId), or one teacher's classes (teacherId; null = classes with no teacher)
     const { teacherId, ...rest } = params;

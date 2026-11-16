@@ -453,11 +453,12 @@ export const getProfitabilityFees = async (req: Request, res: Response, next: Ne
       teacherId: z.string().uuid().or(z.literal('none')).optional(),
       courseId: z.string().uuid().optional(),
       campus: z.enum(['senior', 'junior']).default('senior'),
+      studentType: z.enum(['local', 'online']).optional(), // only the Local or only the Online students' fees
     }).safeParse(req.query);
     if (!query.success || (!query.data.teacherId && !query.data.courseId)) throw new AppError(400, 'Invalid request');
-    const { startDate, endDate, group, teacherId, courseId, campus } = query.data;
+    const { startDate, endDate, group, teacherId, courseId, campus, studentType } = query.data;
     const { start, end } = resolveDateRange(startDate, endDate);
-    const filter = { startDate: start, endDate: end, group, courseId, teacherId: teacherId === 'none' ? null : teacherId };
+    const filter = { startDate: start, endDate: end, group, courseId, teacherId: teacherId === 'none' ? null : teacherId, studentType };
 
     if (campus === 'junior') {
       if (req.user?.role !== 'sudo') throw new AppError(403, 'Only sudo can view other campuses');

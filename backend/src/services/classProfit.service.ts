@@ -171,7 +171,7 @@ export const classProfitService = {
    * classes, or with teacherId null the classes that have no teacher. One line per fee.
    */
   async getFeeList(
-    filter: { startDate: Date; endDate: Date; group: 'received' | 'notReceived' | 'notInvoiced'; teacherId?: string | null; courseId?: string },
+    filter: { startDate: Date; endDate: Date; group: 'received' | 'notReceived' | 'notInvoiced'; teacherId?: string | null; courseId?: string; studentType?: 'local' | 'online' },
     database: Database = db,
   ): Promise<FinanceFee[]> {
     const today = pakistanToday();
@@ -207,6 +207,7 @@ export const classProfitService = {
       WHERE f.status IN ('received', 'pending', 'overdue') AND f.amount::numeric > 0
         AND (f.year * 12 + f.month) BETWEEN ${firstMonth} AND ${lastMonth}
         AND ${group} AND ${teaches}
+        AND ${filter.studentType ? sql`u.student_subcategory = ${filter.studentType}` : sql`true`}
       ORDER BY u.first_name, u.last_name, f.year, f.month, c.title`)).rows as unknown as FinanceFee[];
   },
 
