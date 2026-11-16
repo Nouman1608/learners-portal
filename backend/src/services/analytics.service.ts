@@ -189,7 +189,7 @@ export const analyticsService = {
   /**
    * Outstanding fees by age bucket, split by currency.
    */
-  async getOutstandingFeesAnalysis() {
+  async getOutstandingFeesAnalysis(dueBetween?: { start: Date; end: Date }) {
     try {
       const bucket = sql`
         CASE
@@ -210,7 +210,13 @@ export const analyticsService = {
           amountPKR: sumInPkr(fees.amount, fees.currency),
         })
         .from(fees)
-        .where(and(sql`${fees.status} IN ('pending', 'overdue')`, feeInBooks(this.db)))
+        .where(and(
+          sql`${fees.status} IN ('pending', 'overdue')`,
+          feeInBooks(this.db),
+          // Only fees for one chosen month when asked; otherwise every outstanding fee, any month
+          dueBetween ? gte(fees.dueDate, dueBetween.start.toISOString().split('T')[0]) : undefined,
+          dueBetween ? lte(fees.dueDate, dueBetween.end.toISOString().split('T')[0]) : undefined,
+        ))
         .groupBy(bucket, fees.currency);
 
       const buckets = new Map<string, {

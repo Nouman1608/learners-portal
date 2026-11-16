@@ -358,6 +358,8 @@ export interface AnalyticsQueryParams {
   limit?: number;
   /** Sudo on the Senior Campus portal only. Omitted means this portal's own campus. */
   campus?: 'senior' | 'junior' | 'both';
+  /** '1': "outstanding fees by age" counts only fees due inside startDate..endDate */
+  outstandingInPeriod?: '1';
 }
 
 /**

@@ -56,6 +56,10 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
   const [tableMonth, setTableMonth] = useState('');
   const [monthRows, setMonthRows] = useState<Pick<FinancialAnalytics, 'courseProfitability' | 'teacherProfitability'> | null>(null);
   const [monthLoading, setMonthLoading] = useState(false);
+  // Month filter on collection rate, payment methods and outstanding-by-age: '' = whole period, or 'YYYY-MM'
+  const [sectionMonth, setSectionMonth] = useState('');
+  const [sectionData, setSectionData] = useState<Pick<FinancialAnalytics, 'collectionRate' | 'paymentMethods' | 'outstandingFees'> | null>(null);
+  const [sectionLoading, setSectionLoading] = useState(false);
   // The fees behind a teacher's Received / Not received figure (click the number)
   const [feeList, setFeeList] = useState<{
     title: string; subtitle: string; rows: FeeListRow[] | null;
@@ -85,7 +89,24 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
   useEffect(() => {
     fetchData();
     setTableMonth(''); // a new period or campus starts from the whole period again
+    setSectionMonth('');
   }, [filters]);
+
+  useEffect(() => {
+    if (!sectionMonth) {
+      setSectionData(null);
+      return;
+    }
+    let current = true;
+    const [year, month] = sectionMonth.split('-').map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    setSectionLoading(true);
+    analyticsApi.getFinancialAnalytics({ ...filters, startDate: `${sectionMonth}-01`, endDate: `${sectionMonth}-${String(lastDay).padStart(2, '0')}`, outstandingInPeriod: '1' })
+      .then((result) => { if (current) setSectionData(result); })
+      .catch((error: any) => { if (current) { toast.error(error.response?.data?.error || 'Failed to load that month'); setSectionMonth(''); } })
+      .finally(() => { if (current) setSectionLoading(false); });
+    return () => { current = false; };
+  }, [sectionMonth, filters, refresh]);
 
   // A fee was marked paid from the pop-up: bring the whole-period figures up to date quietly
   useEffect(() => {
@@ -273,6 +294,20 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
       {monthOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
     </select>
   );
+  const sectionFilter = (
+    <select
+      value={sectionMonth}
+      onChange={(e) => setSectionMonth(e.target.value)}
+      aria-label="Month for collection, payment methods and outstanding fees"
+      className={`rounded-md border px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 ${sectionMonth ? 'border-indigo-500 bg-indigo-50 text-indigo-800' : 'border-gray-300'} ${sectionLoading ? 'opacity-60' : ''}`}
+    >
+      <option value="">Whole period ({comparison.period.start.slice(0, 7)} to {comparison.period.end.slice(0, 7)})</option>
+      {monthOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+    </select>
+  );
+  const sectionMonthLabel = monthOptions.find(option => option.value === sectionMonth)?.label;
+  // These three sections show the chosen month, or the whole period when no month is picked
+  const shown = sectionMonth && sectionData ? sectionData : data;
   const revenueByCurrency = mergeCurrencies(data.revenueOverTime.map(r => r.byCurrency));
   const outstandingByCurrency = mergeCurrencies(data.outstandingFees.map(r => r.byCurrency));
   const outstandingPKR = data.outstandingFees.reduce((sum, r) => sum + r.amountPKR, 0);
@@ -416,12 +451,18 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
       </div>
 
       {/* Collection rate per currency */}
-      {collectionRate.byCurrency.length > 0 && (
+      {(collectionRate.byCurrency.length > 0 || sectionMonth) && (
         <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Collection rate by currency</h3>
-            <p className="mt-1 text-sm text-gray-500">Of fees due in this period, how much has been received.</p>
+          <div className="px-6 py-4 border-b border-gray-200 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Collection rate by currency{sectionMonthLabel ? ` · ${sectionMonthLabel}` : ''}</h3>
+              <p className="mt-1 text-sm text-gray-500">Of fees due in {sectionMonthLabel ? 'this month' : 'this period'}, how much has been received. The month applies to the payment methods and outstanding fees below too.</p>
+            </div>
+            {sectionFilter}
           </div>
+          {shown.collectionRate.byCurrency.length === 0 && (
+            <p className="py-8 text-center text-gray-500">No fees fall due in this month</p>
+          )}
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -434,7 +475,7 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {collectionRate.byCurrency.map(row => (
+                {shown.collectionRate.byCurrency.map(row => (
                   <tr key={row.currency}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{row.currency}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{money(row.billed, row.currency)}</td>
@@ -452,13 +493,13 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Payment Methods */}
         <div className="bg-white rounded-lg shadow p-6">
-          {data.paymentMethods.length > 0 ? (
+          {shown.paymentMethods.length > 0 ? (
             <PieChart
-              data={data.paymentMethods}
+              data={shown.paymentMethods}
               nameKey="method"
               valueKey="amountPKR"
               height={350}
-              title="Payment methods (PKR equivalent)"
+              title={`Payment methods (PKR equivalent)${sectionMonthLabel ? ` · ${sectionMonthLabel}` : ''}`}
             />
           ) : (
             <p className="py-12 text-center text-gray-500">No payments in this period</p>
@@ -467,14 +508,14 @@ export default function FinancialDashboard({ filters }: FinancialDashboardProps)
 
         {/* Outstanding Fees Aging */}
         <div className="bg-white rounded-lg shadow p-6">
-          {data.outstandingFees.length > 0 ? (
+          {shown.outstandingFees.length > 0 ? (
             <BarChart
-              data={data.outstandingFees}
+              data={shown.outstandingFees}
               xKey="range"
               yKeys={['amountPKR']}
               colors={['#ef4444']}
               height={350}
-              title="Outstanding fees by age (PKR equivalent)"
+              title={`Outstanding fees by age (PKR equivalent)${sectionMonthLabel ? ` · fees due ${sectionMonthLabel}` : ''}`}
               yLabel="Amount (PKR)"
             />
           ) : (

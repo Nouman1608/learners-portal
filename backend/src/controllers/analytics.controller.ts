@@ -19,6 +19,8 @@ const analyticsQuerySchema = z.object({
   groupBy: z.enum(['day', 'week', 'month']).optional(),
   limit: z.string().regex(/^\d+$/).optional(),
   campus: z.enum(['senior', 'junior', 'both']).optional(),
+  // '1' = "outstanding fees by age" counts only fees due in the period (used by the month filter)
+  outstandingInPeriod: z.enum(['1']).optional(),
 });
 
 /**
@@ -75,7 +77,7 @@ export const getFinancialAnalytics = async (req: Request, res: Response, next: N
         const [r, pm, of, cr, col, prof, prevR, prevC] = await Promise.all([
           svc.getRevenueOverTime(start, end, validated.groupBy as 'day' | 'week' | 'month' | undefined),
           svc.getPaymentMethodBreakdown(start, end),
-          svc.getOutstandingFeesAnalysis(),
+          svc.getOutstandingFeesAnalysis(validated.outstandingInPeriod ? { start, end } : undefined),
           svc.getCourseRevenueBreakdown(start, end),
           svc.getCollectionRate(start, end),
           svc.getProfitability(start, end),
