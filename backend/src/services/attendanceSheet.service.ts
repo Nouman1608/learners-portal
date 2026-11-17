@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { db, Database } from '../config/database';
+import teacherSheetDays from '../config/teacherSheetDays.json';
 
 /**
  * Data for the printable monthly attendance sheets (one sheet per class): the class days of the
@@ -85,10 +86,16 @@ export const attendanceSheetService = {
       FROM course_timeslots
       WHERE course_id IN (${idList}) AND is_active = true`)).rows as any[];
 
-    const datesOf = (courseId: string) => {
+    const datesOf = (courseId: string, teacherIds: string[]) => {
       const found = new Map<string, string | null>();
       for (const row of eventRows) if (row.courseId === courseId && !found.has(row.date)) found.set(row.date, row.time);
-      if (found.size === 0) {
+      // No calendar days: a teacher whose weekdays are known (config/teacherSheetDays.json) overrides the timetable
+      const known = [...new Set(teacherIds.flatMap((id) => (teacherSheetDays as Record<string, number[]>)[id] ?? []))];
+      if (found.size === 0 && known.length > 0) {
+        for (let day = 1; day <= daysInMonth; day++) {
+          if (known.includes(new Date(year, month - 1, day).getDay())) found.set(`${year}-${pad(month)}-${pad(day)}`, null);
+        }
+      } else if (found.size === 0) {
         for (const slot of slotRows.filter((s) => s.courseId === courseId)) {
           for (let day = 1; day <= daysInMonth; day++) {
             const date = `${year}-${pad(month)}-${pad(day)}`;
@@ -109,7 +116,7 @@ export const attendanceSheetService = {
         title: row.title,
         teachers: row.teacherNames as string[],
         oneToOne: !!row.oneToOne,
-        dates: datesOf(row.courseId),
+        dates: datesOf(row.courseId, row.teacherIds as string[]),
         students: studentRows.filter((s) => s.courseId === row.courseId).map((s) => ({ id: s.id, name: s.name })),
       })),
     };
