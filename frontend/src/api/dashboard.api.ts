@@ -126,4 +126,32 @@ export const dashboardApi = {
   },
 };
 
+/** One class of the printable attendance sheets */
+export interface SheetClass {
+  courseId: string;
+  title: string;
+  teachers: string[];
+  oneToOne: boolean;
+  dates: { date: string; time: string | null }[];
+  students: { id: string; name: string }[];
+  campus?: 'senior' | 'junior';
+}
+
+export interface AttendanceSheetData {
+  month: number;
+  year: number;
+  teachers: { id: string; name: string; campus?: 'senior' | 'junior' }[];
+  classes: SheetClass[];
+}
+
+/** The classes of a month with their class days and enrolled students (admins and sudo) */
+export const getAttendanceSheet = async (
+  campus: Campus, month: number, year: number, teacherId?: string,
+): Promise<AttendanceSheetData> => {
+  const response = await apiClient.get('/dashboard/attendance-sheet', {
+    params: { month, year, ...(campus === 'senior' ? {} : { campus }), ...(teacherId ? { teacherId } : {}) },
+  });
+  return response.data;
+};
+
 export default dashboardApi;

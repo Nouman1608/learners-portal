@@ -16,4 +16,7 @@ router.get('/fee-overview', requireAdmin, dashboardController.getFeeOverview);
 // The students behind one number of that overview
 router.get('/fee-overview/students', requireAdmin, dashboardController.getFeeOverviewStudents);
 
+// Printable monthly attendance sheets, one per class (admins and sudo)
+router.get('/attendance-sheet', requireAdmin, dashboardController.getAttendanceSheet);
+
 export default router;

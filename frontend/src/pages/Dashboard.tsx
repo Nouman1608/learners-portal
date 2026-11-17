@@ -7,6 +7,7 @@ import { authApi } from '../api/auth.api';
 import toast from 'react-hot-toast';
 import { StatCardSkeleton } from '../components/common/Skeleton';
 import FeeOverviewPanel from '../components/dashboard/FeeOverviewPanel';
+import AttendanceSheetPanel from '../components/dashboard/AttendanceSheetPanel';
 import {
   UserGroupIcon,
   AcademicCapIcon,
@@ -416,6 +417,7 @@ const Dashboard: React.FC = () => {
 
         {/* Admins and sudo: this month's fees (paid / pending / overdue) and each teacher's classes */}
         {(user?.role === 'sudo' || user?.role === 'admin') && <FeeOverviewPanel campus={juniorAvailable ? campus : 'senior'} />}
+        {(user?.role === 'sudo' || user?.role === 'admin') && <AttendanceSheetPanel campus={juniorAvailable ? campus : 'senior'} />}
       </main>
     </div>
   );

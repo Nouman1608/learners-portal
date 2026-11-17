@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { dashboardService, FeeGroup } from '../services/dashboard.service';
 import { juniorDb } from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+import { attendanceSheetService } from '../services/attendanceSheet.service';
 
 const feeOverviewStudentsQuery = z.object({
   month: z.coerce.number().int().min(1).max(12),
@@ -123,6 +124,41 @@ export const getStats = async (req: Request, res: Response, next: NextFunction) 
     // Admin/Sudo get general stats
     const stats = await dashboardService.getGeneralStats();
     res.json({ ...stats, juniorCampusAvailable: user.role === 'sudo' && !!juniorDb });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/dashboard/attendance-sheet?month=&year=&teacherId=&campus= (admins and sudo; other
+ * campuses sudo only). The classes of the month with their class days and enrolled students,
+ * for the printable attendance sheets handed to the teachers.
+ */
+export const getAttendanceSheet = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = z.object({
+      month: z.coerce.number().int().min(1).max(12),
+      year: z.coerce.number().int().min(2020).max(2100),
+      teacherId: z.string().uuid().optional(),
+      campus: z.enum(['senior', 'junior', 'both']).default('senior'),
+    }).safeParse(req.query);
+    if (!parsed.success) throw new AppError(400, 'Invalid request');
+    const { month, year, teacherId, campus } = parsed.data;
+
+    if (campus === 'senior') return res.json(await attendanceSheetService.getSheets(month, year, teacherId));
+    if (req.user!.role !== 'sudo') throw new AppError(403, 'Only sudo can view other campuses');
+    if (!juniorDb) throw new AppError(400, 'Junior Campus is not connected to this portal');
+
+    // A teacher belongs to one campus, so the chosen teacher is looked up in both
+    const junior = await attendanceSheetService.getSheets(month, year, teacherId, juniorDb);
+    const tag = <T extends object>(rows: T[], tagged: 'senior' | 'junior') => rows.map((row) => ({ ...row, campus: tagged }));
+    if (campus === 'junior') return res.json({ ...junior, teachers: tag(junior.teachers, 'junior'), classes: tag(junior.classes, 'junior') });
+    const senior = await attendanceSheetService.getSheets(month, year, teacherId);
+    res.json({
+      month, year,
+      teachers: [...tag(senior.teachers, 'senior'), ...tag(junior.teachers, 'junior')],
+      classes: [...tag(senior.classes, 'senior'), ...tag(junior.classes, 'junior')],
+    });
   } catch (error) {
     next(error);
   }
