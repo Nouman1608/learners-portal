@@ -53,6 +53,8 @@ const navigationItems: NavItem[] = [
   { name: 'Message Templates', path: '/message-templates', icon: ChatBubbleLeftRightIcon, roles: ['sudo'] },
   { name: 'Calendar', path: '/calendar', icon: CalendarIcon },
   { name: 'Attendance', path: '/attendance', icon: ClipboardDocumentCheckIcon, roles: ['sudo', 'admin', 'teacher'] },
+  { name: 'Assignments', path: '/assignments', icon: PencilIcon, roles: ['sudo', 'admin', 'teacher'] },
+  { name: 'My Assignments', path: '/my-assignments', icon: PencilIcon, roles: ['student'] },
   { name: 'Assessments', path: '/assessments', icon: DocumentTextIcon, roles: ['sudo', 'admin', 'teacher', 'student'] },
   { name: 'My Results', path: '/my-results', icon: ChartBarIcon, roles: ['student'] },
   { name: 'Fees', path: '/fees', icon: BanknotesIcon, roles: ['sudo', 'admin'] },

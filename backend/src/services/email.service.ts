@@ -233,6 +233,30 @@ This is an automated email. Please do not reply to this message.
 
     `;
   },
+
+  /**
+   * Tell a student a new assignment was posted. Skipped quietly when SMTP is not configured.
+   */
+  async sendAssignmentEmail(input: {
+    to: string; studentName: string; title: string; className: string | null; dueDate: string | null; teacherName: string; link: string;
+  }): Promise<boolean> {
+    try {
+      const transporter = this.createTransporter();
+      if (!transporter) return false;
+      const due = input.dueDate ? `Due: ${input.dueDate}\n` : '';
+      const text = `Hello ${input.studentName},\n\n${input.teacherName} has posted a new assignment${input.className ? ` for ${input.className}` : ''}:\n\n${input.title}\n${due}\nOpen it in the portal to read the instructions, download the files and upload your answers:\n${input.link}\n\n${SCHOOL_NAME}`;
+      await transporter.sendMail({
+        from: `${SCHOOL_NAME} <${EMAIL_FROM}>`,
+        to: input.to,
+        subject: `New assignment: ${input.title}`,
+        text,
+      });
+      return true;
+    } catch (error: any) {
+      logger.error(`[EMAIL] Failed to send assignment notice to ${input.to}:`, error);
+      return false;
+    }
+  },
 };
 
 export default emailService;

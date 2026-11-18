@@ -21,6 +21,8 @@ import TakeAssessment from './pages/TakeAssessment';
 import GradeAssessment from './pages/GradeAssessment';
 import MyResults from './pages/MyResults';
 import MyCourses from './pages/MyCourses';
+import Assignments from './pages/Assignments';
+import MyAssignments from './pages/MyAssignments';
 import MyTeacherCourses from './pages/MyTeacherCourses';
 import MyFees from './pages/MyFees';
 import MyInvoices from './pages/MyInvoices';
@@ -204,6 +206,28 @@ function App() {
               <ProtectedRoute allowedRoles={['student']}>
                 <Layout>
                   <MyResults />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/assignments"
+            element={
+              <ProtectedRoute allowedRoles={['sudo', 'admin', 'teacher']}>
+                <Layout>
+                  <Assignments />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/my-assignments"
+            element={
+              <ProtectedRoute allowedRoles={['student']}>
+                <Layout>
+                  <MyAssignments />
                 </Layout>
               </ProtectedRoute>
             }
