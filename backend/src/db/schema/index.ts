@@ -8,5 +8,6 @@ export * from './attendance';
 export * from './leads';
 export * from './expenses';
 export * from './teacherAdvances';
+export * from './salarySlipPayments';
 export * from './teacherAttendanceMarks';
 export * from './assignments';

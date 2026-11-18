@@ -7,6 +7,7 @@ import { AppError } from '../middleware/errorHandler';
 import { feesService } from './fees.service';
 import { teacherAdvancesService, AdvanceSummary } from './teacherAdvances.service';
 import { teacherDeductionsService, DeductionSummary } from './teacherDeductions.service';
+import { salarySlipPaymentsService, SlipPayment } from './salarySlipPayments.service';
 import { otherCampus, ownCampusLabel, otherCampusLabel } from './otherCampus.service';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
@@ -308,6 +309,7 @@ export const invoicesService = {
     advance?: AdvanceSummary | null,
     deduction?: DeductionSummary | null
   ): Promise<string> {
+    const payment = await this.slipPaymentFor(invoice);
     return new Promise((resolve, reject) => {
       try {
         const fileName = `${invoice.invoiceNumber}.pdf`;
@@ -500,6 +502,9 @@ export const invoicesService = {
         // Salary advances taken off this invoice, and the balance still to pay
         this.drawAdvanceSection(doc, currentY, advance);
 
+        // The day the slip was paid (or "not paid yet")
+        this.drawSlipPayment(doc, payment);
+
         // Footer
         doc
           .fontSize(8)
@@ -538,6 +543,7 @@ export const invoicesService = {
     advance?: AdvanceSummary | null,
     deduction?: DeductionSummary | null
   ): Promise<string> {
+    const payment = await this.slipPaymentFor(invoice);
     return new Promise((resolve, reject) => {
       try {
         const fileName = `${invoice.invoiceNumber}-simplified.pdf`;
@@ -713,6 +719,9 @@ export const invoicesService = {
         // Salary advances taken off this invoice, and the balance still to pay
         this.drawAdvanceSection(doc, currentY, advance);
 
+        // The day the slip was paid (or "not paid yet")
+        this.drawSlipPayment(doc, payment);
+
         // Footer
         doc
           .fontSize(8)
@@ -767,6 +776,50 @@ export const invoicesService = {
       .text('Total Deductions:', 300, y, { width: 140, align: 'right' })
       .text(`- ${pkr(deduction.total)}`, 450, y, { width: 90, align: 'right' });
     return y + 25;
+  },
+
+  /** The recorded payment of a salary slip (null for student invoices or a slip not paid yet) */
+  async slipPaymentFor(invoice: { type?: string; recipientId: string; month: number; year: number }, database: Database = db) {
+    if (!invoice.type || invoice.type === 'student') return null;
+    return salarySlipPaymentsService.get(
+      { teacherId: invoice.recipientId, slipType: invoice.type, month: invoice.month, year: invoice.year }, database);
+  },
+
+  /** "PAID on 6 Nov 2026 (bank transfer)" above a salary slip's footer, or "Not paid yet" */
+  drawSlipPayment(doc: any, payment: SlipPayment | null) {
+    const y = doc.page.height - 125;
+    if (!payment) {
+      doc.fontSize(10).font('Helvetica').fillColor('#6b7280')
+        .text('Payment: not paid yet', 50, y, { align: 'center', width: 500 });
+    } else {
+      const day = new Date(payment.paidOn + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const how = payment.paymentMethod === 'cash' ? ' (cash)' : payment.paymentMethod === 'bank_transfer' ? ' (bank transfer)' : '';
+      doc.fontSize(12).font('Helvetica-Bold').fillColor('#15803d')
+        .text(`PAID on ${day}${how}`, 50, y, { align: 'center', width: 500 });
+    }
+    doc.fillColor('black');
+  },
+
+  /**
+   * Re-draws one salary slip's PDFs (e.g. after its payment date changes) without
+   * re-working its amounts.
+   */
+  async refreshSlipPdfs(invoiceId: string) {
+    const [invoice] = await db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+    if (!invoice || invoice.type === 'student') return;
+    const [teacher] = await db
+      .select({ id: users.id, firstName: users.firstName, lastName: users.lastName, email: users.email, username: users.username })
+      .from(users).where(eq(users.id, invoice.recipientId)).limit(1);
+    if (!teacher) return;
+    const items = await db.select().from(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoice.id));
+    // Same inputs the slip was drawn with: the separate 1-to-1 slip carries no advances or deductions
+    const ordinary = invoice.type === 'teacher';
+    const gross = items.reduce((sum, item) => sum + Number(item.amount), 0);
+    const deduction = ordinary ? await teacherDeductionsService.summaryFor(invoice.recipientId, invoice.month, invoice.year, gross) : null;
+    const advance = ordinary ? await teacherAdvancesService.summaryFor(invoice.recipientId, invoice.month, invoice.year, Number(invoice.totalAmount)) : null;
+    const pdfUrl = await this.generateTeacherInvoicePDF(invoice, items, teacher, undefined, advance, deduction);
+    const simplifiedPdfUrl = await this.generateSimplifiedTeacherInvoicePDF(invoice, items, teacher, undefined, advance, deduction);
+    await db.update(invoices).set({ pdfUrl, simplifiedPdfUrl }).where(eq(invoices.id, invoice.id));
   },
 
   /**
@@ -1811,6 +1864,9 @@ export const invoicesService = {
               items.reduce((sum, item) => sum + Number(item.amount), 0), database)
           : null;
 
+        // Salary slips: the day it was paid (null = not paid yet)
+        const payment = await this.slipPaymentFor(invoice, database);
+
         const siblings = invoice.recipient.familyId
           ? familyMembers
               .filter((m) => m.familyId === invoice.recipient.familyId && m.id !== invoice.recipientId)
@@ -1837,6 +1893,7 @@ export const invoicesService = {
           lineItems: items,
           advance,
           deduction,
+          payment,
           siblings,
           otherCampusSiblings,
           // Siblings share this number: the Invoices page shows them as one family row

@@ -62,6 +62,10 @@ router.post(
 router.post('/:id/family', requireAdmin, logActivity('generate', 'family-invoice'), invoicesController.generateFamilyInvoice);
 router.post('/:id/family/email', requireAdmin, logActivity('email', 'family-invoice'), invoicesController.emailFamilyInvoice);
 
+// Salary slips: the day a slip was paid - admin only (teachers see it on their slips)
+router.put('/:id/payment', requireAdmin, logActivity('update', 'salary-slip-payment'), invoicesController.setSlipPayment);
+router.delete('/:id/payment', requireAdmin, logActivity('delete', 'salary-slip-payment'), invoicesController.clearSlipPayment);
+
 // Email invoice - admin only
 router.post('/:id/email', requireAdmin, logActivity('email', 'invoice'), invoicesController.emailInvoice);
 

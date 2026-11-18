@@ -39,6 +39,14 @@ export interface Invoice {
   members?: Invoice[];
   advance?: InvoiceAdvance | null; // teacher invoices: salary advances taken off
   deduction?: InvoiceDeduction | null; // teacher invoices: absent/late deductions (Junior)
+  payment?: SlipPayment | null; // salary slips: the day it was paid (null = not paid yet)
+}
+
+/** When a salary slip was paid */
+export interface SlipPayment {
+  paidOn: string; // YYYY-MM-DD
+  paymentMethod: 'cash' | 'bank_transfer' | 'other' | null;
+  note: string | null;
 }
 
 export interface InvoiceLineItem {
@@ -139,6 +147,16 @@ export const invoicesApi = {
 
     const response = await apiClient.get(`/invoices?${params.toString()}`);
     return response.data.invoices;
+  },
+
+  /** Record (or change) the day a salary slip was paid (admin only) */
+  async setSlipPayment(id: string, payment: { paidOn: string; paymentMethod?: string; note?: string }): Promise<void> {
+    await apiClient.put(`/invoices/${id}/payment`, payment);
+  },
+
+  /** Mark a salary slip as not paid again (admin only) */
+  async clearSlipPayment(id: string): Promise<void> {
+    await apiClient.delete(`/invoices/${id}/payment`);
   },
 
   /**

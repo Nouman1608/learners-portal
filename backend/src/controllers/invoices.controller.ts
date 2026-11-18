@@ -7,6 +7,8 @@ import { AppError } from '../middleware/errorHandler';
 import { invoices } from '../db/schema/invoices';
 import { users } from '../db/schema';
 import { eq, inArray } from 'drizzle-orm';
+import { salarySlipPaymentsService } from '../services/salarySlipPayments.service';
+import logger from '../utils/logger';
 
 // Validation schemas
 const generateStudentInvoiceSchema = z.object({
@@ -346,3 +348,54 @@ function getMonthName(month: number): string {
   ];
   return months[month - 1] || 'Unknown';
 }
+
+const slipPaymentSchema = z.object({
+  paidOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick the date the slip was paid'),
+  paymentMethod: z.enum(['cash', 'bank_transfer', 'other']).optional().or(z.literal('')).nullable(),
+  note: z.string().max(500).optional().nullable(),
+});
+
+/** The salary slip behind :id, checked for the caller (admins' own slips are for sudo only) */
+const slipFor = async (req: Request) => {
+  const [slip] = await db
+    .select({ id: invoices.id, type: invoices.type, recipientId: invoices.recipientId, month: invoices.month, year: invoices.year, role: users.role })
+    .from(invoices).innerJoin(users, eq(users.id, invoices.recipientId))
+    .where(eq(invoices.id, req.params.id)).limit(1);
+  if (!slip || slip.type === 'student') throw new AppError(404, 'Salary slip not found');
+  if (slip.role === 'admin' && req.user!.role !== 'sudo') throw new AppError(403, "Only sudo can change an admin's salary slip");
+  return slip;
+};
+
+/** Re-draw the slip PDFs so they show the payment (never blocks the request) */
+const refreshSlipPdfs = (invoiceId: string) =>
+  invoicesService.refreshSlipPdfs(invoiceId)
+    .catch((error) => logger.error('[SLIP PAYMENT] Failed to refresh slip PDFs', { invoiceId, error: error.message }));
+
+/** PUT /api/invoices/:id/payment - admin: record the day a salary slip was paid */
+export const setSlipPayment = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = slipPaymentSchema.parse(req.body);
+    const slip = await slipFor(req);
+    const todayInPakistan = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(new Date());
+    if (input.paidOn > todayInPakistan) throw new AppError(400, 'The payment date cannot be in the future');
+    await salarySlipPaymentsService.set(
+      { teacherId: slip.recipientId, slipType: slip.type, month: slip.month, year: slip.year },
+      { paidOn: input.paidOn, paymentMethod: input.paymentMethod || null, note: input.note }, req.user!.id);
+    await refreshSlipPdfs(slip.id);
+    res.json({ message: 'Payment date saved' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/** DELETE /api/invoices/:id/payment - admin: back to "not paid" */
+export const clearSlipPayment = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const slip = await slipFor(req);
+    await salarySlipPaymentsService.clear({ teacherId: slip.recipientId, slipType: slip.type, month: slip.month, year: slip.year });
+    await refreshSlipPdfs(slip.id);
+    res.json({ message: 'Payment date removed' });
+  } catch (error) {
+    next(error);
+  }
+};

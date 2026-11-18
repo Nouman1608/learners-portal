@@ -1,6 +1,7 @@
 import { Fragment, useState, useEffect, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import SalarySlipInputsModal from '../components/invoices/SalarySlipInputsModal';
+import SlipPaymentModal from '../components/invoices/SlipPaymentModal';
 import SalaryAdvances from './SalaryAdvances';
 import TeacherAttendance from './TeacherAttendance';
 import { invoicesApi, Invoice, FamilyInvoice, OneToOneSession, SessionOverride } from '../api/invoices.api';
@@ -31,6 +32,8 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
+const PAYMENT_METHODS: Record<string, string> = { bank_transfer: 'Bank transfer', cash: 'Cash', other: 'Other' };
+
 /**
  * Two tabs share this page: "Invoices" (kind 'student': students' fee invoices) and
  * "Salary Slips" (kind 'teacher': teachers' monthly pay invoices).
@@ -60,6 +63,7 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
   const [familyLoadingId, setFamilyLoadingId] = useState<string | null>(null);
   const [emailingId, setEmailingId] = useState<string | null>(null);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+  const [payingSlip, setPayingSlip] = useState<Invoice | null>(null); // salary slip whose payment date is being set
   const [sessionModal, setSessionModal] = useState<{
     type: 'student' | 'teacher';
     studentId: string;
@@ -436,6 +440,11 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
     return `${symbol} ${parseFloat(amount).toFixed(2)}`;
   };
 
+  // Salary slip payment date (YYYY-MM-DD, a calendar day: no time zone shift)
+  const formatPaidOn = (day: string) => new Date(day + 'T00:00:00').toLocaleDateString('en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric',
+  });
+
   const formatDate = (date: Date | null) => {
     if (!date) return 'Not sent';
     return new Date(date).toLocaleDateString('en-US', {
@@ -568,6 +577,14 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
         </p>
       )}
       {salaryTabs}
+
+      {payingSlip && (
+        <SlipPaymentModal
+          slip={payingSlip}
+          onClose={() => setPayingSlip(null)}
+          onSaved={() => { setPayingSlip(null); loadInvoices(); }}
+        />
+      )}
 
       {inputsFor && (
         <SalarySlipInputsModal
@@ -796,6 +813,11 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
                 <th onClick={() => requestSort('emailedAt')} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
                   Emailed {getSortIndicator('emailedAt')}
                 </th>
+                {isSalary && (
+                  <th onClick={() => requestSort('payment.paidOn')} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                    Paid {getSortIndicator('payment.paidOn')}
+                  </th>
+                )}
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
@@ -857,6 +879,28 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {formatDate(invoice.emailedAt)}
                   </td>
+                  {isSalary && (
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      {(() => {
+                        const label = invoice.payment ? (
+                          <span className="text-green-700">
+                            <span className="font-medium">{formatPaidOn(invoice.payment.paidOn)}</span>
+                            {invoice.payment.paymentMethod && (
+                              <span className="block text-xs text-gray-500">{PAYMENT_METHODS[invoice.payment.paymentMethod]}</span>
+                            )}
+                          </span>
+                        ) : <span className="text-gray-400">Not paid</span>;
+                        return canAct ? (
+                          <button type="button" onClick={() => setPayingSlip(invoice)}
+                            className="rounded-md px-2 py-1 text-left hover:bg-indigo-50"
+                            title={invoice.payment ? 'Change or remove the payment date' : 'Record the day this slip was paid'}>
+                            {label}
+                            {!invoice.payment && <span className="block text-xs text-indigo-600">Mark as paid</span>}
+                          </button>
+                        ) : label;
+                      })()}
+                    </td>
+                  )}
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     {juniorTab && <span className="text-xs text-gray-400">On Junior portal</span>}
                     <div className={`flex items-center justify-end gap-1 ${juniorTab ? 'hidden' : ''}`}>
