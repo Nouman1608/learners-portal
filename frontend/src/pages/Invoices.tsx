@@ -26,6 +26,7 @@ import EmptyState from '../components/common/EmptyState';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
 import { JUNIOR_CATEGORIES, isJuniorPortal } from '../brand';
+import { downloadXlsx } from '../utils/xlsx';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -512,6 +513,50 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
 
   const { items: sortedInvoices, requestSort, getSortIndicator } = useSortableData(invoiceRows);
 
+  // Excel: one row per invoice as listed (family rows are split back into each child's own
+  // invoice, so every row is a real invoice with its own number and amount)
+  const exportExcel = () => {
+    const rows = sortedInvoices.flatMap((row) => row.members ?? [row]);
+    if (!rows.length) return toast.error('Nothing to export');
+    const label = isSalary ? 'Salary slips' : 'Invoices';
+    const period = isSearching ? `search "${searchTerm.trim()}"` : `${MONTHS[selectedMonth - 1]} ${selectedYear}`;
+    const filters = [
+      filterCategory !== 'all' && filterCategory,
+      filterSubcategory !== 'all' && filterSubcategory,
+      slipGroup && ({ permanent: 'Permanent teachers', percentage: 'Percentage teachers', oneToOne: "Permanent teachers' 1-to-1" } as Record<string, string>)[slipGroup],
+    ].filter((f): f is string => !!f);
+    const currencies = new Set(rows.map((r) => r.currency));
+    const amount = (r: Invoice) => Math.round((parseFloat(r.totalAmount) || 0) * 100) / 100;
+    const date = (d: Date | null) => (d ? new Date(d).toISOString().split('T')[0] : '');
+    downloadXlsx(`${label} ${isSearching ? 'search' : `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`}${juniorTab ? ' junior' : ''}`, {
+      sheetName: label,
+      title: [
+        `${label} - ${period}${juniorView ? ' (Junior Campus)' : ''}`,
+        filters.length ? `Filtered: ${filters.join(', ')}` : '',
+      ].filter(Boolean),
+      headers: [
+        'Invoice number', ...(isSalary ? [] : ['Family invoice']), 'Type', 'Name', 'Email',
+        ...(isSalary ? ['Payment type'] : ['Category', 'Sub-category']),
+        'Month', 'Year', 'Currency', 'Amount', 'Items', 'Emailed on',
+      ],
+      rows: rows.map((r) => [
+        r.invoiceNumber,
+        ...(isSalary ? [] : [r.familyInvoiceNumber ?? '']),
+        r.type === 'teacher_1to1' ? '1-to-1 slip' : r.type,
+        `${r.recipient.firstName} ${r.recipient.lastName}`.trim(),
+        r.recipient.email,
+        ...(isSalary ? [r.recipient.teacherPaymentType ?? ''] : [r.recipient.studentCategory ?? '', r.recipient.studentSubcategory ?? '']),
+        MONTHS[r.month - 1], r.year, r.currency, amount(r),
+        (r.lineItems ?? []).map((item) => item.description).join('; '),
+        date(r.emailedAt),
+      ]),
+      // A total only makes sense in one currency
+      totals: currencies.size === 1
+        ? [`Total (${rows.length})`, ...Array(isSalary ? 7 : 9).fill(null), rows.reduce((sum, r) => sum + amount(r), 0), null, null]
+        : undefined,
+    });
+  };
+
   // Teachers only have salary slips (old /invoices links land there)
   if (!isSalary && user?.role === 'teacher') return <Navigate to="/salary-slips" replace />;
 
@@ -774,6 +819,17 @@ export default function Invoices({ kind }: { kind: 'student' | 'teacher' }) {
           )}
         </div>
       </div>
+
+      {isAdmin && sortedInvoices.length > 0 && (
+        <div className="flex justify-end mb-3">
+          <button
+            onClick={exportExcel}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+          >
+            <ArrowDownTrayIcon className="h-5 w-5" /> Export to Excel
+          </button>
+        </div>
+      )}
 
       {/* Invoices List */}
       {loading ? (
