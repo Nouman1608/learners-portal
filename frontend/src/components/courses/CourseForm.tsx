@@ -40,6 +40,8 @@ interface CourseFormProps {
   course: Course | null;
   onClose: () => void;
   onSuccess: () => void;
+  /** New course: start with this teacher already chosen */
+  teacherId?: string;
 }
 
 const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -56,7 +58,7 @@ interface TimeslotFormData {
   endDate?: string;
 }
 
-export default function CourseForm({ course, onClose, onSuccess }: CourseFormProps) {
+export default function CourseForm({ course, onClose, onSuccess, teacherId: initialTeacherId }: CourseFormProps) {
   const isEditing = !!course;
   const [teachers, setTeachers] = useState<any[]>([]);
   const [rooms, setRooms] = useState<any[]>([]);
@@ -93,7 +95,7 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
           description: '',
           duration: 1,
           whatsappGroupLink: '',
-          teacherId: '',
+          teacherId: initialTeacherId || '',
           isActive: true,
         },
   });
@@ -119,7 +121,7 @@ export default function CourseForm({ course, onClose, onSuccess }: CourseFormPro
 
   // Junior portal: every teacher of this grade/class (the single "Assign Teacher" pick elsewhere).
   const [teacherIds, setTeacherIds] = useState<string[]>(
-    () => (course?.teachers ?? []).map((t) => t.teacherId)
+    () => (course ? (course.teachers ?? []).map((t) => t.teacherId) : initialTeacherId ? [initialTeacherId] : [])
   );
 
   useEffect(() => {

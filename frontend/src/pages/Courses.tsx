@@ -9,6 +9,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import EmptyState from '../components/common/EmptyState';
 import TimeslotManager from '../components/courses/TimeslotManager';
 import CourseActionsModal from '../components/courses/CourseActionsModal';
+import CourseStudentsModal from '../components/courses/CourseStudentsModal';
 import { useSortableData } from '../hooks/useSortableData';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
@@ -29,6 +30,8 @@ export default function Courses() {
   const [showTimeslotManager, setShowTimeslotManager] = useState(false);
   const [timeslotCourseId, setTimeslotCourseId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [newCourseTeacher, setNewCourseTeacher] = useState<string | undefined>(undefined); // 'Add another course' for this teacher
+  const [studentsOf, setStudentsOf] = useState<{ title: string; courseIds: string[] } | null>(null); // whose students are shown
   const [expandedTeachers, setExpandedTeachers] = useState<Set<string>>(new Set()); // teachers whose courses are open
   const [showActionsModal, setShowActionsModal] = useState(false);
   const [actionsCourse, setActionsCourse] = useState<Course | null>(null);
@@ -530,13 +533,31 @@ export default function Courses() {
                       )}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900" title={`Students across this teacher's active ${terms.coursesLc} (a student in two of them counts twice)`}>
-                      {group.studentTotal}
+                      <button
+                        type="button"
+                        onClick={() => setStudentsOf({ title: group.name, courseIds: group.courses.filter((c) => c.isActive).map((c) => c.id) })}
+                        className="text-indigo-700 hover:text-indigo-900 hover:underline font-medium"
+                      >
+                        {group.studentTotal}
+                      </button>
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">{statusChips(group)}</td>
                   </tr>
                   {open && (
                     <tr className="bg-gray-50/60">
                       <td colSpan={isAdmin ? 5 : 4} className="px-6 py-3">
+                        {canManageCourses && group.id !== 'none' && (
+                          <div className="mb-2 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => { setSelectedCourse(null); setNewCourseTeacher(group.id); setShowForm(true); }}
+                              className="inline-flex items-center px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                            >
+                              <PlusIcon className="h-4 w-4 mr-1" />
+                              Add another {terms.courseLc}
+                            </button>
+                          </div>
+                        )}
                         <table className="min-w-full divide-y divide-gray-200 bg-white rounded-lg border border-gray-200">
                           <thead className="bg-gray-50">
                             <tr>
@@ -605,7 +626,13 @@ export default function Courses() {
                       )}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
-                      {course.studentCount || 0}
+                      <button
+                        type="button"
+                        onClick={() => setStudentsOf({ title: displayTitle(course.title), courseIds: [course.id] })}
+                        className="text-indigo-700 hover:text-indigo-900 hover:underline font-medium"
+                      >
+                        {course.studentCount || 0}
+                      </button>
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
                       {course.teacherCount || 0}
@@ -702,6 +729,18 @@ export default function Courses() {
                 </div>
                 {open && (
                   <div>
+                    {canManageCourses && group.id !== 'none' && (
+                      <div className="px-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedCourse(null); setNewCourseTeacher(group.id); setShowForm(true); }}
+                          className="mb-2 w-full inline-flex items-center justify-center px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                          <PlusIcon className="h-4 w-4 mr-1" />
+                          Add another {terms.courseLc}
+                        </button>
+                      </div>
+                    )}
                     {group.courses.map((course) => (
               <div key={course.id} className="p-4 border-b border-gray-200">
                 <div className="flex gap-3 items-start mb-2">
@@ -746,9 +785,13 @@ export default function Courses() {
                   </div>
                   <div>
                     <span className="text-gray-500">Students:</span>
-                    <span className="ml-1 text-gray-900">
+                    <button
+                      type="button"
+                      onClick={() => setStudentsOf({ title: displayTitle(course.title), courseIds: [course.id] })}
+                      className="ml-1 text-indigo-700 hover:underline font-medium"
+                    >
                       {course.studentCount || 0}
-                    </span>
+                    </button>
                   </div>
                   <div>
                     <span className="text-gray-500">Teachers:</span>
@@ -837,11 +880,24 @@ export default function Courses() {
       {showForm && (
         <CourseForm
           course={selectedCourse}
+          teacherId={newCourseTeacher}
           onClose={() => {
             setShowForm(false);
             setSelectedCourse(null);
+            setNewCourseTeacher(undefined);
           }}
           onSuccess={loadCourses}
+        />
+      )}
+
+      {/* Students of a teacher / course */}
+      {studentsOf && (
+        <CourseStudentsModal
+          title={studentsOf.title}
+          courseIds={studentsOf.courseIds}
+          canDrop={isAdmin}
+          onClose={() => setStudentsOf(null)}
+          onChanged={loadCourses}
         />
       )}
 

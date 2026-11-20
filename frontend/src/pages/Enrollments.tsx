@@ -714,17 +714,7 @@ export default function Enrollments() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
-                            {isAdmin && (
-                      <button
-                        type="button"
-                        onClick={() => setEnrollForStudent(group.id)}
-                        className="mb-2 w-full inline-flex items-center justify-center px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                      >
-                        <PlusIcon className="h-4 w-4 mr-1" />
-                        Enrol in another subject
-                      </button>
-                    )}
-                    {group.enrollments.map((enrollment) => {
+                            {group.enrollments.map((enrollment) => {
                               const isOneToOne = enrollment.classType === '1-to-1';
                               const displayFee = isOneToOne ? enrollment.perSessionFee : enrollment.customFeePerMonth;
                               const isCustomFee = !!(enrollment.customFeePerMonth || enrollment.perSessionFee);
@@ -966,6 +956,16 @@ export default function Enrollments() {
                         </div>
                       )}
                     </div>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setEnrollForStudent(group.id)}
+                        className="mb-2 w-full inline-flex items-center justify-center px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        <PlusIcon className="h-4 w-4 mr-1" />
+                        Enrol in another subject
+                      </button>
+                    )}
                     {group.enrollments.map((enrollment) => {
               const isOneToOne = enrollment.classType === '1-to-1';
               const displayFee = isOneToOne ? enrollment.perSessionFee : enrollment.customFeePerMonth;
