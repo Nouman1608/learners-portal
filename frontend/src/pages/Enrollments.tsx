@@ -31,6 +31,7 @@ export default function Enrollments() {
   // Students whose details are open (a student opened from the dashboard link starts open)
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(() => new Set(searchParams.get('studentId') ? [searchParams.get('studentId')!] : []));
   const [showForm, setShowForm] = useState(false);
+  const [enrollForStudent, setEnrollForStudent] = useState<string | null>(null); // enrol this existing student in another subject
   const [enrollmentToDrop, setEnrollmentToDrop] = useState<Enrollment | null>(null);
   const [enrollmentToEditFee, setEnrollmentToEditFee] = useState<Enrollment | null>(null);
   const [editingEnrolledAt, setEditingEnrolledAt] = useState<string | null>(null); // enrollment ID being edited
@@ -689,6 +690,18 @@ export default function Enrollments() {
                         </div>
                       )}
                         </div>
+                        {isAdmin && (
+                          <div className="mb-2 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => setEnrollForStudent(group.id)}
+                              className="inline-flex items-center px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                            >
+                              <PlusIcon className="h-4 w-4 mr-1" />
+                              Enrol in another subject
+                            </button>
+                          </div>
+                        )}
                         <table className="min-w-full divide-y divide-gray-200 bg-white rounded-lg border border-gray-200">
                           <thead className="bg-gray-50">
                             <tr>
@@ -701,7 +714,17 @@ export default function Enrollments() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
-                            {group.enrollments.map((enrollment) => {
+                            {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setEnrollForStudent(group.id)}
+                        className="mb-2 w-full inline-flex items-center justify-center px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        <PlusIcon className="h-4 w-4 mr-1" />
+                        Enrol in another subject
+                      </button>
+                    )}
+                    {group.enrollments.map((enrollment) => {
                               const isOneToOne = enrollment.classType === '1-to-1';
                               const displayFee = isOneToOne ? enrollment.perSessionFee : enrollment.customFeePerMonth;
                               const isCustomFee = !!(enrollment.customFeePerMonth || enrollment.perSessionFee);
@@ -1100,9 +1123,10 @@ export default function Enrollments() {
       )}
 
       {/* Enrollment Form Modal */}
-      {showForm && (
+      {(showForm || enrollForStudent) && (
         <EnrollmentForm
-          onClose={() => setShowForm(false)}
+          studentId={enrollForStudent || undefined}
+          onClose={() => { setShowForm(false); setEnrollForStudent(null); }}
           onSuccess={loadEnrollments}
         />
       )}

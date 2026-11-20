@@ -45,9 +45,11 @@ type EnrollmentFormData = z.infer<typeof enrollmentSchema>;
 interface EnrollmentFormProps {
   onClose: () => void;
   onSuccess: () => void;
+  /** Start with this student already chosen (enrolling an existing student in another subject) */
+  studentId?: string;
 }
 
-export default function EnrollmentForm({ onClose, onSuccess }: EnrollmentFormProps) {
+export default function EnrollmentForm({ onClose, onSuccess, studentId: initialStudentId }: EnrollmentFormProps) {
   const [students, setStudents] = useState<User[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,7 +64,7 @@ export default function EnrollmentForm({ onClose, onSuccess }: EnrollmentFormPro
   } = useForm<EnrollmentFormData>({
     resolver: zodResolver(enrollmentSchema),
     defaultValues: {
-      studentId: '',
+      studentId: initialStudentId || '',
       courseId: '',
       enrolledAt: new Date().toISOString().split('T')[0],
       attendanceMode: 'local',

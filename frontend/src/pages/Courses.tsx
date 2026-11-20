@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { coursesApi, Course } from '../api/courses.api';
 import { teacherCourseTitle } from '../utils/course';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { PlusIcon, PencilIcon, ClockIcon, MagnifyingGlassIcon, XMarkIcon, EllipsisVerticalIcon, XCircleIcon, SignalIcon, AcademicCapIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, ClockIcon, MagnifyingGlassIcon, XMarkIcon, EllipsisVerticalIcon, XCircleIcon, SignalIcon, AcademicCapIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import CourseForm from '../components/courses/CourseForm';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import EmptyState from '../components/common/EmptyState';
@@ -29,6 +29,7 @@ export default function Courses() {
   const [showTimeslotManager, setShowTimeslotManager] = useState(false);
   const [timeslotCourseId, setTimeslotCourseId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [expandedTeachers, setExpandedTeachers] = useState<Set<string>>(new Set()); // teachers whose courses are open
   const [showActionsModal, setShowActionsModal] = useState(false);
   const [actionsCourse, setActionsCourse] = useState<Course | null>(null);
 
@@ -245,7 +246,61 @@ export default function Courses() {
     return matchesSearch && matchesFilter && matchesCategory && matchesLevel && matchesClassType && matchesTeacher && matchesRole;
   });
 
-  const { items: sortedCourses, requestSort, getSortIndicator } = useSortableData(filteredCourses);
+  // One line per teacher: their courses (as filtered), how many are running, and their students.
+  // A course with two teachers is listed under each; a course with none goes under "No teacher".
+  // Active / total counts use every course so filters don't change them.
+  interface TeacherGroup { id: string; name: string; courses: Course[]; activeCount: number; totalCount: number; studentTotal: number }
+  const teachersOf = (course: Course) => {
+    const list = (course.teachers || []).map((t) => ({ id: t.teacher.id, name: `${t.teacher.firstName} ${t.teacher.lastName}`.trim() }));
+    return list.length ? list : [{ id: 'none', name: 'No teacher' }];
+  };
+  const teacherTotals = new Map<string, { active: number; total: number }>();
+  for (const course of courses) {
+    for (const t of teachersOf(course)) {
+      const totals = teacherTotals.get(t.id) || { active: 0, total: 0 };
+      totals.total += 1;
+      if (course.isActive) totals.active += 1;
+      teacherTotals.set(t.id, totals);
+    }
+  }
+  const groupMap = new Map<string, TeacherGroup>();
+  for (const course of filteredCourses) {
+    for (const t of teachersOf(course)) {
+      let group = groupMap.get(t.id);
+      if (!group) {
+        const totals = teacherTotals.get(t.id) || { active: 0, total: 0 };
+        group = { id: t.id, name: t.name, courses: [], activeCount: totals.active, totalCount: totals.total, studentTotal: 0 };
+        groupMap.set(t.id, group);
+      }
+      group.courses.push(course);
+      if (course.isActive) group.studentTotal += course.studentCount || 0;
+    }
+  }
+  const { items: sortedGroups, requestSort, getSortIndicator } = useSortableData<TeacherGroup>(Array.from(groupMap.values()), { key: 'name', direction: 'asc' });
+
+  const toggleTeacher = (id: string) => setExpandedTeachers((open) => {
+    const next = new Set(open);
+    if (!next.delete(id)) next.add(id);
+    return next;
+  });
+  const handleSelectGroup = (group: TeacherGroup) => {
+    const next = new Set(selectedIds);
+    const all = group.courses.every((c) => next.has(c.id));
+    for (const c of group.courses) { if (all) next.delete(c.id); else next.add(c.id); }
+    setSelectedIds(next);
+  };
+  const statusChips = (group: TeacherGroup) => {
+    const active = group.courses.filter((c) => c.isActive).length;
+    const ended = group.courses.filter((c) => !c.isActive && c.endDate).length;
+    const inactive = group.courses.length - active - ended;
+    return (
+      <div className="flex flex-wrap gap-1">
+        {active > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-800">{active} active</span>}
+        {ended > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">{ended} ended</span>}
+        {inactive > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-800">{inactive} inactive</span>}
+      </div>
+    );
+  };
 
   if (loading) {
     return <LoadingSpinner message={`Loading ${terms.coursesLc}...`} className="py-12" />;
@@ -378,6 +433,13 @@ export default function Courses() {
           </select>
         )}
 
+        <button
+          onClick={() => setExpandedTeachers((open) => (open.size ? new Set() : new Set(sortedGroups.map((g) => g.id))))}
+          className="ml-auto px-3 py-1.5 rounded-md text-sm text-indigo-700 hover:bg-indigo-50 whitespace-nowrap"
+        >
+          {expandedTeachers.size ? 'Collapse all' : 'Expand all'}
+        </button>
+
         {(searchTerm || filterActive !== 'all' || filterCategory !== 'all' || filterLevel !== 'all' || filterClassType !== 'all' || filterTeacher !== 'all') && (
           <button
             onClick={() => {
@@ -403,7 +465,7 @@ export default function Courses() {
         />
       ) : (
         <div className="bg-white shadow-card rounded-xl overflow-hidden border border-gray-200">
-          {/* Desktop Table */}
+          {/* Desktop Table: one line per teacher; click the name to open their courses */}
           <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50 sticky top-0 z-10">
@@ -418,34 +480,79 @@ export default function Courses() {
                       />
                     </th>
                   )}
-                  <th onClick={() => requestSort('title')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                    {terms.course} {getSortIndicator('title')}
+                  <th onClick={() => requestSort('name')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                    Teacher {getSortIndicator('name')}
                   </th>
-                  <th onClick={() => requestSort('duration')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                    Duration {getSortIndicator('duration')}
+                  <th onClick={() => requestSort('activeCount')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                    {terms.courses} {getSortIndicator('activeCount')}
+                  </th>
+                  <th onClick={() => requestSort('studentTotal')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                    Students {getSortIndicator('studentTotal')}
                   </th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    WhatsApp Group
+                    Status
                   </th>
-                  <th onClick={() => requestSort('studentCount')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                    Students {getSortIndicator('studentCount')}
-                  </th>
-                  <th onClick={() => requestSort('teacherCount')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                    Teachers {getSortIndicator('teacherCount')}
-                  </th>
-                  <th onClick={() => requestSort('isActive')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                    Status {getSortIndicator('isActive')}
-                  </th>
-                  {canManageCourses && (
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  )}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200 animate-fade-in">
-                {sortedCourses.map((course) => (
-                  <tr key={course.id} className={`hover:bg-indigo-50/30 transition-colors ${selectedIds.has(course.id) ? 'bg-indigo-50/50' : ''}`}>
+                {sortedGroups.map((group) => {
+                  const open = expandedTeachers.has(group.id);
+                  const allSelected = group.courses.every((c) => selectedIds.has(c.id));
+                  return (
+                  <Fragment key={group.id}>
+                  <tr className={`hover:bg-indigo-50/30 transition-colors ${allSelected && isAdmin ? 'bg-indigo-50/50' : ''}`}>
+                    {isAdmin && (
+                      <td className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          checked={allSelected}
+                          onChange={() => handleSelectGroup(group)}
+                          title={`Select all of this teacher's ${terms.coursesLc}`}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                      </td>
+                    )}
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleTeacher(group.id)}
+                        aria-expanded={open}
+                        className="inline-flex items-center gap-1 text-sm font-medium text-indigo-700 hover:text-indigo-900 hover:underline text-left"
+                      >
+                        <ChevronRightIcon className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+                        {group.name}
+                      </button>
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+                      <span className="font-semibold">{group.activeCount}</span>
+                      {group.totalCount > group.activeCount && (
+                        <span className="text-xs text-gray-500" title={`Active ${terms.coursesLc} out of all`}> of {group.totalCount}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900" title={`Students across this teacher's active ${terms.coursesLc} (a student in two of them counts twice)`}>
+                      {group.studentTotal}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">{statusChips(group)}</td>
+                  </tr>
+                  {open && (
+                    <tr className="bg-gray-50/60">
+                      <td colSpan={isAdmin ? 5 : 4} className="px-6 py-3">
+                        <table className="min-w-full divide-y divide-gray-200 bg-white rounded-lg border border-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              {isAdmin && <th className="px-3 py-2 w-12" />}
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{terms.course}</th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">WhatsApp Group</th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Students</th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teachers</th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                              {canManageCourses && <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {group.courses.map((course) => (
+                              <tr key={course.id} className={selectedIds.has(course.id) ? 'bg-indigo-50/50' : ''}>
                     {isAdmin && (
                       <td className="px-3 py-2">
                         <input
@@ -554,15 +661,48 @@ export default function Courses() {
                         </div>
                       </td>
                     )}
-                  </tr>
-                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
-          {/* Mobile Cards */}
+          {/* Mobile Cards: one per teacher; tap the name to open their courses */}
           <div className="md:hidden">
-            {sortedCourses.map((course) => (
+            {sortedGroups.map((group) => {
+              const open = expandedTeachers.has(group.id);
+              return (
+              <div key={group.id} className="border-b border-gray-200">
+                <div className="p-3 flex items-center gap-3">
+                  {isAdmin && (
+                    <input
+                      type="checkbox"
+                      checked={group.courses.every((c) => selectedIds.has(c.id))}
+                      onChange={() => handleSelectGroup(group)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-indigo-500"
+                    />
+                  )}
+                  <button type="button" onClick={() => toggleTeacher(group.id)} aria-expanded={open} className="flex-1 flex items-center justify-between gap-2 text-left">
+                    <span className="inline-flex items-center gap-1 text-sm font-medium text-indigo-700">
+                      <ChevronRightIcon className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+                      {group.name}
+                    </span>
+                    <span className="text-xs text-gray-500 whitespace-nowrap">
+                      <span className="text-sm font-semibold text-gray-900">{group.activeCount}</span>{group.totalCount > group.activeCount ? ` of ${group.totalCount}` : ''} {group.totalCount !== 1 ? terms.coursesLc : terms.courseLc}
+                    </span>
+                  </button>
+                </div>
+                {open && (
+                  <div>
+                    {group.courses.map((course) => (
               <div key={course.id} className="p-4 border-b border-gray-200">
                 <div className="flex gap-3 items-start mb-2">
                   {isAdmin && (
@@ -680,10 +820,15 @@ export default function Courses() {
                   </div>
                 )}
               </div>
-            ))}
+                    ))}
+                  </div>
+                )}
+              </div>
+              );
+            })}
           </div>
           <div className="px-4 py-2 text-xs text-gray-500 bg-gray-50/50 border-t border-gray-100">
-            Showing {sortedCourses.length} result{sortedCourses.length !== 1 ? 's' : ''}
+            Showing {sortedGroups.length} teacher{sortedGroups.length !== 1 ? 's' : ''} ({filteredCourses.length} {filteredCourses.length !== 1 ? terms.coursesLc : terms.courseLc})
           </div>
         </div>
       )}
