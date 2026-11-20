@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { enrollmentsApi, Enrollment, CurrencyCode } from '../api/enrollments.api';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { PlusIcon, TrashIcon, MagnifyingGlassIcon, XMarkIcon, PencilIcon, ClipboardDocumentListIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, TrashIcon, MagnifyingGlassIcon, XMarkIcon, PencilIcon, ClipboardDocumentListIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import EnrollmentForm from '../components/enrollments/EnrollmentForm';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import EmptyState from '../components/common/EmptyState';
@@ -28,6 +28,8 @@ export default function Enrollments() {
   // ?studentId= comes from the dashboard's fee overview (click a student's name there)
   const [filterStudent, setFilterStudent] = useState<string>(searchParams.get('studentId') || '');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Students whose details are open (a student opened from the dashboard link starts open)
+  const [expandedStudents, setExpandedStudents] = useState<Set<string>>(() => new Set(searchParams.get('studentId') ? [searchParams.get('studentId')!] : []));
   const [showForm, setShowForm] = useState(false);
   const [enrollmentToDrop, setEnrollmentToDrop] = useState<Enrollment | null>(null);
   const [enrollmentToEditFee, setEnrollmentToEditFee] = useState<Enrollment | null>(null);
@@ -63,13 +65,15 @@ export default function Enrollments() {
     return `${symbol} ${numAmount.toLocaleString()}`;
   };
 
+  // Everything is loaded once (all statuses) so each child's subject count is right on every tab;
+  // the All / Active / Completed / Dropped buttons filter on screen
   useEffect(() => {
     loadEnrollments();
-  }, [filterStatus]);
+  }, []);
 
   useEffect(() => {
     // Filter enrollments based on search query and filters
-    let filtered = enrollments;
+    let filtered = filterStatus === 'all' ? enrollments : enrollments.filter((e) => e.status === filterStatus);
 
     // Apply search filter
     if (searchQuery.trim()) {
@@ -100,13 +104,12 @@ export default function Enrollments() {
     }
 
     setFilteredEnrollments(filtered);
-  }, [searchQuery, filterCourse, filterTeacher, filterStudent, enrollments]);
+  }, [searchQuery, filterCourse, filterTeacher, filterStudent, filterStatus, enrollments]);
 
   const loadEnrollments = async () => {
     try {
       setLoading(true);
-      const filters = filterStatus === 'all' ? {} : { status: filterStatus };
-      const data = await enrollmentsApi.getEnrollments(filters);
+      const data = await enrollmentsApi.getEnrollments({});
       setEnrollments(data);
       setSelectedIds(new Set()); // Clear selection on reload
     } catch (error: any) {
@@ -321,7 +324,47 @@ export default function Enrollments() {
     }
   };
 
-  const { items: sortedEnrollments, requestSort, getSortIndicator } = useSortableData(filteredEnrollments);
+  // One line per child: their enrolments (as filtered) plus how many subjects they are taking now
+  // (active enrolments, counted over everything loaded so filters don't change it)
+  interface StudentGroup { id: string; student: Enrollment['student']; enrollments: Enrollment[]; activeCount: number; totalCount: number }
+  const activeByStudent = new Map<string, number>();
+  const totalByStudent = new Map<string, number>();
+  for (const e of enrollments) {
+    totalByStudent.set(e.student.id, (totalByStudent.get(e.student.id) || 0) + 1);
+    if (e.status === 'active') activeByStudent.set(e.student.id, (activeByStudent.get(e.student.id) || 0) + 1);
+  }
+  const groupMap = new Map<string, StudentGroup>();
+  for (const e of filteredEnrollments) {
+    let group = groupMap.get(e.student.id);
+    if (!group) {
+      group = { id: e.student.id, student: e.student, enrollments: [], activeCount: activeByStudent.get(e.student.id) || 0, totalCount: totalByStudent.get(e.student.id) || 0 };
+      groupMap.set(e.student.id, group);
+    }
+    group.enrollments.push(e);
+  }
+  const { items: sortedGroups, requestSort, getSortIndicator } = useSortableData<StudentGroup>(Array.from(groupMap.values()), { key: 'student.firstName', direction: 'asc' });
+
+  const toggleStudent = (id: string) => setExpandedStudents((open) => {
+    const next = new Set(open);
+    if (!next.delete(id)) next.add(id);
+    return next;
+  });
+  const handleSelectGroup = (group: StudentGroup) => {
+    const next = new Set(selectedIds);
+    const all = group.enrollments.every((e) => next.has(e.id));
+    for (const e of group.enrollments) { if (all) next.delete(e.id); else next.add(e.id); }
+    setSelectedIds(next);
+  };
+  const statusChips = (group: StudentGroup) => {
+    const count = (status: string) => group.enrollments.filter((e) => e.status === status).length;
+    return (
+      <div className="flex flex-wrap gap-1">
+        {count('active') > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-800">{count('active')} active</span>}
+        {count('completed') > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">{count('completed')} completed</span>}
+        {count('dropped') > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-800">{count('dropped')} dropped</span>}
+      </div>
+    );
+  };
 
   if (loading) {
     return <LoadingSpinner message="Loading enrollments..." className="py-12" />;
@@ -487,7 +530,7 @@ export default function Enrollments() {
       </div>
 
       {/* Status Filters */}
-      <div className="mb-4 flex gap-2 overflow-x-auto">
+      <div className="mb-4 flex gap-2 overflow-x-auto items-center">
         <button
           onClick={() => setFilterStatus('all')}
           className={`px-3 py-1.5 rounded-md transition-colors whitespace-nowrap text-sm ${
@@ -528,6 +571,12 @@ export default function Enrollments() {
         >
           Dropped
         </button>
+        <button
+          onClick={() => setExpandedStudents((open) => (open.size ? new Set() : new Set(filteredEnrollments.map((e) => e.student.id))))}
+          className="ml-auto px-3 py-1.5 rounded-md text-sm text-indigo-700 hover:bg-indigo-50 whitespace-nowrap"
+        >
+          {expandedStudents.size ? 'Collapse all' : 'Expand all'}
+        </button>
       </div>
 
       {/* Enrollments List */}
@@ -538,7 +587,7 @@ export default function Enrollments() {
         />
       ) : (
         <div className="bg-white shadow-card rounded-xl overflow-hidden border border-gray-200">
-          {/* Desktop Table */}
+          {/* Desktop Table: one line per child; click the name to open the details */}
           <div className="hidden md:block overflow-x-auto max-h-[70vh] overflow-y-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50 sticky top-0 z-10">
@@ -556,35 +605,108 @@ export default function Enrollments() {
                   <th onClick={() => requestSort('student.firstName')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
                     Student {getSortIndicator('student.firstName')}
                   </th>
-                  <th onClick={() => requestSort('course.title')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                    {terms.course} {getSortIndicator('course.title')}
+                  <th onClick={() => requestSort('activeCount')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
+                    Subjects {getSortIndicator('activeCount')}
                   </th>
-                  {!isTeacher && (
-                    <th onClick={() => requestSort('customFeePerMonth')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                      Fee/Month {getSortIndicator('customFeePerMonth')}
-                    </th>
-                  )}
-                  <th onClick={() => requestSort('attendanceMode')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                    Mode {getSortIndicator('attendanceMode')}
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
                   </th>
-                  <th onClick={() => requestSort('status')} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100">
-                    Status {getSortIndicator('status')}
-                  </th>
-                  {isAdmin && (
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  )}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200 animate-fade-in">
-                {sortedEnrollments.map((enrollment) => {
-                  const isOneToOne = enrollment.classType === '1-to-1';
-                  const displayFee = isOneToOne ? enrollment.perSessionFee : enrollment.customFeePerMonth;
-                  const isCustomFee = !!(enrollment.customFeePerMonth || enrollment.perSessionFee);
-
+                {sortedGroups.map((group) => {
+                  const open = expandedStudents.has(group.id);
+                  const allSelected = group.enrollments.every((e) => selectedIds.has(e.id));
                   return (
-                  <tr key={enrollment.id} className={`hover:bg-indigo-50/30 transition-colors ${selectedIds.has(enrollment.id) ? 'bg-indigo-50/50' : ''}`}>
+                  <Fragment key={group.id}>
+                  <tr className={`hover:bg-indigo-50/30 transition-colors ${allSelected && isAdmin ? 'bg-indigo-50/50' : ''}`}>
+                    {isAdmin && (
+                      <td className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          checked={allSelected}
+                          onChange={() => handleSelectGroup(group)}
+                          title="Select all of this student's enrollments"
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                      </td>
+                    )}
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleStudent(group.id)}
+                        aria-expanded={open}
+                        className="inline-flex items-center gap-1 text-sm font-medium text-indigo-700 hover:text-indigo-900 hover:underline text-left"
+                      >
+                        <ChevronRightIcon className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+                        {group.student.firstName} {group.student.lastName}
+                      </button>
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+                      <span className="font-semibold">{group.activeCount}</span>
+                      {group.totalCount > group.activeCount && (
+                        <span className="text-xs text-gray-500" title="Active subjects out of all enrollments"> of {group.totalCount}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">{statusChips(group)}</td>
+                  </tr>
+                  {open && (
+                    <tr className="bg-gray-50/60">
+                      <td colSpan={isAdmin ? 4 : 3} className="px-6 py-3">
+                        <div className="mb-3">
+                      <div className="text-xs text-gray-500">
+                        {group.student.email}
+                      </div>
+                      {group.student.phone && (
+                        <div className="text-xs text-gray-500">
+                          {isAdmin ? (
+                            <a
+                              href={`https://wa.me/${formatWhatsAppNumber(group.student.phone)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-green-600 hover:text-green-800 hover:underline"
+                              title="Open in WhatsApp"
+                            >
+                              {group.student.phone}
+                            </a>
+                          ) : (
+                            group.student.phone
+                          )}
+                        </div>
+                      )}
+                      {group.student.parentPhone && isAdmin && (
+                        <div className="text-xs text-gray-500">
+                          Parent:{' '}
+                          <a
+                            href={`https://wa.me/${formatWhatsAppNumber(group.student.parentPhone)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-green-600 hover:text-green-800 hover:underline"
+                            title="Open in WhatsApp"
+                          >
+                            {group.student.parentPhone}
+                          </a>
+                        </div>
+                      )}
+                        </div>
+                        <table className="min-w-full divide-y divide-gray-200 bg-white rounded-lg border border-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              {isAdmin && <th className="px-3 py-2 w-12" />}
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{terms.course}</th>
+                              {!isTeacher && <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fee/Month</th>}
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mode</th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                              {isAdmin && <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {group.enrollments.map((enrollment) => {
+                              const isOneToOne = enrollment.classType === '1-to-1';
+                              const displayFee = isOneToOne ? enrollment.perSessionFee : enrollment.customFeePerMonth;
+                              const isCustomFee = !!(enrollment.customFeePerMonth || enrollment.perSessionFee);
+                              return (
+                              <tr key={enrollment.id} className={selectedIds.has(enrollment.id) ? 'bg-indigo-50/50' : ''}>
                     {isAdmin && (
                       <td className="px-3 py-2">
                         <input
@@ -595,45 +717,6 @@ export default function Enrollments() {
                         />
                       </td>
                     )}
-                    <td className="px-3 py-2">
-                      <div className="text-sm font-medium text-gray-900">
-                        {enrollment.student.firstName} {enrollment.student.lastName}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {enrollment.student.email}
-                      </div>
-                      {enrollment.student.phone && (
-                        <div className="text-xs text-gray-500">
-                          {isAdmin ? (
-                            <a
-                              href={`https://wa.me/${formatWhatsAppNumber(enrollment.student.phone)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-green-600 hover:text-green-800 hover:underline"
-                              title="Open in WhatsApp"
-                            >
-                              {enrollment.student.phone}
-                            </a>
-                          ) : (
-                            enrollment.student.phone
-                          )}
-                        </div>
-                      )}
-                      {enrollment.student.parentPhone && isAdmin && (
-                        <div className="text-xs text-gray-500">
-                          Parent:{' '}
-                          <a
-                            href={`https://wa.me/${formatWhatsAppNumber(enrollment.student.parentPhone)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-green-600 hover:text-green-800 hover:underline"
-                            title="Open in WhatsApp"
-                          >
-                            {enrollment.student.parentPhone}
-                          </a>
-                        </div>
-                      )}
-                    </td>
                     <td className="px-3 py-2">
                       <div className="text-sm text-gray-900">
                         {enrollment.course.title}
@@ -782,16 +865,85 @@ export default function Enrollments() {
                         </div>
                       </td>
                     )}
-                  </tr>
+                              </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                   );
                 })}
               </tbody>
             </table>
           </div>
 
-          {/* Mobile Cards */}
+          {/* Mobile Cards: one per child; tap the name to open the details */}
           <div className="md:hidden">
-            {filteredEnrollments.map((enrollment) => {
+            {sortedGroups.map((group) => {
+              const open = expandedStudents.has(group.id);
+              return (
+              <div key={group.id} className="border-b border-gray-200">
+                <div className="p-3 flex items-center gap-3">
+                  {isAdmin && (
+                    <input
+                      type="checkbox"
+                      checked={group.enrollments.every((e) => selectedIds.has(e.id))}
+                      onChange={() => handleSelectGroup(group)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-indigo-500"
+                    />
+                  )}
+                  <button type="button" onClick={() => toggleStudent(group.id)} aria-expanded={open} className="flex-1 flex items-center justify-between gap-2 text-left">
+                    <span className="inline-flex items-center gap-1 text-sm font-medium text-indigo-700">
+                      <ChevronRightIcon className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+                      {group.student.firstName} {group.student.lastName}
+                    </span>
+                    <span className="text-xs text-gray-500 whitespace-nowrap">
+                      <span className="text-sm font-semibold text-gray-900">{group.activeCount}</span>{group.totalCount > group.activeCount ? ` of ${group.totalCount}` : ''} subject{group.totalCount !== 1 ? 's' : ''}
+                    </span>
+                  </button>
+                </div>
+                {open && (
+                  <div className="px-3 pb-3">
+                    <div className="mb-2 pl-6">
+                      <div className="text-xs text-gray-500">
+                        {group.student.email}
+                      </div>
+                      {group.student.phone && (
+                        <div className="text-xs text-gray-500">
+                          {isAdmin ? (
+                            <a
+                              href={`https://wa.me/${formatWhatsAppNumber(group.student.phone)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-green-600 hover:text-green-800 hover:underline"
+                              title="Open in WhatsApp"
+                            >
+                              {group.student.phone}
+                            </a>
+                          ) : (
+                            group.student.phone
+                          )}
+                        </div>
+                      )}
+                      {group.student.parentPhone && isAdmin && (
+                        <div className="text-xs text-gray-500">
+                          Parent:{' '}
+                          <a
+                            href={`https://wa.me/${formatWhatsAppNumber(group.student.parentPhone)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-green-600 hover:text-green-800 hover:underline"
+                            title="Open in WhatsApp"
+                          >
+                            {group.student.parentPhone}
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                    {group.enrollments.map((enrollment) => {
               const isOneToOne = enrollment.classType === '1-to-1';
               const displayFee = isOneToOne ? enrollment.perSessionFee : enrollment.customFeePerMonth;
               const isCustomFee = !!(enrollment.customFeePerMonth || enrollment.perSessionFee);
@@ -809,43 +961,7 @@ export default function Enrollments() {
                   )}
                   <div className="flex-1">
                     <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h3 className="text-sm font-medium text-gray-900">
-                          {enrollment.student.firstName} {enrollment.student.lastName}
-                        </h3>
-                        <p className="text-xs text-gray-500">{enrollment.student.email}</p>
-                        {enrollment.student.phone && (
-                          <p className="text-xs text-gray-500">
-                            {isAdmin ? (
-                              <a
-                                href={`https://wa.me/${formatWhatsAppNumber(enrollment.student.phone)}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-green-600 hover:text-green-800 hover:underline"
-                                title="Open in WhatsApp"
-                              >
-                                {enrollment.student.phone}
-                              </a>
-                            ) : (
-                              enrollment.student.phone
-                            )}
-                          </p>
-                        )}
-                        {enrollment.student.parentPhone && isAdmin && (
-                          <p className="text-xs text-gray-500">
-                            Parent:{' '}
-                            <a
-                              href={`https://wa.me/${formatWhatsAppNumber(enrollment.student.parentPhone)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-green-600 hover:text-green-800 hover:underline"
-                              title="Open in WhatsApp"
-                            >
-                              {enrollment.student.parentPhone}
-                            </a>
-                          </p>
-                        )}
-                      </div>
+                      <div className="text-sm font-medium text-gray-900">{enrollment.course.title}</div>
                       <span
                         className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
                           enrollment.status === 'active'
@@ -859,12 +975,6 @@ export default function Enrollments() {
                       </span>
                     </div>
                     <div className="mt-2 space-y-1 text-sm">
-                      <div>
-                        <span className="text-gray-500 text-xs">{terms.course}:</span>
-                        <span className="ml-1 text-gray-900">
-                          {enrollment.course.title}
-                        </span>
-                      </div>
                       {!isTeacher && (
                         <div className="flex items-center gap-2">
                           <div>
@@ -976,10 +1086,15 @@ export default function Enrollments() {
                 </div>
               </div>
               );
+                    })}
+                  </div>
+                )}
+              </div>
+              );
             })}
           </div>
           <div className="px-4 py-2 text-xs text-gray-500 bg-gray-50/50 border-t border-gray-100">
-            Showing {sortedEnrollments.length} result{sortedEnrollments.length !== 1 ? 's' : ''}
+            Showing {sortedGroups.length} student{sortedGroups.length !== 1 ? 's' : ''} ({filteredEnrollments.length} enrolment{filteredEnrollments.length !== 1 ? 's' : ''})
           </div>
         </div>
       )}
