@@ -11,8 +11,8 @@ export const authApi = {
     await apiClient.post('/auth/logout');
   },
 
-  getMe: async (): Promise<User> => {
-    const response = await apiClient.get<AuthResponse>('/auth/me');
+  getMe: async (options: { signal?: AbortSignal; timeout?: number } = {}): Promise<User> => {
+    const response = await apiClient.get<AuthResponse>('/auth/me', options);
     return response.data.user;
   },
 

@@ -11,16 +11,15 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [justLoggedIn, setJustLoggedIn] = useState(false);
   const { login, user } = useAuth();
   const navigate = useNavigate();
 
   // Navigate to dashboard after successful login and state update
   useEffect(() => {
-    if (user && justLoggedIn) {
-      navigate('/dashboard');
+    if (user) {
+      navigate('/dashboard', { replace: true });
     }
-  }, [user, justLoggedIn, navigate]);
+  }, [user, navigate]);
 
   const changeSchool = async () => {
     await setAuthToken(null);
@@ -30,17 +29,14 @@ const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setJustLoggedIn(false);
 
     try {
       await login({ username, password });
-      setJustLoggedIn(true);
       setLoading(false);
       // Navigation will happen in useEffect after user state updates
     } catch (error) {
       // Error handled by AuthContext (toast)
       setLoading(false);
-      setJustLoggedIn(false);
     }
   };
 
@@ -146,14 +142,6 @@ const Login: React.FC = () => {
           </p>
         )}
 
-        {/* Development Hint */}
-        {import.meta.env.DEV && (
-          <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-            <p className="text-xs text-yellow-800">
-              <strong>Dev Mode:</strong> Username: sudo | Password: Admin@123
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );

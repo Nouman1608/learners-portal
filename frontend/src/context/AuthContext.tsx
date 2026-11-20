@@ -1,9 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { User, LoginCredentials } from '../types';
 import authApi from '../api/auth.api';
 import { isSessionExpired } from '../api/client';
 import toast from 'react-hot-toast';
-import { setAuthToken } from '../native';
+import { getAuthToken, isNativeApp, setAuthToken } from '../native';
+import { startStartupSession } from './startupSession';
 
 interface AuthContextType {
   user: User | null;
@@ -32,27 +33,39 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [startupUnavailable, setStartupUnavailable] = useState(false);
+  const [startupChecking, setStartupChecking] = useState(false);
+  const retryStartup = useRef<() => void>(() => {});
 
-  // Check if user is already logged in on mount
+  // Only a confirmed 401 ends a saved session. Retry temporary startup failures.
   useEffect(() => {
-    const checkAuth = async () => {
-      // Skip if a login is in progress
-      if (isLoggingIn) return;
-
-      try {
-        const userData = await authApi.getMe();
+    if (isNativeApp && !getAuthToken()) {
+      setLoading(false);
+      return;
+    }
+    const startup = startStartupSession({
+      getUser: signal => authApi.getMe({ signal, timeout: 15000 }),
+      clearSession: () => setAuthToken(null),
+      onChecking: () => setStartupChecking(true),
+      onUnavailable: () => {
+        setStartupUnavailable(true);
+        setStartupChecking(false);
+      },
+      onAuthenticated: userData => {
         setUser(userData);
-      } catch (error) {
-        // User not authenticated
-        setUser(null);
-      } finally {
         setLoading(false);
-      }
+      },
+      onSignedOut: () => {
+        setUser(null);
+        setLoading(false);
+      },
+    });
+    retryStartup.current = () => void startup.retry();
+    return () => {
+      retryStartup.current = () => {};
+      startup.dispose();
     };
-
-    checkAuth();
-  }, [isLoggingIn]);
+  }, []);
 
   // Keep the session alive without signing out on temporary connectivity failures.
   useEffect(() => {
@@ -75,7 +88,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, [user]);
 
   const login = async (credentials: LoginCredentials) => {
-    setIsLoggingIn(true);
     try {
       const userData = await authApi.login(credentials);
       setUser(userData);
@@ -86,8 +98,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const message = error.response?.data?.error || 'Login failed';
       toast.error(message);
       throw error;
-    } finally {
-      setIsLoggingIn(false);
     }
   };
 
@@ -129,7 +139,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     hasRole,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {loading ? (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 px-6">
+          <div className="max-w-sm text-center space-y-4">
+            <h1 className="text-xl font-semibold text-gray-900">
+              {startupUnavailable ? 'Unable to connect' : 'Restoring your session…'}
+            </h1>
+            <p role="status" className="text-gray-600">
+              {startupUnavailable
+                ? 'Your saved login has been kept. We’ll reconnect automatically when the portal is available.'
+                : 'Connecting to your portal.'}
+            </p>
+            {startupUnavailable && (
+              <button type="button" onClick={() => retryStartup.current()} disabled={startupChecking}
+                className="min-h-11 rounded-md bg-indigo-600 px-5 py-2 text-white disabled:opacity-60">
+                {startupChecking ? 'Connecting…' : 'Try again'}
+              </button>
+            )}
+          </div>
+        </div>
+      ) : children}
+    </AuthContext.Provider>
+  );
 };
 
 export default AuthContext;
