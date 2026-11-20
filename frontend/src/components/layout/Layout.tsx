@@ -15,16 +15,16 @@ export default function Layout({ children }: LayoutProps) {
   const showFirstLoginModal = user?.role === 'student' && user?.mustChangePassword === true;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <div className="app-layout flex h-screen overflow-hidden bg-gray-50">
       {showFirstLoginModal && <FirstLoginModal />}
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="min-w-0 flex-1 flex flex-col overflow-hidden">
         {/* Mobile header with hamburger menu */}
-        <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+        <div className="mobile-header lg:hidden shrink-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="text-gray-500 hover:text-gray-700"
+            className="min-h-11 min-w-11 flex items-center justify-center text-gray-500 hover:text-gray-700"
             aria-label="Open menu"
           >
             <Bars3Icon className="h-6 w-6" />
@@ -34,7 +34,7 @@ export default function Layout({ children }: LayoutProps) {
         </div>
 
         {/* Main content */}
-        <main className="flex-1 overflow-auto">
+        <main className="min-w-0 flex-1 overflow-auto">
           <div className="animate-fade-in">
             {children}
           </div>
