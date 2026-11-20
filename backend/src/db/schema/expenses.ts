@@ -6,7 +6,8 @@ import { users } from './users';
 // ============================================================================
 
 export const EXPENSE_CATEGORIES = [
-  'rent', 'utilities', 'maintenance', 'supplies', 'salaries', 'subscriptions', 'marketing', 'transport', 'taxes', 'other',
+  'rent', 'electricity', 'water', 'gas', 'printer', 'stationery', 'groceries', 'repairs', 'mobile_charges',
+  'utilities', 'maintenance', 'supplies', 'salaries', 'subscriptions', 'marketing', 'transport', 'taxes', 'other',
 ] as const;
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
 

@@ -2,6 +2,14 @@ import apiClient from './client';
 
 export const EXPENSE_CATEGORIES = [
   { value: 'rent', label: 'Rent' },
+  { value: 'electricity', label: 'Electricity' },
+  { value: 'water', label: 'Water' },
+  { value: 'gas', label: 'Gas' },
+  { value: 'printer', label: 'Printer' },
+  { value: 'stationery', label: 'Stationery' },
+  { value: 'groceries', label: 'Groceries' },
+  { value: 'repairs', label: 'Repairs' },
+  { value: 'mobile_charges', label: 'Mobile charges' },
   { value: 'utilities', label: 'Utilities' },
   { value: 'maintenance', label: 'Maintenance' },
   { value: 'supplies', label: 'Supplies' },
