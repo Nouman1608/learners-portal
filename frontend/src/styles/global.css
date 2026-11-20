@@ -88,3 +88,12 @@ body {
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
+
+/* Keep the portal within the visible phone viewport, including landscape. */
+@supports (height: 100dvh) {
+  .app-layout, .mobile-sidebar { height: 100dvh; }
+}
+@media (pointer: coarse) {
+  input, select, textarea { font-size: 16px; }
+  button { touch-action: manipulation; }
+}

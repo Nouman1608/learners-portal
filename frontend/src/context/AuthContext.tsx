@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, LoginCredentials } from '../types';
 import authApi from '../api/auth.api';
+import { isSessionExpired } from '../api/client';
 import toast from 'react-hot-toast';
 import { setAuthToken } from '../native';
 
@@ -53,7 +54,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     checkAuth();
   }, [isLoggingIn]);
 
-  // Automatic token refresh - runs every 10 minutes to keep session alive
+  // Keep the session alive without signing out on temporary connectivity failures.
   useEffect(() => {
     if (!user) return;
 
@@ -63,10 +64,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.log('[Auth] Token refreshed automatically');
       } catch (error) {
         console.error('[Auth] Auto-refresh failed:', error);
-        // If refresh fails, user will be logged out on next API call
-        setUser(null);
+        if (isSessionExpired(error)) {
+          await setAuthToken(null);
+          setUser(null);
+        }
       }
-    }, 10 * 60 * 1000); // Refresh every 10 minutes (before 15-minute expiration)
+    }, 10 * 60 * 1000); // Renew while the app is active
 
     return () => clearInterval(refreshInterval);
   }, [user]);

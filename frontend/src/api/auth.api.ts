@@ -1,4 +1,4 @@
-import apiClient from './client';
+import apiClient, { refreshSession } from './client';
 import { User, LoginCredentials, AuthResponse } from '../types';
 
 export const authApi = {
@@ -17,7 +17,7 @@ export const authApi = {
   },
 
   refresh: async (): Promise<void> => {
-    await apiClient.post('/auth/refresh');
+    await refreshSession();
   },
 
   changeSelfPassword: async (currentPassword: string, newPassword: string): Promise<void> => {

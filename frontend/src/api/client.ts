@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { InternalAxiosRequestConfig } from 'axios';
 import { isNativeApp, MOBILE_CLIENT_HEADER, getAuthToken, setAuthToken } from '../native';
 import { appCampus } from '../appCampus';
 
@@ -17,64 +17,68 @@ export const apiClient = axios.create({
   },
 });
 
-// The app authenticates with a Bearer token instead of the cookie.
-if (isNativeApp) {
-  apiClient.interceptors.request.use((config) => {
+type SessionRequest = InternalAxiosRequestConfig & { _retry?: boolean; _sessionVersion?: number };
+let sessionVersion = 0;
+let refreshPromise: Promise<void> | null = null;
+
+apiClient.interceptors.request.use((config: SessionRequest) => {
+  config._sessionVersion = sessionVersion;
+  if (isNativeApp) {
     config.headers['X-Client'] = MOBILE_CLIENT_HEADER;
     const token = getAuthToken();
     if (token) config.headers.Authorization = `Bearer ${token}`;
-    return config;
-  });
+    else delete config.headers.Authorization;
+  }
+  return config;
+});
+
+/** Scheduled refreshes and failed requests must share a single token rotation. */
+export function refreshSession(): Promise<void> {
+  if (!refreshPromise) {
+    refreshPromise = apiClient.post('/auth/refresh').then(() => {
+      sessionVersion += 1;
+    }).finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
 }
 
-let isRefreshing = false;
+export const isSessionExpired = (error: unknown): boolean =>
+  axios.isAxiosError(error) && error.response?.status === 401;
 
-// Response interceptor for error handling and automatic token refresh
 apiClient.interceptors.response.use(
   async (response) => {
-    // Login and refresh hand the app a new token; keep it.
     if (isNativeApp && typeof response.data?.token === 'string') {
       await setAuthToken(response.data.token);
     }
     return response;
   },
   async (error) => {
-    const originalRequest = error.config;
-
-    // Don't auto-redirect on 401 from /auth endpoints - let them handle it
-    if (error.config?.url?.includes('/auth/')) {
+    const request = error.config as SessionRequest | undefined;
+    // Auth endpoints handle their own errors, including wrong-password responses.
+    if (!request || request.url?.includes('/auth/') || !isSessionExpired(error)) {
       return Promise.reject(error);
     }
 
-    // If we get a 401 and haven't tried refreshing yet, attempt token refresh
-    if (error.response?.status === 401 && !originalRequest._retry && !isRefreshing) {
-      originalRequest._retry = true;
-      isRefreshing = true;
-
+    if (!request._retry) {
+      request._retry = true;
       try {
-        // Attempt to refresh the token
-        await apiClient.post('/auth/refresh');
-        console.log('[API] Token refreshed on 401, retrying request');
-        isRefreshing = false;
-
-        // Retry the original request
-        return apiClient(originalRequest);
+        // A late response may belong to the token that was already replaced.
+        if (request._sessionVersion === sessionVersion) await refreshSession();
       } catch (refreshError) {
-        // Refresh failed, redirect to login
-        console.error('[API] Token refresh failed, redirecting to login');
-        isRefreshing = false;
-        await setAuthToken(null);
-        window.location.href = '/login';
+        if (isSessionExpired(refreshError)) {
+          await setAuthToken(null);
+          window.location.href = '/login';
+        }
+        // Offline/server failures do not invalidate a saved session.
         return Promise.reject(refreshError);
       }
+      return apiClient(request);
     }
 
-    // If we already tried refreshing or it's not a 401, just reject
-    if (error.response?.status === 401) {
-      await setAuthToken(null);
-      window.location.href = '/login';
-    }
-
+    await setAuthToken(null);
+    window.location.href = '/login';
     return Promise.reject(error);
   }
 );

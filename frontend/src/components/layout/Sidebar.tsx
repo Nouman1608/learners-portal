@@ -112,8 +112,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   };
 
   const handleLogout = () => {
-    logout();
-    navigate('/login');
+    void logout().then(() => navigate('/login'));
   };
 
   const canAccessRoute = (roles?: string[]) => {
@@ -141,7 +140,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         fixed lg:static inset-y-0 left-0 z-50
         transform ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0 transition-transform duration-300 ease-in-out
-        flex flex-col w-64 bg-gray-900 h-screen
+        mobile-sidebar flex flex-col w-64 bg-gray-900 h-screen
         [@media(max-height:500px)]:overflow-y-auto
       `}>
       {/* Logo/Brand */}
@@ -211,7 +210,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 to={item.path}
                 onClick={handleNavClick}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                  `flex min-h-11 items-center gap-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
                     isActive
                       ? 'bg-indigo-600/20 text-white border-l-[3px] border-indigo-400 pl-2.5 pr-3'
                       : 'text-gray-400 hover:bg-gray-800 hover:text-white px-3'
