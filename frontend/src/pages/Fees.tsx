@@ -715,6 +715,11 @@ export default function Fees() {
                         title={fee.invoiceSentAt ? `Invoice sent on ${new Date(fee.invoiceSentAt).toLocaleDateString()}` : 'Tick when the invoice has been sent'}
                         className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:cursor-default"
                       />
+                      {fee.invoiceSentAt && (
+                        <span className="ml-2 text-xs text-gray-600 align-middle">
+                          {new Date(fee.invoiceSentAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap text-center">
                       <input
