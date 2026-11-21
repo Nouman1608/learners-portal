@@ -2,7 +2,10 @@ import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { ArrowLeftIcon, PaperClipIcon } from '@heroicons/react/24/outline';
-import assignmentsApi, { MyAssignmentSummary, MyAssignmentDetail, AssignmentFile, filesTooBig } from '../api/assignments.api';
+import assignmentsApi, { MyAssignmentSummary, MyAssignmentDetail, AssignmentFile } from '../api/assignments.api';
+import StudentFilePicker from '../components/common/StudentFilePicker';
+import { prepareAssignmentFiles } from '../utils/studentUploads';
+import { fileUrl, isNativeApp, openExternal } from '../native';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import EmptyState from '../components/common/EmptyState';
 
@@ -13,7 +16,9 @@ export const FileLinks: React.FC<{ files: AssignmentFile[] }> = ({ files }) => (
   <ul className="space-y-1">
     {files.map((file) => (
       <li key={file.id}>
-        <a href={file.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center text-sm text-indigo-600 hover:underline">
+        <a href={fileUrl(file.fileUrl)} onClick={event => {
+          if (isNativeApp) { event.preventDefault(); void openExternal(fileUrl(file.fileUrl)).catch(() => toast.error('Could not open this file')); }
+        }} target="_blank" rel="noopener noreferrer" className="inline-flex items-center text-sm text-indigo-600 hover:underline">
           <PaperClipIcon className="mr-1 h-4 w-4" />{file.fileName} <span className="ml-1 text-xs text-gray-400">{size(file.sizeBytes)}</span>
         </a>
       </li>
@@ -71,6 +76,7 @@ const MyAssignmentView: React.FC<{ id: string; onBack: () => void }> = ({ id, on
   const [note, setNote] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
+  const [stage, setStage] = useState('Preparing files...');
 
   const load = () => assignmentsApi.mineDetail(id)
     .then((d) => { setDetail(d); setNote(d.submission?.note ?? ''); })
@@ -82,15 +88,17 @@ const MyAssignmentView: React.FC<{ id: string; onBack: () => void }> = ({ id, on
 
   const submit = async () => {
     if (files.length === 0 && !note.trim() && !detail.submission) { toast.error('Add a file or a note first'); return; }
-    if (filesTooBig(files)) { toast.error('The files are more than 10 MB together. Send fewer or smaller files.'); return; }
     setBusy(true);
+    setStage('Preparing files...');
     try {
-      await assignmentsApi.submit(id, note, files);
+      const prepared = await prepareAssignmentFiles(files, (current, total) => setStage(`Preparing ${current} of ${total}...`));
+      setStage('Uploading...');
+      await assignmentsApi.submit(id, note, prepared);
       toast.success('Handed in');
       setFiles([]);
       await load();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to hand in');
+      toast.error(error.response?.data?.error || error.message || 'Failed to hand in');
     } finally {
       setBusy(false);
     }
@@ -139,26 +147,21 @@ const MyAssignmentView: React.FC<{ id: string; onBack: () => void }> = ({ id, on
           <>
             <textarea
               value={note}
+              disabled={busy}
               onChange={(e) => setNote(e.target.value)}
               rows={3}
               placeholder="A note for your teacher (optional)"
               className="mt-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500"
             />
             <div className="mt-3">
-              <input
-                type="file"
-                multiple
-                accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.heic,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
-                onChange={(e) => setFiles(Array.from(e.target.files ?? []).slice(0, 5))}
-                className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:text-indigo-700"
-              />
+              <StudentFilePicker files={files} onChange={setFiles} maxFiles={5} documents disabled={busy} />
               <p className="mt-1 text-xs text-gray-500">
-                Up to 5 files, 10 MB in total: PDF, photos, Word, Excel, PowerPoint, text or zip.
+                Photos are resized for upload. PDF, photos, Word, Excel, PowerPoint, text or zip; 10 MB maximum upload.
                 {detail.submission && ' New files replace the ones you handed in before.'}
               </p>
             </div>
             <button type="button" onClick={submit} disabled={busy} className="mt-4 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60">
-              {busy ? 'Uploading...' : detail.submission ? 'Hand in again' : 'Hand in'}
+              {busy ? stage : detail.submission ? 'Hand in again' : 'Hand in'}
             </button>
           </>
         )}

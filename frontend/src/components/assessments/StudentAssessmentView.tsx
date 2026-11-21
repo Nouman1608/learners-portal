@@ -1,3 +1,5 @@
+import StudentFilePicker from '../common/StudentFilePicker';
+import { prepareAssessmentSubmission } from '../../utils/studentUploads';
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { assessmentsApi, Assessment, AssessmentFile } from '../../api/assessments.api';
@@ -20,7 +22,8 @@ const StudentAssessmentView: React.FC<StudentAssessmentViewProps> = ({
   const [canAccess, setCanAccess] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [questionPapers, setQuestionPapers] = useState<AssessmentFile[]>([]);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [stage, setStage] = useState('Preparing files...');
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [submitted, setSubmitted] = useState<boolean>(false);
   const [currentPaperIndex, setCurrentPaperIndex] = useState<number>(0);
@@ -57,36 +60,24 @@ const StudentAssessmentView: React.FC<StudentAssessmentViewProps> = ({
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.type !== 'application/pdf') {
-        toast.error('Only PDF files are allowed');
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('File size must be less than 5MB');
-        return;
-      }
-      setSelectedFile(file);
-    }
-  };
-
   const handleSubmit = async () => {
-    if (!selectedFile) {
-      toast.error('Please select a file to submit');
+    if (!selectedFiles.length) {
+      toast.error('Add a photo or PDF to submit');
       return;
     }
 
     try {
       setSubmitting(true);
-      await assessmentsApi.submitAssessmentWithPdf(assessment.id, selectedFile);
+      setStage('Preparing files...');
+      const pdf = await prepareAssessmentSubmission(selectedFiles, (current, total) => setStage(`Preparing ${current} of ${total}...`));
+      setStage('Uploading...');
+      await assessmentsApi.submitAssessmentWithPdf(assessment.id, pdf);
       toast.success('Assessment submitted successfully');
+      setSelectedFiles([]);
       setSubmitted(true);
       onSubmitSuccess?.();
     } catch (error: any) {
-      console.error('Error submitting assessment:', error);
-      toast.error(error.response?.data?.message || 'Failed to submit assessment');
+      toast.error(error.response?.data?.error || error.response?.data?.message || error.message || 'Failed to submit assessment');
     } finally {
       setSubmitting(false);
     }
@@ -295,7 +286,7 @@ const StudentAssessmentView: React.FC<StudentAssessmentViewProps> = ({
               </div>
 
               {/* Right Panel: Submission */}
-              <div className="w-80 p-6 flex flex-col">
+              <div className="w-80 p-6 flex flex-col overflow-y-auto">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Submit Your Work</h3>
 
                 {isAfterEnd && (
@@ -307,34 +298,17 @@ const StudentAssessmentView: React.FC<StudentAssessmentViewProps> = ({
                 )}
 
                 <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Upload your answer PDF
-                  </label>
-                  <input
-                    type="file"
-                    accept=".pdf"
-                    onChange={handleFileSelect}
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                  {selectedFile && (
-                    <div className="mt-2 p-2 bg-gray-50 rounded">
-                      <p className="text-sm text-gray-700 truncate">{selectedFile.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                      </p>
-                    </div>
-                  )}
-                  <p className="mt-2 text-xs text-gray-500">
-                    Maximum file size: 5MB. Only PDF files are accepted.
-                  </p>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Photos and PDFs</label>
+                  <StudentFilePicker files={selectedFiles} onChange={setSelectedFiles} disabled={submitting} />
+                  <p className="mt-2 text-sm text-gray-500">Your pages will be combined in this order into one PDF for your teacher. Maximum upload: 10 MB.</p>
                 </div>
 
                 <button
                   onClick={handleSubmit}
-                  disabled={!selectedFile || submitting}
+                  disabled={!selectedFiles.length || submitting}
                   className="w-full mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
-                  {submitting ? 'Submitting...' : 'Submit Assessment'}
+                  {submitting ? stage : 'Submit Assessment'}
                 </button>
               </div>
             </div>
