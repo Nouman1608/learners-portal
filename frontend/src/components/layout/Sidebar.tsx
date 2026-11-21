@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import InstallPortal from '../common/InstallPortal';
 import authApi from '../../api/auth.api';
 import toast from 'react-hot-toast';
 import { brand, terms } from '../../brand';
@@ -225,8 +226,9 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
       </nav>
 
-      {/* Logout - Sticky at bottom */}
+        {/* Logout - Sticky at bottom */}
       <div className="p-4 border-t border-gray-700 bg-gray-900 flex-shrink-0">
+          {!isNativeApp && <div className="mb-3"><InstallPortal dark /></div>}
         {isNativeApp && (
           <div className="px-3 pb-3">
             <p className="text-xs text-gray-400 mb-1.5">Display size</p>

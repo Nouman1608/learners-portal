@@ -1,5 +1,6 @@
 import { APP_CAMPUSES, chooseAppCampus, isWebChooser } from '../appCampus';
 import { setAuthToken } from '../native';
+import InstallPortal from '../components/common/InstallPortal';
 
 /**
  * Pick which school to sign in to. In the mobile app this is the home screen (first launch
@@ -41,6 +42,7 @@ export default function CampusChooser() {
           </button>
         ))}
       </div>
+      {isWebChooser && <div className="mt-6 w-full max-w-sm"><InstallPortal /></div>}
     </div>
   );
 }

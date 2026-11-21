@@ -6,9 +6,11 @@ import { applyBrand } from './brand'
 import { loadAuthToken, initDisplayScale } from './native'
 import { needsCampusChoice } from './appCampus'
 import CampusChooser from './pages/CampusChooser'
+import { initPwa } from './pwa'
 
 applyBrand()
 initDisplayScale()
+initPwa()
 
 // In the mobile app, read the saved login before the first request goes out.
 loadAuthToken().then(() => {
