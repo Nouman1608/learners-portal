@@ -1,0 +1,32 @@
+{
+  "id": "/",
+  "name": "Learners Academy",
+  "short_name": "Learners",
+  "description": "Learners Academy student, teacher and staff portal",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3F548D",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/pwa/la/icon-192-d8fde57f00.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa/la/icon-512-ddb632aa91.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa/la/maskable-512-4ea7a67fd3.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "id": "/",
+  "name": "Learners Preschool",
+  "short_name": "Preschool",
+  "description": "Learners Preschool student, teacher and staff portal",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3F548D",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/pwa/lp/icon-192-0f85af5f65.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa/lp/icon-512-bc73c71a9f.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa/lp/maskable-512-959826caee.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
